@@ -1,6 +1,6 @@
 "use client";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { supabaseClient } from "@/lib/supabaseClient";
 import { Card, CardContent, CardHeader } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
@@ -37,28 +37,106 @@ export default function GlassPage() {
   const [logs, setLogs] = useState<GlassLog[]>([]);
   const [loading, setLoading] = useState(false);
   const [suppressPrefillForDate, setSuppressPrefillForDate] = useState<string|null>(null);
+  const [activeTab, setActiveTab] = useState<"logs"|"daily">("logs");
 
+  const loadingInFlight = useRef(false);
+  const hasLoadedOnce = useRef(false);
+  const loadRetries = useRef(0);
+  const bootLoaded = useRef(false);
   async function load() {
+    if (loadingInFlight.current) return;
+    loadingInFlight.current = true;
     setLoading(true);
-    // fetch last 365 days for aggregates + table
+    const watchdog = setTimeout(() => {
+      setLoading(false);
+      loadingInFlight.current = false;
+    }, 10000);
     const from = new Date();
     from.setDate(from.getDate() - 365);
-    const { data, error } = await supabaseClient
-      .from("glass_logs")
-      .select("id, created_at, log_date, shift, small_count, large_count, broken_count")
-      .gte("log_date", from.toISOString().slice(0,10))
-      .order("log_date", { ascending: false })
-      .order("created_at", { ascending: false });
-    if (error) {
-      toast({ title: "Failed to load", description: error.message, variant: "error" });
+    try {
+      // Ensure a real session exists (prevents empty result on first enter)
+      const { data: sessionData } = await supabaseClient.auth.getSession();
+      console.log('[glass] getSession ->', !!sessionData?.session);
+      if (!sessionData?.session) {
+        await new Promise((r) => setTimeout(r, 250));
+      }
+
+      let rows: any[] = [];
+      let lastErr: any = null;
+      for (let attempts = 0; attempts < 3; attempts++) {
+        const { data, error } = await supabaseClient
+          .from("glass_logs")
+          .select("id, created_at, log_date, shift, small_count, large_count, broken_count")
+          .gte("log_date", from.toISOString().slice(0, 10))
+          .order("log_date", { ascending: false })
+          .order("created_at", { ascending: false });
+        if (error) lastErr = error;
+        rows = (data || []) as any[];
+        console.log('[glass] fetch attempt rows=', rows.length, 'err?', !!error);
+        if (rows.length > 0) break;
+        await new Promise((r) => setTimeout(r, (attempts + 1) * 200));
+      }
+      if (lastErr && rows.length === 0) throw lastErr;
+
+      // Avoid overwriting prior data with an empty response
+      if (rows.length === 0 && hasLoadedOnce.current && logs.length > 0) {
+        console.log('[glass] keeping previous logs, empty response after first load');
+        return;
+      }
+
+      setLogs(rows as any);
+      if (rows.length > 0) {
+        hasLoadedOnce.current = true;
+        loadRetries.current = 0;
+      } else if (!hasLoadedOnce.current && loadRetries.current < 5) {
+        loadRetries.current += 1;
+        // brief retry loop to cover session warmup
+        setTimeout(() => {
+          loadingInFlight.current = false;
+          load();
+        }, 400);
+      }
+    } catch (e: any) {
+      toast({ title: "Failed to load", description: e?.message || String(e), variant: "error" });
+    } finally {
+      clearTimeout(watchdog);
       setLoading(false);
-      return;
+      loadingInFlight.current = false;
     }
-    setLogs((data||[]) as any);
-    setLoading(false);
   }
 
-  useEffect(()=>{ load(); },[]);
+  useEffect(()=>{
+    // Defer first load until Supabase fires INITIAL_SESSION/SIGNED_IN once
+    const { data: sub } = supabaseClient.auth.onAuthStateChange((_event, session) => {
+      console.log('[glass] auth event ->', _event, 'hasSession', !!session);
+      if (!bootLoaded.current && (session || _event === 'INITIAL_SESSION' || _event === 'SIGNED_IN')) {
+        bootLoaded.current = true;
+        load();
+      }
+    });
+    // Fallback: if no event within 2s, try anyway
+    const t = setTimeout(() => { if (!bootLoaded.current) load(); }, 2000);
+    return () => { try { sub?.subscription?.unsubscribe?.(); } catch {}; clearTimeout(t); };
+  },[]);
+
+  useEffect(() => {
+    const onFocus = () => { load(); };
+    const onVisibility = () => { if (document.visibilityState === 'visible') load(); };
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onVisibility);
+    // Also reload on auth changes after boot
+    const { data: sub } = supabaseClient.auth.onAuthStateChange((_e) => {
+      if (!bootLoaded.current) return;
+      hasLoadedOnce.current = false;
+      loadRetries.current = 0;
+      load();
+    });
+    return () => {
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onVisibility);
+      sub?.subscription?.unsubscribe?.();
+    };
+  }, []);
 
   // Prefill inputs when date changes (unless suppressed after save)
   useEffect(()=>{
@@ -168,150 +246,31 @@ export default function GlassPage() {
         <CardContent className="grid gap-3">
           {/* Aggregates */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-            <div className="rounded-xl border p-3 bg-white text-center">
+            <div className="rounded-xl border border-zinc-200 p-3 bg-white text-center">
               <div className="text-[11px] text-zinc-600">Broken today</div>
               <div className="text-xl font-semibold text-zinc-900">{aggregates.perDay}</div>
             </div>
-            <div className="rounded-xl border p-3 bg-white text-center">
+            <div className="rounded-xl border border-zinc-200 p-3 bg-white text-center">
               <div className="text-[11px] text-zinc-600">This week</div>
               <div className="text-xl font-semibold text-zinc-900">{aggregates.perWeek}</div>
             </div>
-            <div className="rounded-xl border p-3 bg-white text-center">
+            <div className="rounded-xl border border-zinc-200 p-3 bg-white text-center">
               <div className="text-[11px] text-zinc-600">This month</div>
               <div className="text-xl font-semibold text-zinc-900">{aggregates.perMonth}</div>
             </div>
-            <div className="rounded-xl border p-3 bg-white text-center">
+            <div className="rounded-xl border border-zinc-200 p-3 bg-white text-center">
               <div className="text-[11px] text-zinc-600">This year</div>
               <div className="text-xl font-semibold text-zinc-900">{aggregates.perYear}</div>
             </div>
           </div>
 
-          {/* Form */}
-          <div className="grid gap-2">
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-              <div className="grid gap-1">
-                <span className="text-[12px] text-zinc-600">Date</span>
-                <Input type="date" value={logDate} onChange={e=>setLogDate(e.target.value)} />
-              </div>
-              <div className="grid gap-1">
-                <span className="text-[12px] text-zinc-600">Morning</span>
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="grid gap-1">
-                    <span className="text-[12px] text-zinc-600">Small</span>
-                    <Input type="number" value={mSmall} onChange={e=>setMSmall(e.target.value)} />
-                  </div>
-                  <div className="grid gap-1">
-                    <span className="text-[12px] text-zinc-600">Large</span>
-                    <Input type="number" value={mLarge} onChange={e=>setMLarge(e.target.value)} />
-                  </div>
-                </div>
-              </div>
-              <div className="grid gap-1">
-                <span className="text-[12px] text-zinc-600">Night</span>
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="grid gap-1">
-                    <span className="text-[12px] text-zinc-600">Small</span>
-                    <Input type="number" value={nSmall} onChange={e=>setNSmall(e.target.value)} />
-                  </div>
-                  <div className="grid gap-1">
-                    <span className="text-[12px] text-zinc-600">Large</span>
-                    <Input type="number" value={nLarge} onChange={e=>setNLarge(e.target.value)} />
-                  </div>
-                </div>
-              </div>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-              <div className="rounded-xl border p-3 bg-white text-center">
-                <div className="text-[11px] text-zinc-600">Broken small</div>
-                <div className="text-xl font-semibold text-zinc-900">{computedBrokenSmall}</div>
-              </div>
-              <div className="rounded-xl border p-3 bg-white text-center">
-                <div className="text-[11px] text-zinc-600">Broken large</div>
-                <div className="text-xl font-semibold text-zinc-900">{computedBrokenLarge}</div>
-              </div>
-              <div className="rounded-xl border p-3 bg-white text-center">
-                <div className="text-[11px] text-zinc-600">Broken total</div>
-                <div className="text-xl font-semibold text-zinc-900">{computedBroken}</div>
-              </div>
-            </div>
-            <div className="flex gap-2">
-              <Button onClick={saveDay} className="flex-1">Save day</Button>
-            </div>
+          {/* Action */}
+          <div className="mt-2">
+            <Link href="/glass/entry" className="block">
+              <Button block>Add glass count</Button>
+            </Link>
           </div>
 
-          {/* Table */}
-          <div className="grid gap-2">
-            <div className="text-sm font-medium text-zinc-900">Recent logs</div>
-            <div className="grid gap-2">
-              {loading && (
-                <>
-                  {Array.from({ length: 4 }).map((_,i)=>(
-                    <div key={i} className="rounded-xl border p-3 bg-white animate-pulse">
-                      <div className="h-4 bg-zinc-200 rounded w-1/2" />
-                    </div>
-                  ))}
-                </>
-              )}
-              {Array.from(new Set(logs.map(l=>l.log_date))).slice(0,30).map(d=>{
-                const dayLogs = logs.filter(l=>l.log_date===d);
-                const m = dayLogs.find(l=>l.shift==='morning');
-                const n = dayLogs.find(l=>l.shift==='night');
-                const bSmall = Math.max((m?.small_count||0)-(n?.small_count||0), 0);
-                const bLarge = Math.max((m?.large_count||0)-(n?.large_count||0), 0);
-                const bTotal = bSmall + bLarge;
-                return (
-                  <div key={d} className="rounded-xl border p-3 bg-white text-sm">
-                    <div className="flex items-center justify-between">
-                      <div className="font-medium text-zinc-900">{d}</div>
-                      <div className="text-[11px] text-zinc-600">Broken: <span className="font-semibold text-zinc-900">{bTotal}</span> (S:{bSmall} L:{bLarge})</div>
-                    </div>
-                    <div className="mt-2 grid grid-cols-2 gap-2">
-                      <div className="rounded-lg border p-2">
-                        <div className="text-[11px] text-zinc-600">Morning</div>
-                        <div className="text-[12px] text-zinc-700">Small: {m?.small_count||0} • Large: {m?.large_count||0}</div>
-                      </div>
-                      <div className="rounded-lg border p-2">
-                        <div className="text-[11px] text-zinc-600">Night</div>
-                        <div className="text-[12px] text-zinc-700">Small: {n?.small_count||0} • Large: {n?.large_count||0}</div>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-              {!loading && logs.length===0 && (
-                <div className="text-sm text-zinc-500">No logs yet</div>
-              )}
-            </div>
-          </div>
-
-          {/* Monthly summary */}
-          <div className="grid gap-2 mt-2">
-            <div className="text-sm font-medium text-zinc-900">Daily broken (last 30 days)</div>
-            <div className="rounded-xl border overflow-hidden bg-white">
-              <div className="grid grid-cols-5 bg-zinc-50 text-[12px] font-medium text-zinc-700">
-                <div className="px-3 py-2">Date</div>
-                <div className="px-3 py-2 text-right">Small</div>
-                <div className="px-3 py-2 text-right">Large</div>
-                <div className="px-3 py-2 text-right">Total</div>
-                <div className="px-3 py-2 text-right">Δ (day)</div>
-              </div>
-              <div className="divide-y">
-                {monthSummary.map((row, idx)=> {
-                  const prev = monthSummary[idx+1];
-                  const delta = Math.max((row.broken || 0) - (prev?.broken || 0), 0);
-                  return (
-                    <div key={row.date} className="grid grid-cols-5 text-sm">
-                      <div className="px-3 py-2 text-zinc-900">{row.date}</div>
-                      <div className="px-3 py-2 text-right text-zinc-900">{row.bSmall}</div>
-                      <div className="px-3 py-2 text-right text-zinc-900">{row.bLarge}</div>
-                      <div className="px-3 py-2 text-right font-medium text-zinc-900">{row.broken}</div>
-                      <div className="px-3 py-2 text-right font-medium text-zinc-900">{delta}</div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
         </CardContent>
       </Card>
     </div>

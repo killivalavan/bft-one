@@ -181,7 +181,7 @@ export default function BillingPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-[110px_1fr] md:grid-cols-[140px_1fr] gap-3">
+      <div className="grid grid-cols-[96px_1fr] md:grid-cols-[120px_1fr] gap-2">
         {/* Left column: categories */}
         <div className="relative">
           <div className="sticky top-2 grid gap-1.5">
@@ -189,15 +189,11 @@ export default function BillingPage() {
               const active = activeCat===c.id;
               return (
                 <button key={c.id}
-                  className={`w-full overflow-hidden whitespace-nowrap px-2 py-1 rounded-xl border text-xs flex items-center gap-2 text-left ${active?'bg-brand-50 border-brand-200 text-brand-800':'bg-white border-zinc-200 text-zinc-800'}`}
+                  className={`w-full aspect-square overflow-hidden px-3 py-2 rounded-xl border border-zinc-200 text-sm flex flex-col items-center justify-center gap-1 ${active?'bg-brand-50 border-zinc-200 text-brand-800':'bg-white border-zinc-200 text-zinc-800'}`}
                   onClick={()=>setActiveCat(c.id)}>
-                  {c.icon_url ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={c.icon_url} alt={c.name} className={`w-6 h-6 rounded-full object-cover border ${active?'border-brand-200':'border-zinc-200'}`} />
-                  ) : (
-                    <span className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-semibold ${active?'bg-brand-100 text-brand-700':'bg-zinc-100 text-zinc-700'}`}>{c.name.slice(0,2)}</span>
-                  )}
-                  <span className="truncate">{c.name}</span>
+                  <span className="text-center text-sm sm:text-base font-semibold leading-tight px-1 line-clamp-2">
+                    {c.name}
+                  </span>
                 </button>
               );
             })}
@@ -216,7 +212,7 @@ export default function BillingPage() {
                 <CardContent className="p-0">
                   <div className="p-1.5">
                     {/* image */}
-                    <div className="relative aspect-square w-full rounded-lg overflow-hidden border bg-white">
+                    <div className="relative aspect-square w-full rounded-lg overflow-hidden border border-zinc-200 bg-white">
                       {p.image_url ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img src={p.image_url} alt={p.name} className="w-full h-full object-cover" />
@@ -228,6 +224,11 @@ export default function BillingPage() {
                       )}
                       {!st?.oos && st?.low && (
                         <span className="absolute top-1 right-1 px-1.5 py-0.5 text-[10px] font-semibold rounded bg-amber-500 text-white">Low stock</span>
+                      )}
+                      {qInCart > 0 && (
+                        <span className="absolute bottom-1 right-1 min-w-6 h-6 px-1 inline-flex items-center justify-center rounded-full border border-zinc-200 bg-white text-brand-700 text-[12px] font-semibold">
+                          {qInCart}
+                        </span>
                       )}
                     </div>
                     {/* content */}
@@ -248,38 +249,42 @@ export default function BillingPage() {
                   </div>
                   <div className="p-1.5 pt-0 flex items-center gap-2">
                     {Array.isArray(p.options_json) && p.options_json.length > 1 ? (
-                      <Button size="sm" variant="outline" className="h-8 text-[13px] border-brand-600 text-brand-700 hover:bg-brand-50 flex-1 inline-flex items-center justify-center gap-2">
+                      <Button size="sm" variant="outline" className="h-8 text-[13px] border-zinc-200 text-zinc-700 hover:bg-zinc-50 flex-1 inline-flex items-center justify-center gap-2">
                         <span>{p.options_json.length} options</span>
-                        <span className="min-w-5 h-5 px-1 inline-flex items-center justify-center rounded-full border border-brand-200 bg-brand-50 text-brand-700 text-[11px] font-semibold animate-pop" key={(items[p.id]?.qty||0)}>
+                        <span className="min-w-5 h-5 px-1 inline-flex items-center justify-center rounded-full border border-zinc-200 bg-zinc-50 text-zinc-700 text-[11px] font-semibold animate-pop" key={(items[p.id]?.qty||0)}>
                           {(items[p.id]?.qty||0)}
                         </span>
                       </Button>
                     ) : (
                       <Button
                         size="sm"
-                        className={`h-8 text-[13px] flex-1 inline-flex items-center justify-center gap-2 ${st?.oos || atLimit ? 'bg-zinc-300 text-zinc-600 cursor-not-allowed' : 'bg-brand-600 hover:bg-brand-700 text-white'}`}
-                        onClick={()=>{ if (st?.oos || atLimit) { return; } increment({ product_id:p.id, name:p.name, price_cents:p.price_cents, qty:1 }); }}
+                        className={`min-h-[48px] h-12 text-[15px] flex-1 inline-flex items-center justify-center gap-3 px-2.5 ${st?.oos || atLimit ? 'bg-zinc-300 text-zinc-600 cursor-not-allowed' : 'bg-brand-600 hover:bg-brand-700 text-white'}`}
+                        onClick={()=>{ if (st?.oos || atLimit) { return; } const q=(items[p.id]?.qty||0); if (q===0) { increment({ product_id:p.id, name:p.name, price_cents:p.price_cents, qty:1 }); } }}
                       >
-                        {(()=>{ const q=(items[p.id]?.qty||0); return (
-                          <>
-                            <span
-                              onClick={(e)=>{ e.preventDefault(); e.stopPropagation(); if(q>0){ decrement(p.id); } }}
-                              className={`w-5 h-5 inline-flex items-center justify-center rounded-full text-[14px] font-bold ${q===0? 'bg-white/10 text-white/50 cursor-not-allowed':'bg-white/20 text-white cursor-pointer'}`}
-                              aria-disabled={q===0}
-                            >
-                              −
-                            </span>
-                            <span className="min-w-6 h-6 px-1 inline-flex items-center justify-center rounded-md border border-brand-200 bg-white text-brand-700 text-[12px] font-semibold animate-pop" key={q}>
-                              {q}
-                            </span>
-                            <span
-                              onClick={(e)=>{ e.stopPropagation(); if(!(st?.oos || atLimit)){ increment({ product_id:p.id, name:p.name, price_cents:p.price_cents, qty:1 }); } }}
-                              className={`w-5 h-5 inline-flex items-center justify-center rounded-full text-[14px] font-bold ${st?.oos || atLimit ? 'bg-white/10 text-white/50 cursor-not-allowed' : 'bg-white/20 text-white cursor-pointer'}`}
-                            >
-                              +
-                            </span>
-                          </>
-                        ); })()}
+                        {(()=>{ const q=(items[p.id]?.qty||0);
+                          if (q===0) {
+                            return (
+                              <span className="px-4 py-1.5 rounded-md bg-emerald-600 text-white font-semibold tracking-wide">ADD</span>
+                            );
+                          }
+                          return (
+                            <>
+                              <span
+                                onClick={(e)=>{ e.preventDefault(); e.stopPropagation(); if(q>0){ decrement(p.id); } }}
+                                className={`shrink-0 w-9 h-9 inline-flex items-center justify-center rounded-full text-[18px] font-bold transition-colors ${q===0? 'bg-white/10 text-white/50 cursor-not-allowed':'bg-white/20 text-white hover:bg-white/30 cursor-pointer'}`}
+                                aria-disabled={q===0}
+                              >
+                                −
+                              </span>
+                              <span
+                                onClick={(e)=>{ e.stopPropagation(); if(!(st?.oos || atLimit)){ increment({ product_id:p.id, name:p.name, price_cents:p.price_cents, qty:1 }); } }}
+                                className={`shrink-0 w-9 h-9 inline-flex items-center justify-center rounded-full text-[18px] font-bold transition-colors ${st?.oos || atLimit ? 'bg-white/10 text-white/50 cursor-not-allowed' : 'bg-white/20 text-white hover:bg-white/30 cursor-pointer'}`}
+                              >
+                                +
+                              </span>
+                            </>
+                          );
+                        })()}
                       </Button>
                     )}
                   </div>
@@ -291,17 +296,17 @@ export default function BillingPage() {
       </div>
 
       {/* Sticky cart bar */}
-      <div className="fixed left-0 right-0 bottom-0 bg-white border-t p-2">
+      <div className="fixed left-0 right-0 bottom-0 bg-white border-t border-zinc-200 p-2">
         <div className="max-w-md mx-auto">
           <div className="flex flex-wrap gap-1 text-[11px]">
             {Object.values(items).map(i=> (
-              <span key={i.product_id} className="px-2 py-1 rounded-full bg-zinc-100 border text-zinc-800">{i.name} {i.qty}</span>
+              <span key={i.product_id} className="px-2 py-1 rounded-full bg-zinc-100 border border-zinc-200 text-zinc-800">{i.name} {i.qty}</span>
             ))}
           </div>
           <div className="flex justify-between items-center mt-1.5">
             <div className="font-semibold text-zinc-900 text-sm">Total: ₹ {(totalCents(items)/100).toFixed(2)}</div>
             <div className="flex gap-2">
-              <Button size="sm" variant="outline" className="h-9" onClick={clear}>Clear</Button>
+              <Button size="sm" variant="outline" className="h-9 border-zinc-200 text-zinc-700 hover:bg-zinc-50" onClick={clear}>Clear</Button>
               <Button size="sm" className="h-9" onClick={submitOrder}>Submit</Button>
             </div>
           </div>

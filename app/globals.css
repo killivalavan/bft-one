@@ -2,7 +2,7 @@
 
 :root {
   --background: #ffffff;
-  --foreground: #0f172a; /* slate-900 */
+  --foreground: #000000; /* force black text */
 }
 
 @theme inline {
@@ -31,12 +31,12 @@
 @media (prefers-color-scheme: dark) {
   :root {
     --background: #0b1220; /* deep slate */
-    --foreground: #e5e7eb; /* gray-200 */
+    --foreground: #000000; /* keep text black in dark mode too */
   }
 }
 
 body {
-  background: var(--background);
+  /* Let Tailwind body class (e.g., bg-zinc-100) control background */
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }

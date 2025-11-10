@@ -1,35 +1,71 @@
 "use client";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { supabaseClient } from "@/lib/supabaseClient";
 import { CalendarCheck2, Coffee, ClipboardList, Home, Shield, ChevronLeft } from "lucide-react";
 
 export default function Navbar() {
   const pathname = usePathname();
-  const [userEmail, setUserEmail] = useState<string|undefined>();
+  const router = useRouter();
+  const [userEmail, setUserEmail] = useState<string|undefined>(undefined);
   const [isAdmin, setIsAdmin] = useState<boolean>(false);
   const [menuOpen, setMenuOpen] = useState<boolean>(false);
   const menuRef = useRef<HTMLDivElement|null>(null);
 
   useEffect(()=>{
+    // Show cached email immediately
+    try {
+      const cached = typeof window !== 'undefined' ? localStorage.getItem('bftone_display_email') : null;
+      if (cached) setUserEmail(cached);
+    } catch {}
+
     (async()=>{
-      const { data:{ user } } = await supabaseClient.auth.getUser();
-      setUserEmail(user?.email || undefined);
+      let { data: { session } } = await supabaseClient.auth.getSession();
+      let user = session?.user || null;
+      if (!user) {
+        const { data: { user: u2 } } = await supabaseClient.auth.getUser();
+        user = u2 ?? null;
+      }
+      if (user?.email) {
+        setUserEmail(user.email);
+        try { localStorage.setItem('bftone_display_email', user.email); } catch {}
+      }
       if (user) {
         const { data: prof } = await supabaseClient.from('profiles').select('is_admin').eq('id', user.id).maybeSingle();
         setIsAdmin(!!prof?.is_admin);
       } else {
         setIsAdmin(false);
+        // Double-check again shortly before redirecting to avoid transient nulls
+        setTimeout(async()=>{
+          let { data: { session } } = await supabaseClient.auth.getSession();
+          let u = session?.user || null;
+          if (!u) {
+            const { data: { user: u2 } } = await supabaseClient.auth.getUser();
+            u = u2 ?? null;
+          }
+          if (!u && pathname !== "/login") { try { router.replace("/login"); } catch {} }
+        }, 50);
       }
     })();
-    const { data: sub } = supabaseClient.auth.onAuthStateChange(async (_event, session)=>{
-      const u = session?.user;
-      setUserEmail(u?.email || undefined);
+
+    const { data: sub } = supabaseClient.auth.onAuthStateChange(async (event, session)=>{
+      let u = session?.user || null;
+      if (!u) {
+        const { data: { user: u2 } } = await supabaseClient.auth.getUser();
+        u = u2 ?? null;
+      }
+      if (u?.email) {
+        setUserEmail(u.email);
+        try { localStorage.setItem('bftone_display_email', u.email); } catch {}
+      } else if (event === 'SIGNED_OUT') {
+        setUserEmail(undefined);
+        try { localStorage.removeItem('bftone_display_email'); } catch {}
+      }
       if (u) {
         const { data: prof } = await supabaseClient.from('profiles').select('is_admin').eq('id', u.id).maybeSingle();
         setIsAdmin(!!prof?.is_admin);
-      } else {
+      } else if (event === 'SIGNED_OUT') {
         setIsAdmin(false);
       }
     });
@@ -64,9 +100,9 @@ export default function Navbar() {
 
   if (pathname === "/") {
     return (
-      <nav className="sticky top-0 z-50 border-b bg-white/80 backdrop-blur">
+      <nav className="sticky top-0 z-50 border-b bg-sky-600">
         <div className="mx-auto max-w-md px-4 py-3 flex items-center justify-between">
-          <Link href="/" className="font-semibold text-lg text-sky-700">BFTOne</Link>
+          <Link href="/" className="font-semibold text-lg text-white">BFTOne</Link>
           {displayName ? (
             <div className="relative" ref={menuRef}>
               <button onClick={()=>setMenuOpen(v=>!v)} className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full border border-zinc-200 bg-zinc-50 text-zinc-800 text-sm">
@@ -76,7 +112,7 @@ export default function Navbar() {
               {menuOpen && (
                 <div className="absolute right-0 mt-2 w-40 rounded-lg border bg-white shadow focus:outline-none">
                   <Link href={isAdmin? '/admin': '/profile'} className="block px-3 py-2 text-sm text-zinc-800 hover:bg-zinc-50">Profile</Link>
-                  <button onClick={async()=>{ await supabaseClient.auth.signOut(); setMenuOpen(false); location.href='/' }} className="w-full text-left px-3 py-2 text-sm text-red-700 hover:bg-red-50">Logout</button>
+                  <button onClick={async()=>{ await supabaseClient.auth.signOut(); setMenuOpen(false); location.href='/login' }} className="w-full text-left px-3 py-2 text-sm text-red-700 hover:bg-red-50">Logout</button>
                 </div>
               )}
             </div>

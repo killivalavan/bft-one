@@ -18,8 +18,16 @@ export default function Home() {
           if (cached && typeof cached === 'object') setFlags(cached);
         }
       } catch {}
-      const { data:{ user } } = await supabaseClient.auth.getUser();
-      setUserEmail(user?.email ?? null);
+      let { data: { session } } = await supabaseClient.auth.getSession();
+      let user = session?.user || null;
+      if (!user) {
+        const { data: { user: u } } = await supabaseClient.auth.getUser();
+        user = u ?? null;
+      }
+      if (user?.email) {
+        setUserEmail(user.email);
+        try { localStorage.setItem('bftone_display_email', user.email); } catch {}
+      } 
       if (user) {
         const { data: prof } = await supabaseClient.from('profiles').select('is_admin,is_stock_manager').eq('id', user.id).maybeSingle();
         const f = { is_admin: !!prof?.is_admin, is_stock_manager: !!prof?.is_stock_manager };
@@ -46,35 +54,43 @@ export default function Home() {
       }
     }
     load();
-    const { data: sub } = supabaseClient.auth.onAuthStateChange((_evt, session)=>{
-      const u = session?.user || null;
-      setUserEmail(u?.email ?? null);
+    const { data: sub } = supabaseClient.auth.onAuthStateChange(async (event, session)=>{
+      let u = session?.user || null;
+      if (!u) {
+        const { data: { user: u2 } } = await supabaseClient.auth.getUser();
+        u = u2 ?? null;
+      }
+      if (u?.email) {
+        setUserEmail(u.email);
+        try { localStorage.setItem('bftone_display_email', u.email); } catch {}
+      } else if (event === 'SIGNED_OUT') {
+        setUserEmail(null);
+        try { localStorage.removeItem('bftone_display_email'); } catch {}
+      } // else ignore transient nulls
       if (u) {
-        supabaseClient.from('profiles').select('is_admin,is_stock_manager').eq('id', u.id).maybeSingle().then(({ data: prof })=>{
-          const f = { is_admin: !!prof?.is_admin, is_stock_manager: !!prof?.is_stock_manager };
-          setFlags(f);
-          try { localStorage.setItem('bftone_flags', JSON.stringify(f)); } catch {}
-          // Preload Billing caches in background on auth change
-          (async ()=>{
-            try {
-              const ts = Number(sessionStorage.getItem('billing_cache_at')||'0');
-              if (!ts || (Date.now()-ts) > 5*60*1000) {
-                const [catsRes, prodsRes, stkRes] = await Promise.all([
-                  supabaseClient.from("categories").select("*").order("name"),
-                  supabaseClient.from("products").select("*").eq("active", true).order("name"),
-                  supabaseClient.from('product_stocks').select('product_id,max_qty,available_qty,notify_at_count')
-                ]);
-                if (!catsRes.error && catsRes.data) sessionStorage.setItem('billing_categories', JSON.stringify(catsRes.data));
-                if (!prodsRes.error && prodsRes.data) sessionStorage.setItem('billing_products', JSON.stringify(prodsRes.data));
-                if (!stkRes.error && stkRes.data) sessionStorage.setItem('billing_stocks', JSON.stringify(stkRes.data));
-                sessionStorage.setItem('billing_cache_at', String(Date.now()));
-              }
-            } catch {}
-          })();
-        });
-      } else {
+        const { data: prof } = await supabaseClient.from('profiles').select('is_admin,is_stock_manager').eq('id', u.id).maybeSingle();
+        const f = { is_admin: !!prof?.is_admin, is_stock_manager: !!prof?.is_stock_manager };
+        setFlags(f);
+        try { localStorage.setItem('bftone_flags', JSON.stringify(f)); } catch {}
+        (async ()=>{
+          try {
+            const ts = Number(sessionStorage.getItem('billing_cache_at')||'0');
+            if (!ts || (Date.now()-ts) > 5*60*1000) {
+              const [catsRes, prodsRes, stkRes] = await Promise.all([
+                supabaseClient.from("categories").select("*").order("name"),
+                supabaseClient.from("products").select("*").eq("active", true).order("name"),
+                supabaseClient.from('product_stocks').select('product_id,max_qty,available_qty,notify_at_count')
+              ]);
+              if (!catsRes.error && catsRes.data) sessionStorage.setItem('billing_categories', JSON.stringify(catsRes.data));
+              if (!prodsRes.error && prodsRes.data) sessionStorage.setItem('billing_products', JSON.stringify(prodsRes.data));
+              if (!stkRes.error && stkRes.data) sessionStorage.setItem('billing_stocks', JSON.stringify(stkRes.data));
+              sessionStorage.setItem('billing_cache_at', String(Date.now()));
+            }
+          } catch {}
+        })();
+      } else if (event === 'SIGNED_OUT') {
         setFlags(null);
-        try { localStorage.removeItem('shopops_flags'); } catch {}
+        try { localStorage.removeItem('bftone_flags'); } catch {}
       }
     });
     return ()=>{ try { sub.subscription.unsubscribe(); } catch {} };
@@ -82,7 +98,7 @@ export default function Home() {
   return (
     <div className="grid gap-4">
       <div>
-        <h1 className="text-2xl font-semibold text-sky-700">Hello{userEmail?`, ${userEmail}`:""}</h1>
+        <h1 className="text-2xl font-semibold text-sky-700">Hello{userEmail?`, ${userEmail.split("@")[0] || userEmail}`:""}</h1>
         <p className="text-sm text-zinc-600">What would you like to do?</p>
       </div>
       <div className="grid grid-cols-2 gap-3">

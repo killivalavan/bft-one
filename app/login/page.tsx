@@ -17,6 +17,7 @@ export default function LoginPage() {
     setError(undefined);
     const { error } = await supabaseClient.auth.signInWithPassword({ email, password });
     if (error) { setError(error.message); return; }
+    try { localStorage.setItem('bftone_display_email', email); } catch {}
     router.push("/");
   }
 
