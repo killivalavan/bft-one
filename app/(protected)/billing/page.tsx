@@ -2,30 +2,30 @@
 import { useEffect, useState, useMemo } from "react";
 import { supabaseClient } from "@/lib/supabaseClient";
 import { useCart, totalCents } from "@/store/cart";
-import { Card, CardContent } from "@/components/ui/Card";
-import { Button } from "@/components/ui/Button";
 import { useToast } from "@/components/ui/Toast";
-// search removed per request
+import { CategorySelector } from "@/components/billing/CategorySelector";
+import { ProductCard } from "@/components/billing/ProductCard";
+import { CartBar } from "@/components/billing/CartBar";
 
-type Category = { id:string; name:string; icon_url?: string|null };
+type Category = { id: string; name: string; icon_url?: string | null };
 
-type Product = { id:string; name:string; price_cents:number; image_url:string|null; category_id:string; mrp_cents?: number|null; unit_label?: string|null; subtitle?: string|null; options_json?: any };
-type Stock = { product_id:string; max_qty:number; available_qty:number; notify_at_count?: number|null };
+type Product = { id: string; name: string; price_cents: number; image_url: string | null; category_id: string; mrp_cents?: number | null; unit_label?: string | null; subtitle?: string | null; options_json?: any };
+type Stock = { product_id: string; max_qty: number; available_qty: number; notify_at_count?: number | null };
 
 export default function BillingPage() {
   const { toast } = useToast();
-  const [categories,setCategories] = useState<Category[]>([]);
-  const [products,setProducts] = useState<Product[]>([]);
-  const [stocks,setStocks] = useState<Record<string,Stock>>({});
-  const [activeCat,setActiveCat] = useState<string|undefined>();
-  // search removed per request
-  const items = useCart(s=>s.items);
-  const increment = useCart(s=>s.increment);
-  const decrement = useCart(s=>s.decrement);
-  const clear = useCart(s=>s.clear);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [stocks, setStocks] = useState<Record<string, Stock>>({});
+  const [activeCat, setActiveCat] = useState<string | undefined>();
 
-  useEffect(()=>{
-    (async ()=>{
+  const items = useCart(s => s.items);
+  const increment = useCart(s => s.increment);
+  const decrement = useCart(s => s.decrement);
+  const clear = useCart(s => s.clear);
+
+  useEffect(() => {
+    (async () => {
       try {
         // 1) Warm start from session cache
         try {
@@ -33,22 +33,22 @@ export default function BillingPage() {
           const cp = sessionStorage.getItem('billing_products');
           const cs = sessionStorage.getItem('billing_stocks');
           if (cc) {
-            const cats = JSON.parse(cc||'null');
-            if (Array.isArray(cats)) { setCategories(cats); setActiveCat((cats&&cats[0]?.id) || undefined); }
+            const cats = JSON.parse(cc || 'null');
+            if (Array.isArray(cats)) { setCategories(cats); setActiveCat((cats && cats[0]?.id) || undefined); }
           }
           if (cp) {
-            const prods = JSON.parse(cp||'null');
+            const prods = JSON.parse(cp || 'null');
             if (Array.isArray(prods)) setProducts(prods);
           }
           if (cs) {
-            const stocksArr = JSON.parse(cs||'null');
+            const stocksArr = JSON.parse(cs || 'null');
             if (Array.isArray(stocksArr)) {
-              const map: Record<string,Stock> = {};
-              stocksArr.forEach((s:any)=>{ if (s?.product_id) map[s.product_id] = s; });
+              const map: Record<string, Stock> = {};
+              stocksArr.forEach((s: any) => { if (s?.product_id) map[s.product_id] = s; });
               setStocks(map);
             }
           }
-        } catch {}
+        } catch { }
 
         // 2) Fetch fresh data in parallel and cache
         const [catsRes, prodsRes, stkRes] = await Promise.all([
@@ -58,60 +58,61 @@ export default function BillingPage() {
         ]);
         if (catsRes.error) throw catsRes.error;
         if (prodsRes.error) throw prodsRes.error;
-        setCategories(catsRes.data||[]);
-        setActiveCat((catsRes.data&&catsRes.data[0]?.id) || undefined);
-        setProducts(prodsRes.data||[]);
-        const map: Record<string,Stock> = {};
-        (stkRes.data||[]).forEach((s:any)=>{ map[s.product_id] = s; });
+        setCategories(catsRes.data || []);
+        if (!activeCat) setActiveCat((catsRes.data && catsRes.data[0]?.id) || undefined);
+        setProducts(prodsRes.data || []);
+        const map: Record<string, Stock> = {};
+        (stkRes.data || []).forEach((s: any) => { map[s.product_id] = s; });
         setStocks(map);
         try {
-          sessionStorage.setItem('billing_categories', JSON.stringify(catsRes.data||[]));
-          sessionStorage.setItem('billing_products', JSON.stringify(prodsRes.data||[]));
-          sessionStorage.setItem('billing_stocks', JSON.stringify(stkRes.data||[]));
-        } catch {}
-      } catch (e:any) {
+          sessionStorage.setItem('billing_categories', JSON.stringify(catsRes.data || []));
+          sessionStorage.setItem('billing_products', JSON.stringify(prodsRes.data || []));
+          sessionStorage.setItem('billing_stocks', JSON.stringify(stkRes.data || []));
+        } catch { }
+      } catch (e: any) {
         setCategories([]); setProducts([]);
-        try { toast({ title: "Billing data failed", description: e?.message||String(e), variant: "error" }); } catch {}
+        try { toast({ title: "Billing data failed", description: e?.message || String(e), variant: "error" }); } catch { }
       }
     })();
-  },[]);
+  }, []);
 
   // Focus a product if pid is provided in the URL
-  useEffect(()=>{
-    if (products.length===0) return;
+  useEffect(() => {
+    if (products.length === 0) return;
     try {
       const sp = new URLSearchParams(window.location.search);
       const pid = sp.get('pid');
       if (!pid) return;
-      const prod = products.find(p=>p.id===pid);
+      const prod = products.find(p => p.id === pid);
       if (!prod) return;
       setActiveCat(prod.category_id);
-      setTimeout(()=>{
+      setTimeout(() => {
         const el = document.getElementById(`prod-${pid}`);
         if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
       }, 100);
-    } catch {}
+    } catch { }
   }, [products]);
 
-  const shown = useMemo(()=> products.filter(p=>p.category_id===activeCat), [products, activeCat]);
+  const shown = useMemo(() => products.filter(p => p.category_id === activeCat), [products, activeCat]);
 
   // Realtime: reflect stock changes from other devices instantly
-  useEffect(()=>{
+  useEffect(() => {
     const ch = supabaseClient.channel('billing-stocks-live')
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'product_stocks' }, (payload:any)=>{
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'product_stocks' }, (payload: any) => {
         const row = payload.new as any; if (!row?.product_id) return;
-        setStocks(prev=> {
-          const next = { ...prev, [row.product_id]: { ...(prev[row.product_id]||{ product_id: row.product_id, max_qty:0, available_qty:0 }), ...row } as any };
-          try { sessionStorage.setItem('billing_stocks', JSON.stringify(Object.values(next))); } catch {}
+        setStocks(prev => {
+          const next = { ...prev, [row.product_id]: { ...(prev[row.product_id] || { product_id: row.product_id, max_qty: 0, available_qty: 0 }), ...row } as any };
+          try { sessionStorage.setItem('billing_stocks', JSON.stringify(Object.values(next))); } catch { }
           return next;
         });
       })
       .subscribe();
-    return ()=>{ try { supabaseClient.removeChannel(ch); } catch {} };
-  },[]);
-  function statusFor(pid:string){
+    return () => { try { supabaseClient.removeChannel(ch); } catch { } };
+  }, []);
+
+  function statusFor(pid: string) {
     const s = stocks[pid];
-    if (!s) return { low:false, oos:false };
+    if (!s) return { low: false, oos: false };
     const low = (s.notify_at_count ?? 0) > 0 && s.available_qty <= (s.notify_at_count as number);
     const oos = s.available_qty <= 0;
     return { low, oos, s } as any;
@@ -121,198 +122,114 @@ export default function BillingPage() {
     const { data: { user } } = await supabaseClient.auth.getUser();
     if (!user) { toast({ title: "Login required", variant: "error" }); return; }
     const list = Object.values(items);
-    if (list.length===0) return;
+    if (list.length === 0) return;
     const total = totalCents(items);
     const { data: order, error } = await supabaseClient.from("orders")
       .insert({ user_id: user.id, total_cents: total, status: "pending" })
       .select("*").single();
     if (error) { toast({ title: "Failed to submit order", description: error.message, variant: "error" }); return; }
-    const rows = list.map(i=>({ order_id: order.id, product_id: i.product_id, qty: i.qty, price_cents: i.price_cents }));
+    const rows = list.map(i => ({ order_id: order.id, product_id: i.product_id, qty: i.qty, price_cents: i.price_cents }));
     const { error: e2 } = await supabaseClient.from("order_items").insert(rows);
     if (e2) { toast({ title: "Failed to add items", description: e2.message, variant: "error" }); return; }
     try {
       // Adjust stock and create notifications server-side
-      await fetch('/api/stock/adjust', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ items: rows }) });
-    } catch {}
+      await fetch('/api/stock/adjust', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ items: rows }) });
+    } catch { }
 
     // Optimistically update local stock so badges reflect immediately
     setStocks(prev => {
       const next = { ...prev } as Record<string, Stock>;
       for (const it of rows) {
         const cur = next[it.product_id] || { product_id: it.product_id, max_qty: 0, available_qty: 0, notify_at_count: null } as any;
-        next[it.product_id] = { ...cur, available_qty: Math.max(0, (cur.available_qty||0) - (it.qty||0)) };
+        next[it.product_id] = { ...cur, available_qty: Math.max(0, (cur.available_qty || 0) - (it.qty || 0)) };
       }
-      try { sessionStorage.setItem('billing_stocks', JSON.stringify(Object.values(next))); } catch {}
+      try { sessionStorage.setItem('billing_stocks', JSON.stringify(Object.values(next))); } catch { }
       return next;
     });
 
     // Reconcile with server for the specific products
     try {
-      const pids = rows.map(r=>r.product_id);
-      if (pids.length>0) {
+      const pids = rows.map(r => r.product_id);
+      if (pids.length > 0) {
         const { data: fresh } = await supabaseClient.from('product_stocks').select('product_id,max_qty,available_qty,notify_at_count').in('product_id', pids);
         if (fresh) {
-          setStocks(prev=>{
+          setStocks(prev => {
             const next = { ...prev } as Record<string, Stock>;
             for (const s of fresh as any[]) next[s.product_id] = s as any;
-            try { sessionStorage.setItem('billing_stocks', JSON.stringify(Object.values(next))); } catch {}
+            try { sessionStorage.setItem('billing_stocks', JSON.stringify(Object.values(next))); } catch { }
             return next;
           });
         }
       }
-    } catch {}
+    } catch { }
 
     clear();
     toast({ title: "Order submitted", variant: "success" });
   }
 
   return (
-    <div className="grid gap-3">
-      {/* Header */}
-      <div className="flex items-center gap-2">
-        <div className="flex-1 min-w-0 relative z-0">
-          {activeCat ? (
-            <div className="text-sm font-semibold text-foreground">
-              {shown.length} items in {categories.find(c=>c.id===activeCat)?.name}
+    <div className="flex flex-col md:flex-row h-[calc(100vh-64px)] overflow-hidden bg-neutral-50/50">
+
+      {/* Sidebar: Categories */}
+      <aside className="shrink-0 w-full md:w-64 bg-white border-b md:border-b-0 md:border-r border-zinc-200 z-20">
+        <div className="p-3 md:p-4 h-full overflow-hidden flex flex-col">
+          <h2 className="text-xs font-bold text-zinc-400 uppercase tracking-widest mb-3 hidden md:block">Categories</h2>
+          <div className="flex-1 overflow-y-auto no-scrollbar">
+            <CategorySelector
+              categories={categories}
+              activeId={activeCat}
+              onSelect={setActiveCat}
+            />
+          </div>
+        </div>
+      </aside>
+
+      {/* Main Content: Products */}
+      <main className="flex-1 overflow-y-auto p-4 md:p-6 pb-24 relative">
+        <div className="max-w-6xl mx-auto">
+          {/* Header */}
+          <div className="mb-6 flex items-end justify-between">
+            <div>
+              <h1 className="text-2xl font-bold text-zinc-900 tracking-tight">
+                {categories.find(c => c.id === activeCat)?.name || 'Billing'}
+              </h1>
+              <p className="text-zinc-500 text-sm mt-1">{shown.length} products available</p>
             </div>
-          ) : (
-            <div className="text-sm font-semibold text-foreground">Billing</div>
-          )}
-        </div>
-      </div>
-
-      <div className="grid grid-cols-[96px_1fr] md:grid-cols-[120px_1fr] gap-2">
-        {/* Left column: categories */}
-        <div className="relative">
-          <div className="sticky top-2 grid gap-1.5">
-            {categories.map(c=>{
-              const active = activeCat===c.id;
-              return (
-                <button key={c.id}
-                  className={`w-full aspect-square overflow-hidden px-3 py-2 rounded-xl border border-zinc-200 text-sm flex flex-col items-center justify-center gap-1 ${active?'bg-brand-50 border-zinc-200 text-brand-800':'bg-white border-zinc-200 text-zinc-800'}`}
-                  onClick={()=>setActiveCat(c.id)}>
-                  <span className="text-center text-sm sm:text-base font-semibold leading-tight px-1 line-clamp-2">
-                    {c.name}
-                  </span>
-                </button>
-              );
-            })}
           </div>
-        </div>
-        {/* Right: products */}
-        <div className="min-w-0">
-          {/* Filter chips */}
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
-            {shown.map(p=> {
-              const st = statusFor(p.id) as any;
-              const qInCart = (items[p.id]?.qty||0);
-              const atLimit = st?.s ? (qInCart >= Math.max(0, st.s.available_qty)) : false;
-              return (
-              <Card key={p.id} id={`prod-${p.id}`} className="active:scale-[.99] overflow-hidden">
-                <CardContent className="p-0">
-                  <div className="p-1.5">
-                    {/* image */}
-                    <div className="relative aspect-square w-full rounded-lg overflow-hidden border border-zinc-200 bg-white">
-                      {p.image_url ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={p.image_url} alt={p.name} className="w-full h-full object-cover" />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center text-zinc-400 text-xs">No image</div>
-                      )}
-                      {st?.oos && (
-                        <span className="absolute top-1 right-1 px-1.5 py-0.5 text-[10px] font-semibold rounded bg-red-600 text-white">Out of stock</span>
-                      )}
-                      {!st?.oos && st?.low && (
-                        <span className="absolute top-1 right-1 px-1.5 py-0.5 text-[10px] font-semibold rounded bg-amber-500 text-white">Low stock</span>
-                      )}
-                      {qInCart > 0 && (
-                        <span className="absolute bottom-1 right-1 min-w-6 h-6 px-1 inline-flex items-center justify-center rounded-full border border-zinc-200 bg-white text-brand-700 text-[12px] font-semibold">
-                          {qInCart}
-                        </span>
-                      )}
-                    </div>
-                    {/* content */}
-                    <div className="mt-1 min-w-0">
-                      <div className="text-[12px] font-medium truncate text-zinc-900">{p.name}</div>
-                      {p.subtitle && <div className="text-[10px] text-zinc-600 truncate">{p.subtitle}</div>}
-                      {p.unit_label && <div className="text-[10px] text-zinc-600">{p.unit_label}</div>}
-                      <div className="text-[11px] mt-0.5 flex items-center gap-1">
-                        <span className="font-semibold text-zinc-900">₹ {(p.price_cents/100).toFixed(2)}</span>
-                        {p.mrp_cents && p.mrp_cents > p.price_cents && (
-                          <span className="text-zinc-400 line-through text-[10px]">₹ {(p.mrp_cents/100).toFixed(2)}</span>
-                        )}
-                        {st?.s && (
-                          <span className="ml-auto text-[10px] px-1.5 py-0.5 rounded-full border border-zinc-200 text-zinc-700 bg-zinc-50">Avail: {Math.max(0, st.s.available_qty - qInCart)}</span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="p-1.5 pt-0 flex items-center gap-2">
-                    {Array.isArray(p.options_json) && p.options_json.length > 1 ? (
-                      <Button size="sm" variant="outline" className="h-8 text-[13px] border-zinc-200 text-zinc-700 hover:bg-zinc-50 flex-1 inline-flex items-center justify-center gap-2">
-                        <span>{p.options_json.length} options</span>
-                        <span className="min-w-5 h-5 px-1 inline-flex items-center justify-center rounded-full border border-zinc-200 bg-zinc-50 text-zinc-700 text-[11px] font-semibold animate-pop" key={(items[p.id]?.qty||0)}>
-                          {(items[p.id]?.qty||0)}
-                        </span>
-                      </Button>
-                    ) : (
-                      <Button
-                        size="sm"
-                        className={`min-h-[48px] h-12 text-[15px] flex-1 inline-flex items-center justify-center gap-3 px-2.5 ${st?.oos || atLimit ? 'bg-zinc-300 text-zinc-600 cursor-not-allowed' : 'bg-brand-600 hover:bg-brand-700 text-white'}`}
-                        onClick={()=>{ if (st?.oos || atLimit) { return; } const q=(items[p.id]?.qty||0); if (q===0) { increment({ product_id:p.id, name:p.name, price_cents:p.price_cents, qty:1 }); } }}
-                      >
-                        {(()=>{ const q=(items[p.id]?.qty||0);
-                          if (q===0) {
-                            return (
-                              <span className="px-4 py-1.5 rounded-md bg-emerald-600 text-white font-semibold tracking-wide">ADD</span>
-                            );
-                          }
-                          return (
-                            <>
-                              <span
-                                onClick={(e)=>{ e.preventDefault(); e.stopPropagation(); if(q>0){ decrement(p.id); } }}
-                                className={`shrink-0 w-9 h-9 inline-flex items-center justify-center rounded-full text-[18px] font-bold transition-colors ${q===0? 'bg-white/10 text-white/50 cursor-not-allowed':'bg-white/20 text-white hover:bg-white/30 cursor-pointer'}`}
-                                aria-disabled={q===0}
-                              >
-                                −
-                              </span>
-                              <span
-                                onClick={(e)=>{ e.stopPropagation(); if(!(st?.oos || atLimit)){ increment({ product_id:p.id, name:p.name, price_cents:p.price_cents, qty:1 }); } }}
-                                className={`shrink-0 w-9 h-9 inline-flex items-center justify-center rounded-full text-[18px] font-bold transition-colors ${st?.oos || atLimit ? 'bg-white/10 text-white/50 cursor-not-allowed' : 'bg-white/20 text-white hover:bg-white/30 cursor-pointer'}`}
-                              >
-                                +
-                              </span>
-                            </>
-                          );
-                        })()}
-                      </Button>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            );})}
-          </div>
-        </div>
-      </div>
 
-      {/* Sticky cart bar */}
-      <div className="fixed left-0 right-0 bottom-0 bg-white border-t border-zinc-200 p-2">
-        <div className="max-w-md mx-auto">
-          <div className="flex flex-wrap gap-1 text-[11px]">
-            {Object.values(items).map(i=> (
-              <span key={i.product_id} className="px-2 py-1 rounded-full bg-zinc-100 border border-zinc-200 text-zinc-800">{i.name} {i.qty}</span>
+          {/* Grid */}
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+            {shown.map(p => (
+              <div key={p.id} id={`prod-${p.id}`} className="contents">
+                <ProductCard
+                  product={p}
+                  qty={items[p.id]?.qty || 0}
+                  stockStatus={statusFor(p.id)}
+                  onIncrement={() => increment({ product_id: p.id, name: p.name, price_cents: p.price_cents, qty: 1 })}
+                  onDecrement={() => decrement(p.id)}
+                  onAdd={() => increment({ product_id: p.id, name: p.name, price_cents: p.price_cents, qty: 1 })}
+                />
+              </div>
             ))}
           </div>
-          <div className="flex justify-between items-center mt-1.5">
-            <div className="font-semibold text-zinc-900 text-sm">Total: ₹ {(totalCents(items)/100).toFixed(2)}</div>
-            <div className="flex gap-2">
-              <Button size="sm" variant="outline" className="h-9 border-zinc-200 text-zinc-700 hover:bg-zinc-50" onClick={clear}>Clear</Button>
-              <Button size="sm" className="h-9" onClick={submitOrder}>Submit</Button>
+
+          {/* Empty State */}
+          {shown.length === 0 && (
+            <div className="flex flex-col items-center justify-center py-20 text-center opacity-60">
+              <div className="w-16 h-16 bg-zinc-200 rounded-full mb-4" />
+              <p className="text-zinc-500 font-medium">No products found in this category</p>
             </div>
-          </div>
+          )}
         </div>
-      </div>
-      <div className="h-24" />
+      </main>
+
+      {/* Sticky Cart Bar */}
+      <CartBar
+        itemCount={Object.values(items).reduce((a, b) => a + (b.qty || 0), 0)}
+        totalCents={totalCents(items)}
+        onClear={clear}
+        onSubmit={submitOrder}
+      />
     </div>
   );
 }

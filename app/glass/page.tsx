@@ -2,6 +2,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { supabaseClient } from "@/lib/supabaseClient";
+import { useUser } from "@/lib/hooks/useUser";
 import { Card, CardContent, CardHeader } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
@@ -29,15 +30,15 @@ type GlassLog = {
 
 export default function GlassPage() {
   const { toast } = useToast();
-  const [logDate, setLogDate] = useState<string>(()=> new Date().toISOString().slice(0,10));
+  const [logDate, setLogDate] = useState<string>(() => new Date().toISOString().slice(0, 10));
   const [mSmall, setMSmall] = useState<string>("0");
   const [mLarge, setMLarge] = useState<string>("0");
   const [nSmall, setNSmall] = useState<string>("0");
   const [nLarge, setNLarge] = useState<string>("0");
   const [logs, setLogs] = useState<GlassLog[]>([]);
   const [loading, setLoading] = useState(false);
-  const [suppressPrefillForDate, setSuppressPrefillForDate] = useState<string|null>(null);
-  const [activeTab, setActiveTab] = useState<"logs"|"daily">("logs");
+  const [suppressPrefillForDate, setSuppressPrefillForDate] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<"logs" | "daily">("logs");
 
   const loadingInFlight = useRef(false);
   const hasLoadedOnce = useRef(false);
@@ -105,52 +106,53 @@ export default function GlassPage() {
     }
   }
 
-  useEffect(()=>{
-    // Defer first load until Supabase fires INITIAL_SESSION/SIGNED_IN once
-    const { data: sub } = supabaseClient.auth.onAuthStateChange((_event, session) => {
-      console.log('[glass] auth event ->', _event, 'hasSession', !!session);
-      if (!bootLoaded.current && (session || _event === 'INITIAL_SESSION' || _event === 'SIGNED_IN')) {
+  const { user } = useUser();
+
+  // Trigger load when user is available or restored
+  useEffect(() => {
+    if (user) {
+      if (!bootLoaded.current) {
         bootLoaded.current = true;
         load();
+      } else {
+        // Reload on user change/restore if already booted
+        hasLoadedOnce.current = false;
+        loadRetries.current = 0;
+        load();
       }
-    });
-    // Fallback: if no event within 2s, try anyway
+    }
+  }, [user]);
+
+  useEffect(() => {
+    // Fallback if boot hangs
     const t = setTimeout(() => { if (!bootLoaded.current) load(); }, 2000);
-    return () => { try { sub?.subscription?.unsubscribe?.(); } catch {}; clearTimeout(t); };
-  },[]);
+    return () => clearTimeout(t);
+  }, []);
 
   useEffect(() => {
     const onFocus = () => { load(); };
     const onVisibility = () => { if (document.visibilityState === 'visible') load(); };
     window.addEventListener('focus', onFocus);
     document.addEventListener('visibilitychange', onVisibility);
-    // Also reload on auth changes after boot
-    const { data: sub } = supabaseClient.auth.onAuthStateChange((_e) => {
-      if (!bootLoaded.current) return;
-      hasLoadedOnce.current = false;
-      loadRetries.current = 0;
-      load();
-    });
     return () => {
       window.removeEventListener('focus', onFocus);
       document.removeEventListener('visibilitychange', onVisibility);
-      sub?.subscription?.unsubscribe?.();
     };
   }, []);
 
   // Prefill inputs when date changes (unless suppressed after save)
-  useEffect(()=>{
+  useEffect(() => {
     if (suppressPrefillForDate && suppressPrefillForDate === logDate) return;
-    const dayLogs = logs.filter(l=>l.log_date===logDate);
-    const m = dayLogs.find(l=>l.shift==='morning');
-    const n = dayLogs.find(l=>l.shift==='night');
+    const dayLogs = logs.filter(l => l.log_date === logDate);
+    const m = dayLogs.find(l => l.shift === 'morning');
+    const n = dayLogs.find(l => l.shift === 'night');
     setMSmall(String(m?.small_count ?? 0));
     setMLarge(String(m?.large_count ?? 0));
     setNSmall(String(n?.small_count ?? 0));
     setNLarge(String(n?.large_count ?? 0));
   }, [logDate, logs, suppressPrefillForDate]);
 
-  const aggregates = useMemo(()=>{
+  const aggregates = useMemo(() => {
     const now = new Date();
     const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const startOfWeek = new Date(startOfDay);
@@ -174,7 +176,7 @@ export default function GlassPage() {
     return { perDay, perWeek, perMonth, perYear };
   }, [logs]);
 
-  const monthSummary = useMemo(()=>{
+  const monthSummary = useMemo(() => {
     // Build by date using the latest morning & night entries and compute broken S/L
     const map = new Map<string, { m?: GlassLog; n?: GlassLog }>();
     for (const l of logs) {
@@ -190,27 +192,27 @@ export default function GlassPage() {
     const rows: { date: string; bSmall: number; bLarge: number; broken: number }[] = [];
     for (const [date, { m, n }] of map.entries()) {
       if (!n) continue; // only when we have a night entry for the date
-      const bSmall = Math.max((m?.small_count||0) - (n.small_count||0), 0);
-      const bLarge = Math.max((m?.large_count||0) - (n.large_count||0), 0);
+      const bSmall = Math.max((m?.small_count || 0) - (n.small_count || 0), 0);
+      const bLarge = Math.max((m?.large_count || 0) - (n.large_count || 0), 0);
       rows.push({ date, bSmall, bLarge, broken: bSmall + bLarge });
     }
-    return rows.sort((a,b)=> (a.date < b.date ? 1 : -1)).slice(0, 31);
+    return rows.sort((a, b) => (a.date < b.date ? 1 : -1)).slice(0, 31);
   }, [logs]);
 
-  const computedBrokenSmall = useMemo(()=>{
-    const m = parseInt(mSmall||'0',10)||0; const n = parseInt(nSmall||'0',10)||0; const d = m-n; return d>0?d:0;
+  const computedBrokenSmall = useMemo(() => {
+    const m = parseInt(mSmall || '0', 10) || 0; const n = parseInt(nSmall || '0', 10) || 0; const d = m - n; return d > 0 ? d : 0;
   }, [mSmall, nSmall]);
-  const computedBrokenLarge = useMemo(()=>{
-    const m = parseInt(mLarge||'0',10)||0; const n = parseInt(nLarge||'0',10)||0; const d = m-n; return d>0?d:0;
+  const computedBrokenLarge = useMemo(() => {
+    const m = parseInt(mLarge || '0', 10) || 0; const n = parseInt(nLarge || '0', 10) || 0; const d = m - n; return d > 0 ? d : 0;
   }, [mLarge, nLarge]);
-  const computedBroken = useMemo(()=> computedBrokenSmall + computedBrokenLarge, [computedBrokenSmall, computedBrokenLarge]);
+  const computedBroken = useMemo(() => computedBrokenSmall + computedBrokenLarge, [computedBrokenSmall, computedBrokenLarge]);
 
   async function saveDay() {
     if (!logDate) { toast({ title: "Select a date", variant: "error" }); return; }
-    const mSmallNum = parseInt(mSmall||'0',10)||0;
-    const mLargeNum = parseInt(mLarge||'0',10)||0;
-    const nSmallNum = parseInt(nSmall||'0',10)||0;
-    const nLargeNum = parseInt(nLarge||'0',10)||0;
+    const mSmallNum = parseInt(mSmall || '0', 10) || 0;
+    const mLargeNum = parseInt(mLarge || '0', 10) || 0;
+    const nSmallNum = parseInt(nSmall || '0', 10) || 0;
+    const nLargeNum = parseInt(nLarge || '0', 10) || 0;
     const brokenNum = computedBroken;
 
     // upsert by deleting existing entries for the date
@@ -237,43 +239,43 @@ export default function GlassPage() {
         </Link>
       </div>
       <div className="h-0" />
-    <div className="grid gap-4">
-      <Card>
-        <CardHeader>
-          <div className="font-semibold text-zinc-900">Glass count</div>
-          <div className="text-sm text-zinc-600">Track small/large and broken counts for each shift</div>
-        </CardHeader>
-        <CardContent className="grid gap-3">
-          {/* Aggregates */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-            <div className="rounded-xl border border-zinc-200 p-3 bg-white text-center">
-              <div className="text-[11px] text-zinc-600">Broken today</div>
-              <div className="text-xl font-semibold text-zinc-900">{aggregates.perDay}</div>
+      <div className="grid gap-4">
+        <Card>
+          <CardHeader>
+            <div className="font-semibold text-zinc-900">Glass count</div>
+            <div className="text-sm text-zinc-600">Track small/large and broken counts for each shift</div>
+          </CardHeader>
+          <CardContent className="grid gap-3">
+            {/* Aggregates */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              <div className="rounded-xl border border-zinc-200 p-3 bg-white text-center">
+                <div className="text-[11px] text-zinc-600">Broken today</div>
+                <div className="text-xl font-semibold text-zinc-900">{aggregates.perDay}</div>
+              </div>
+              <div className="rounded-xl border border-zinc-200 p-3 bg-white text-center">
+                <div className="text-[11px] text-zinc-600">This week</div>
+                <div className="text-xl font-semibold text-zinc-900">{aggregates.perWeek}</div>
+              </div>
+              <div className="rounded-xl border border-zinc-200 p-3 bg-white text-center">
+                <div className="text-[11px] text-zinc-600">This month</div>
+                <div className="text-xl font-semibold text-zinc-900">{aggregates.perMonth}</div>
+              </div>
+              <div className="rounded-xl border border-zinc-200 p-3 bg-white text-center">
+                <div className="text-[11px] text-zinc-600">This year</div>
+                <div className="text-xl font-semibold text-zinc-900">{aggregates.perYear}</div>
+              </div>
             </div>
-            <div className="rounded-xl border border-zinc-200 p-3 bg-white text-center">
-              <div className="text-[11px] text-zinc-600">This week</div>
-              <div className="text-xl font-semibold text-zinc-900">{aggregates.perWeek}</div>
-            </div>
-            <div className="rounded-xl border border-zinc-200 p-3 bg-white text-center">
-              <div className="text-[11px] text-zinc-600">This month</div>
-              <div className="text-xl font-semibold text-zinc-900">{aggregates.perMonth}</div>
-            </div>
-            <div className="rounded-xl border border-zinc-200 p-3 bg-white text-center">
-              <div className="text-[11px] text-zinc-600">This year</div>
-              <div className="text-xl font-semibold text-zinc-900">{aggregates.perYear}</div>
-            </div>
-          </div>
 
-          {/* Action */}
-          <div className="mt-2">
-            <Link href="/glass/entry" className="block">
-              <Button block>Add glass count</Button>
-            </Link>
-          </div>
+            {/* Action */}
+            <div className="mt-2">
+              <Link href="/glass/entry" className="block">
+                <Button block>Add glass count</Button>
+              </Link>
+            </div>
 
-        </CardContent>
-      </Card>
-    </div>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }

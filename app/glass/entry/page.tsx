@@ -2,6 +2,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { supabaseClient } from "@/lib/supabaseClient";
+import { useUser } from "@/lib/hooks/useUser";
 import { Card, CardContent, CardHeader } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
@@ -86,29 +87,24 @@ export default function GlassEntryPage() {
     }
   }
 
+  const { user } = useUser();
+
   useEffect(() => {
     mounted.current = true;
-    (async () => {
-      for (let i=0;i<8;i++) {
-        const { data } = await supabaseClient.auth.getSession();
-        if (data?.session) break;
-        await new Promise(r=>setTimeout(r, 250));
-      }
-      if (mounted.current) await load();
-    })();
+    if (user) {
+      load();
+    }
     return () => { mounted.current = false; };
-  }, []);
+  }, [user]);
 
   useEffect(() => {
     const onFocus = () => { if (mounted.current) load(); };
     const onVisibility = () => { if (mounted.current && document.visibilityState === 'visible') load(); };
     window.addEventListener('focus', onFocus);
     document.addEventListener('visibilitychange', onVisibility);
-    const { data: sub } = supabaseClient.auth.onAuthStateChange(() => { hasLoadedOnce.current = false; loadRetries.current = 0; if (mounted.current) load(); });
     return () => {
       window.removeEventListener('focus', onFocus);
       document.removeEventListener('visibilitychange', onVisibility);
-      sub?.subscription?.unsubscribe?.();
     };
   }, []);
 
