@@ -5,10 +5,10 @@ import { useCart, totalCents } from "@/store/cart";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { useToast } from "@/components/ui/Toast";
-// search removed per request
+import { cn } from "@/lib/utils/cn";
+import { Check } from "lucide-react";
 
 type Category = { id: string; name: string; icon_url?: string | null };
-
 type Product = { id: string; name: string; price_cents: number; image_url: string | null; category_id: string; mrp_cents?: number | null; unit_label?: string | null; subtitle?: string | null; options_json?: any };
 type Stock = { product_id: string; max_qty: number; available_qty: number; notify_at_count?: number | null };
 
@@ -18,7 +18,7 @@ export default function BillingPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [stocks, setStocks] = useState<Record<string, Stock>>({});
   const [activeCat, setActiveCat] = useState<string | undefined>();
-  // search removed per request
+
   const items = useCart(s => s.items);
   const increment = useCart(s => s.increment);
   const decrement = useCart(s => s.decrement);
@@ -109,6 +109,7 @@ export default function BillingPage() {
       .subscribe();
     return () => { try { supabaseClient.removeChannel(ch); } catch { } };
   }, []);
+
   function statusFor(pid: string) {
     const s = stocks[pid];
     if (!s) return { low: false, oos: false };
@@ -135,7 +136,7 @@ export default function BillingPage() {
       await fetch('/api/stock/adjust', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ items: rows }) });
     } catch { }
 
-    // Optimistically update local stock so badges reflect immediately
+    // Optimistically update local stock
     setStocks(prev => {
       const next = { ...prev } as Record<string, Stock>;
       for (const it of rows) {
@@ -146,7 +147,6 @@ export default function BillingPage() {
       return next;
     });
 
-    // Reconcile with server for the specific products
     try {
       const pids = rows.map(r => r.product_id);
       if (pids.length > 0) {
@@ -167,31 +167,35 @@ export default function BillingPage() {
   }
 
   return (
-    <div className="grid gap-3">
+    <div className="grid gap-4 animate-in fade-in duration-500">
       {/* Header */}
-      <div className="flex items-center gap-2">
-        <div className="flex-1 min-w-0 relative z-0">
-          {activeCat ? (
-            <div className="text-sm font-semibold text-foreground">
-              {shown.length} items in {categories.find(c => c.id === activeCat)?.name}
-            </div>
-          ) : (
-            <div className="text-sm font-semibold text-foreground">Billing</div>
+      <div className="flex items-center gap-2 mb-2">
+        <div className="flex-1 min-w-0">
+          <h1 className="text-xl font-bold text-zinc-900 tracking-tight">Billing</h1>
+          {activeCat && (
+            <p className="text-sm text-zinc-500">
+              Showing {shown.length} items in <span className="font-medium text-sky-600">{categories.find(c => c.id === activeCat)?.name}</span>
+            </p>
           )}
         </div>
       </div>
 
-      <div className="grid grid-cols-[96px_1fr] md:grid-cols-[120px_1fr] gap-2">
+      <div className="grid grid-cols-[96px_1fr] md:grid-cols-[130px_1fr] gap-4">
         {/* Left column: categories */}
         <div className="relative">
-          <div className="sticky top-2 grid gap-1.5">
+          <div className="sticky top-20 grid gap-2">
             {categories.map(c => {
               const active = activeCat === c.id;
               return (
                 <button key={c.id}
-                  className={`w-full aspect-square overflow-hidden px-3 py-2 rounded-xl border border-zinc-200 text-sm flex flex-col items-center justify-center gap-1 ${active ? 'bg-brand-50 border-zinc-200 text-brand-800' : 'bg-white border-zinc-200 text-zinc-800'}`}
+                  className={cn(
+                    "w-full aspect-square overflow-hidden px-2 py-2 rounded-2xl flex flex-col items-center justify-center gap-1 transition-all duration-300",
+                    active
+                      ? "bg-sky-600 text-white shadow-md scale-105 ring-2 ring-sky-200"
+                      : "bg-white border border-zinc-100 text-zinc-600 hover:bg-zinc-50 hover:border-zinc-200 hover:shadow-sm"
+                  )}
                   onClick={() => setActiveCat(c.id)}>
-                  <span className="text-center text-sm sm:text-base font-semibold leading-tight px-1 line-clamp-2">
+                  <span className="text-center text-xs sm:text-sm font-semibold leading-tight line-clamp-2">
                     {c.name}
                   </span>
                 </button>
@@ -199,122 +203,147 @@ export default function BillingPage() {
             })}
           </div>
         </div>
+
         {/* Right: products */}
         <div className="min-w-0">
-          {/* Filter chips */}
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
+          <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
             {shown.map(p => {
               const st = statusFor(p.id) as any;
               const qInCart = (items[p.id]?.qty || 0);
               const atLimit = st?.s ? (qInCart >= Math.max(0, st.s.available_qty)) : false;
+
               return (
-                <Card key={p.id} id={`prod-${p.id}`} className="active:scale-[.99] overflow-hidden">
-                  <CardContent className="p-0">
-                    <div className="p-1.5">
-                      {/* image */}
-                      <div className="relative aspect-square w-full rounded-lg overflow-hidden border border-zinc-200 bg-white">
-                        {p.image_url ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img src={p.image_url} alt={p.name} className="w-full h-full object-cover" />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center text-zinc-400 text-xs">No image</div>
-                        )}
-                        {st?.oos && (
-                          <span className="absolute top-1 right-1 px-1.5 py-0.5 text-[10px] font-semibold rounded bg-red-600 text-white">Out of stock</span>
-                        )}
-                        {!st?.oos && st?.low && (
-                          <span className="absolute top-1 right-1 px-1.5 py-0.5 text-[10px] font-semibold rounded bg-amber-500 text-white">Low stock</span>
-                        )}
-                        {qInCart > 0 && (
-                          <span className="absolute bottom-1 right-1 min-w-6 h-6 px-1 inline-flex items-center justify-center rounded-full border border-zinc-200 bg-white text-brand-700 text-[12px] font-semibold">
-                            {qInCart}
-                          </span>
-                        )}
-                      </div>
-                      {/* content */}
-                      <div className="mt-1 min-w-0">
-                        <div className="text-[12px] font-medium truncate text-zinc-900">{p.name}</div>
-                        {p.subtitle && <div className="text-[10px] text-zinc-600 truncate">{p.subtitle}</div>}
-                        {p.unit_label && <div className="text-[10px] text-zinc-600">{p.unit_label}</div>}
-                        <div className="text-[11px] mt-0.5 flex items-center gap-1">
-                          <span className="font-semibold text-zinc-900">₹ {(p.price_cents / 100).toFixed(2)}</span>
-                          {p.mrp_cents && p.mrp_cents > p.price_cents && (
-                            <span className="text-zinc-400 line-through text-[10px]">₹ {(p.mrp_cents / 100).toFixed(2)}</span>
-                          )}
-                          {st?.s && (
-                            <span className="ml-auto text-[10px] px-1.5 py-0.5 rounded-full border border-zinc-200 text-zinc-700 bg-zinc-50">Avail: {Math.max(0, st.s.available_qty - qInCart)}</span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                    <div className="p-1.5 pt-0 flex items-center gap-2">
-                      {Array.isArray(p.options_json) && p.options_json.length > 1 ? (
-                        <Button size="sm" variant="outline" className="h-8 text-[13px] border-zinc-200 text-zinc-700 hover:bg-zinc-50 flex-1 inline-flex items-center justify-center gap-2">
-                          <span>{p.options_json.length} options</span>
-                          <span className="min-w-5 h-5 px-1 inline-flex items-center justify-center rounded-full border border-zinc-200 bg-zinc-50 text-zinc-700 text-[11px] font-semibold animate-pop" key={(items[p.id]?.qty || 0)}>
-                            {(items[p.id]?.qty || 0)}
-                          </span>
-                        </Button>
-                      ) : (
-                        <Button
-                          size="sm"
-                          className={`min-h-[48px] h-12 text-[15px] flex-1 inline-flex items-center justify-center gap-3 px-2.5 ${st?.oos || atLimit ? 'bg-zinc-300 text-zinc-600 cursor-not-allowed' : 'bg-brand-600 hover:bg-brand-700 text-white'}`}
-                          onClick={() => { if (st?.oos || atLimit) { return; } const q = (items[p.id]?.qty || 0); if (q === 0) { increment({ product_id: p.id, name: p.name, price_cents: p.price_cents, qty: 1 }); } }}
-                        >
-                          {(() => {
-                            const q = (items[p.id]?.qty || 0);
-                            if (q === 0) {
-                              return (
-                                <span className="px-4 py-1.5 rounded-md bg-emerald-600 text-white font-semibold tracking-wide">ADD</span>
-                              );
-                            }
-                            return (
-                              <>
-                                <span
-                                  onClick={(e) => { e.preventDefault(); e.stopPropagation(); if (q > 0) { decrement(p.id); } }}
-                                  className={`shrink-0 w-9 h-9 inline-flex items-center justify-center rounded-full text-[18px] font-bold transition-colors ${q === 0 ? 'bg-white/10 text-white/50 cursor-not-allowed' : 'bg-white/20 text-white hover:bg-white/30 cursor-pointer'}`}
-                                  aria-disabled={q === 0}
-                                >
-                                  −
-                                </span>
-                                <span
-                                  onClick={(e) => { e.stopPropagation(); if (!(st?.oos || atLimit)) { increment({ product_id: p.id, name: p.name, price_cents: p.price_cents, qty: 1 }); } }}
-                                  className={`shrink-0 w-9 h-9 inline-flex items-center justify-center rounded-full text-[18px] font-bold transition-colors ${st?.oos || atLimit ? 'bg-white/10 text-white/50 cursor-not-allowed' : 'bg-white/20 text-white hover:bg-white/30 cursor-pointer'}`}
-                                >
-                                  +
-                                </span>
-                              </>
-                            );
-                          })()}
-                        </Button>
+                <div key={p.id} id={`prod-${p.id}`} className="group bg-white rounded-2xl border border-zinc-100 shadow-sm hover:shadow-md hover:border-zinc-200 transition-all duration-300 overflow-hidden flex flex-col h-full">
+                  {/* Image Area */}
+                  <div className="relative aspect-square bg-zinc-50 overflow-hidden">
+                    {p.image_url ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={p.image_url} alt={p.name} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-zinc-300 text-xs font-medium">No Image</div>
+                    )}
+
+                    {/* Badges */}
+                    <div className="absolute top-2 right-2 flex flex-col gap-1 items-end">
+                      {st?.oos && <span className="px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide rounded-full bg-rose-500 text-white shadow-sm">Out of stock</span>}
+                      {!st?.oos && st?.low && <span className="px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide rounded-full bg-amber-500 text-white shadow-sm">Low stock</span>}
+                      {qInCart > 0 && (
+                        <span className="min-w-[24px] h-6 px-1.5 flex items-center justify-center rounded-full bg-sky-600 text-white text-xs font-bold shadow-sm ring-2 ring-white animate-in zoom-in">
+                          {qInCart}
+                        </span>
                       )}
                     </div>
-                  </CardContent>
-                </Card>
+                  </div>
+
+                  {/* Content Area */}
+                  <div className="p-3 flex-1 flex flex-col">
+                    <div className="flex-1 min-w-0 mb-2">
+                      <h3 className="text-sm font-semibold text-zinc-900 leading-snug line-clamp-2">{p.name}</h3>
+                      {p.subtitle && <p className="text-[11px] text-zinc-500 truncate mt-0.5">{p.subtitle}</p>}
+
+                      <div className="mt-2 flex items-baseline justify-between">
+                        <div>
+                          <span className="text-sm font-bold text-zinc-900">₹{(p.price_cents / 100).toFixed(2)}</span>
+                          {p.mrp_cents && p.mrp_cents > p.price_cents && (
+                            <span className="ml-1 text-[11px] text-zinc-400 line-through">₹{(p.mrp_cents / 100).toFixed(2)}</span>
+                          )}
+                        </div>
+                        {st?.s && (
+                          <span className={cn("text-[10px] font-medium px-1.5 py-0.5 rounded-md bg-zinc-50 text-zinc-600", st.low ? "text-amber-600 bg-amber-50" : "")}>
+                            {Math.max(0, st.s.available_qty - qInCart)} left
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Actions */}
+                    <div>
+                      {Array.isArray(p.options_json) && p.options_json.length > 1 ? (
+                        <Button variant="outline" size="sm" className="w-full h-9 bg-zinc-50 border-zinc-200 text-zinc-700 hover:bg-zinc-100 text-xs">
+                          Select Options
+                        </Button>
+                      ) : (
+                        <div className="flex items-center gap-2">
+                          {qInCart === 0 ? (
+                            <Button
+                              size="sm"
+                              className={cn(
+                                "w-full h-9 text-xs font-semibold tracking-wide",
+                                st?.oos || atLimit ? "bg-zinc-100 text-zinc-400" : "bg-sky-600 text-white hover:bg-sky-700 shadow-sm"
+                              )}
+                              disabled={st?.oos || atLimit}
+                              onClick={() => increment({ product_id: p.id, name: p.name, price_cents: p.price_cents, qty: 1 })}
+                            >
+                              {st?.oos ? "NO STOCK" : "ADD"}
+                            </Button>
+                          ) : (
+                            <div className="flex items-center justify-between w-full h-9 bg-sky-50 rounded-lg border border-sky-100 px-1">
+                              <button
+                                onClick={() => decrement(p.id)}
+                                className="w-7 h-7 flex items-center justify-center rounded-md bg-white text-sky-700 hover:bg-sky-100 shadow-sm transition-colors disabled:opacity-50"
+                              >
+                                -
+                              </button>
+                              <span className="text-sm font-bold text-sky-700 w-6 text-center">{qInCart}</span>
+                              <button
+                                disabled={st?.oos || atLimit}
+                                onClick={() => increment({ product_id: p.id, name: p.name, price_cents: p.price_cents, qty: 1 })}
+                                className="w-7 h-7 flex items-center justify-center rounded-md bg-sky-600 text-white hover:bg-sky-700 shadow-sm transition-colors disabled:bg-zinc-200 disabled:text-zinc-400"
+                              >
+                                +
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
               );
             })}
           </div>
         </div>
       </div>
 
-      {/* Sticky cart bar */}
-      <div className="fixed left-0 right-0 bottom-0 bg-white border-t border-zinc-200 p-2">
-        <div className="max-w-md mx-auto">
-          <div className="flex flex-wrap gap-1 text-[11px]">
-            {Object.values(items).map(i => (
-              <span key={i.product_id} className="px-2 py-1 rounded-full bg-zinc-100 border border-zinc-200 text-zinc-800">{i.name} {i.qty}</span>
-            ))}
-          </div>
-          <div className="flex justify-between items-center mt-1.5">
-            <div className="font-semibold text-zinc-900 text-sm">Total: ₹ {(totalCents(items) / 100).toFixed(2)}</div>
-            <div className="flex gap-2">
-              <Button size="sm" variant="outline" className="h-9 border-zinc-200 text-zinc-700 hover:bg-zinc-50" onClick={clear}>Clear</Button>
-              <Button size="sm" className="h-9" onClick={submitOrder}>Submit</Button>
-            </div>
+      {/* Sticky Floating Cart */}
+      <div className="fixed left-0 right-0 bottom-4 z-40 px-4 pointer-events-none">
+        <div className="max-w-md mx-auto pointer-events-auto">
+          <div className="bg-zinc-900/90 backdrop-blur-md text-white rounded-2xl shadow-2xl p-4 ring-1 ring-white/10 animate-in slide-in-from-bottom-6 duration-500">
+            {Object.keys(items).length > 0 ? (
+              <div>
+                <div className="flex flex-wrap gap-1.5 mb-3 max-h-20 overflow-y-auto no-scrollbar">
+                  {Object.values(items).map(i => (
+                    <span key={i.product_id} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/10 border border-white/5 text-[11px] font-medium text-zinc-200">
+                      {i.name}
+                      <span className="bg-white text-zinc-900 w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-bold">{i.qty}</span>
+                    </span>
+                  ))}
+                </div>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-[10px] text-zinc-400 font-medium uppercase tracking-wider">Total Amount</p>
+                    <p className="text-lg font-bold text-white leading-none">₹{(totalCents(items) / 100).toFixed(2)}</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button onClick={clear} className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-xs font-semibold text-white transition-colors">
+                      Clear
+                    </button>
+                    <button onClick={submitOrder} className="px-6 py-2 rounded-xl bg-sky-500 hover:bg-sky-400 text-white text-sm font-bold shadow-lg shadow-sky-500/20 transition-all active:scale-95 flex items-center gap-2">
+                      Submit Order <Check size={16} />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center justify-between text-zinc-400">
+                <span className="text-sm">Your cart is empty</span>
+                <span className="text-lg font-bold text-zinc-600">₹0.00</span>
+              </div>
+            )}
           </div>
         </div>
       </div>
       <div className="h-24" />
-    </div>
+    </div >
   );
 }

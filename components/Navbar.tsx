@@ -5,7 +5,11 @@ import { useEffect, useRef, useState } from "react";
 import { supabaseClient } from "@/lib/supabaseClient";
 import { useUser } from "@/lib/hooks/useUser";
 import { useProfile } from "@/lib/hooks/useProfile";
-import { CalendarCheck2, Coffee, ClipboardList, Home, Shield, ChevronLeft } from "lucide-react";
+import { cn } from "@/lib/utils/cn";
+import {
+  Home, CalendarCheck2, Coffee, ClipboardList, Shield,
+  Menu, User, LogOut, ChevronDown, Bell
+} from "lucide-react";
 
 export default function Navbar() {
   const pathname = usePathname();
@@ -14,11 +18,11 @@ export default function Navbar() {
   const { flags } = useProfile();
 
   const [userEmail, setUserEmail] = useState<string | undefined>(undefined);
-  const [menuOpen, setMenuOpen] = useState<boolean>(false);
-  const menuRef = useRef<HTMLDivElement | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
 
+  // Persistence & Auth Logic
   useEffect(() => {
-    // Show cached email immediately
     try {
       const cached = typeof window !== 'undefined' ? localStorage.getItem('bftone_display_email') : null;
       if (cached) setUserEmail(cached);
@@ -30,124 +34,200 @@ export default function Navbar() {
       setUserEmail(user.email);
       try { localStorage.setItem('bftone_display_email', user.email!); } catch { }
     } else if (!loading) {
-      // Only clear/redirect if we are sure we are not loading.
       setUserEmail(undefined);
       try { localStorage.removeItem('bftone_display_email'); } catch { }
-
       if (pathname !== "/login") {
         try { router.replace("/login"); } catch { }
       }
     }
   }, [user, loading, pathname, router]);
 
+  // Click Outside
   useEffect(() => {
     function onDocClick(e: MouseEvent) {
-      if (!menuRef.current) return;
-      if (!menuRef.current.contains(e.target as Node)) setMenuOpen(false);
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false);
+      }
     }
     document.addEventListener('mousedown', onDocClick);
     return () => document.removeEventListener('mousedown', onDocClick);
   }, []);
 
+  // Hide on login
+  if (pathname === "/login") return null;
+
+  const displayName = userEmail ? (userEmail.split("@")[0]) : null;
+  const initial = displayName ? displayName[0].toUpperCase() : "?";
+
+  // Standard Links
   const allLinks = [
-    { href: "/", label: "Home", icon: <Home size={18} /> },
-    { href: "/timesheet", label: "Timesheet", icon: <CalendarCheck2 size={18} /> },
-    { href: "/billing", label: "Billing", icon: <Coffee size={18} /> },
-    { href: "/pending", label: "Pending Orders", icon: <ClipboardList size={18} /> },
-    { href: "/admin", label: "Admin", icon: <Shield size={18} /> },
+    { href: "/", label: "Home", icon: Home },
+    { href: "/timesheet", label: "Timesheet", icon: CalendarCheck2 },
+    { href: "/billing", label: "Billing", icon: Coffee },
+    { href: "/pending", label: "Pending", icon: ClipboardList },
+    ...(flags?.isAdmin ? [{ href: "/admin", label: "Admin", icon: Shield }] : []),
   ];
 
-  let links = allLinks;
-  if (pathname.startsWith("/billing")) {
-    links = allLinks.filter(l => ["/", "/billing", "/pending"].includes(l.href));
-  }
-  if (!flags?.isAdmin) {
-    links = links.filter(l => l.href !== "/admin");
-  }
+  // Focus Mode Links (Billing & Pending)
+  const focusLinks = [
+    { href: "/", label: "Home", icon: Home },
+    { href: "/pending", label: "Pending", icon: ClipboardList },
+    { href: "/billing", label: "Billing", icon: Coffee },
+  ];
 
-  const displayName = userEmail ? (userEmail.split("@")[0] || userEmail) : undefined;
+  const isFocusMode = pathname.startsWith("/billing") || pathname.startsWith("/pending");
+  const visibleLinks = isFocusMode ? focusLinks : allLinks;
 
-  if (pathname === "/") {
-    return (
-      <nav className="sticky top-0 z-50 border-b bg-sky-600">
-        <div className="mx-auto max-w-md px-4 py-3 flex items-center justify-between">
-          <Link href="/" className="font-semibold text-lg text-white">BFTOne</Link>
-          {displayName ? (
-            <div className="relative" ref={menuRef}>
-              <button onClick={() => setMenuOpen(v => !v)} className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full border border-zinc-200 bg-zinc-50 text-zinc-800 text-sm">
-                <span className="w-6 h-6 rounded-full bg-sky-100 text-sky-700 text-[11px] font-semibold inline-flex items-center justify-center">{displayName.slice(0, 1).toUpperCase()}</span>
-                <span className="truncate max-w-[140px]">{displayName}</span>
-              </button>
-              {menuOpen && (
-                <div className="absolute right-0 mt-2 w-40 rounded-lg border bg-white shadow focus:outline-none">
-                  <Link href={flags?.isAdmin ? '/admin' : '/profile'} className="block px-3 py-2 text-sm text-zinc-800 hover:bg-zinc-50">Profile</Link>
-                  <button onClick={async () => { await supabaseClient.auth.signOut(); setMenuOpen(false); location.href = '/login' }} className="w-full text-left px-3 py-2 text-sm text-red-700 hover:bg-red-50">Logout</button>
-                </div>
-              )}
-            </div>
-          ) : (
-            <Link href="/login" className="px-2.5 py-1 rounded-lg border border-sky-200 bg-sky-50 text-sky-700 text-sm">Login</Link>
-          )}
-        </div>
-      </nav>
-    );
-  }
-
-  // Special centered navbar on billing and pending routes
-  if (pathname.startsWith("/billing") || pathname.startsWith("/pending")) {
-    let links = allLinks.filter(l => ["/billing", "/pending"].includes(l.href));
-    return (
-      <nav className="sticky top-0 z-50 border-b bg-white/80 backdrop-blur">
-        <div className="mx-auto max-w-md px-4 py-3 flex items-center">
-          <Link href="/" className={`mr-2 p-1.5 rounded-lg border ${pathname === '/' ? 'bg-sky-600 text-white' : 'text-zinc-800'}`} aria-label="Home">
-            <Home size={18} />
-          </Link>
-          <div className="flex-1 flex justify-center gap-2 text-sm">
-            {links.map(l => (
-              <Link key={l.href} href={l.href}
-                className={`px-3 py-1.5 rounded-lg flex items-center gap-2 ${pathname === l.href ? 'bg-sky-600 text-white' : 'text-zinc-800 border'}`}>
-                {l.icon}{l.label}
-              </Link>
-            ))}
-          </div>
-        </div>
-        {/* Mobile bottom nav */}
-        <div className="sm:hidden fixed bottom-0 left-0 right-0 border-t bg-white/90 backdrop-blur">
-          <div className="mx-auto max-w-md grid grid-cols-3 text-[13px]">
-            {[{ href: "/", label: "Home", icon: <Home size={18} /> }, ...links].map(l => (
-              <Link key={l.href} href={l.href}
-                className={`flex flex-col items-center justify-center py-2 ${pathname === l.href ? 'text-sky-700 font-medium' : 'text-zinc-600'}`}>
-                <span className="mb-0.5">{l.icon}</span>
-                {l.label}
-              </Link>
-            ))}
-          </div>
-        </div>
-      </nav>
-    );
+  async function handleLogout() {
+    await supabaseClient.auth.signOut();
+    setMenuOpen(false);
+    location.href = '/login';
   }
 
   return (
-    <nav className="sticky top-0 z-50 border-b bg-white/80 backdrop-blur">
-      <div className="mx-auto max-w-md px-4 py-3 flex items-center justify-between">
-        <Link href="/" className="font-semibold text-lg text-sky-700">BFTOne</Link>
-        {displayName ? (
-          <div className="hidden sm:block relative" ref={menuRef}>
-            <button onClick={() => setMenuOpen(v => !v)} className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full border border-zinc-200 bg-zinc-50 text-zinc-800 text-sm">
-              <span className="w-6 h-6 rounded-full bg-sky-100 text-sky-700 text-[11px] font-semibold inline-flex items-center justify-center">{displayName.slice(0, 1).toUpperCase()}</span>
-              <span className="truncate max-w-[160px]">{displayName}</span>
-            </button>
-            {menuOpen && (
-              <div className="absolute right-0 mt-2 w-40 rounded-lg border bg-white shadow focus:outline-none">
-                {!flags?.isAdmin && (<Link href={'/profile'} className="block px-3 py-2 text-sm text-zinc-800 hover:bg-zinc-50">Profile</Link>)}
-                <button onClick={async () => { await supabaseClient.auth.signOut(); setMenuOpen(false); location.href = '/' }} className="w-full text-left px-3 py-2 text-sm text-red-700 hover:bg-red-50">Logout</button>
+    <>
+      <nav className={cn(
+        "sticky top-0 z-50 transition-all duration-300 shadow-md",
+        "bg-sky-600 border-b border-sky-700"
+      )}>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className={cn("flex items-center h-16", isFocusMode ? "justify-center" : "justify-between")}>
+            {/* Logo - Hide in Focus Mode */}
+            {!isFocusMode && (
+              <div className="flex-shrink-0 flex items-center gap-2">
+                <Link href="/" className="flex items-center gap-2 group">
+                  <span className="font-bold text-xl tracking-tight text-white group-hover:text-sky-50 transition-colors">
+                    BFTOne
+                  </span>
+                </Link>
+              </div>
+            )}
+
+            {/* Desktop Nav (Standard) OR Focus Mode Nav (Always top) */}
+            <div className={cn("flex items-center space-x-2", !isFocusMode && "hidden md:flex")}>
+              {visibleLinks.map(l => {
+                const isActive = pathname === l.href;
+                return (
+                  <Link
+                    key={l.href}
+                    href={l.href}
+                    className={cn(
+                      "px-3 py-2 rounded-full text-sm font-medium flex items-center gap-2 transition-all duration-200",
+                      isActive
+                        ? "bg-white/20 text-white shadow-sm ring-1 ring-white/30"
+                        : "text-sky-100 hover:bg-white/10 hover:text-white"
+                    )}
+                  >
+                    <l.icon size={16} className={isActive ? "text-white" : "text-sky-200 group-hover:text-white"} />
+                    <span className={cn(isFocusMode ? "inline" : "")}>{l.label}</span>
+                  </Link>
+                );
+              })}
+            </div>
+
+            {/* Right Side / User Menu - Hide in Focus Mode */}
+            {!isFocusMode && (
+              <div className="flex-shrink-0 flex items-center gap-4">
+                <Link href="/notifications" className="relative p-2 text-sky-100 hover:text-white transition-colors">
+                  <Bell size={20} />
+                  <span className="absolute top-2 right-2 w-2 h-2 bg-rose-500 rounded-full ring-2 ring-sky-600"></span>
+                </Link>
+
+                <div className="relative" ref={menuRef}>
+                  <button
+                    onClick={() => setMenuOpen(!menuOpen)}
+                    className="flex items-center gap-2 p-1 pl-2 rounded-full border border-sky-500 bg-sky-700/50 hover:bg-sky-700 transition-all focus:outline-none focus:ring-2 focus:ring-white/20"
+                  >
+                    <span className="text-sm font-medium text-white max-w-[100px] truncate hidden sm:block">
+                      {displayName || 'Guest'}
+                    </span>
+                    <div className="w-8 h-8 rounded-full bg-white text-sky-700 flex items-center justify-center text-xs font-bold shadow-sm">
+                      {initial}
+                    </div>
+                    <ChevronDown size={14} className="text-sky-200 mr-2 sm:hidden" />
+                  </button>
+
+                  {/* Dropdown */}
+                  {menuOpen && (
+                    <div className="absolute right-0 mt-2 w-48 bg-white rounded-xl shadow-lg ring-1 ring-black ring-opacity-5 py-1 animate-in fade-in zoom-in-95 duration-200 origin-top-right">
+                      <div className="px-4 py-3 border-b border-zinc-100 sm:hidden">
+                        <p className="text-sm font-medium text-zinc-900">{displayName}</p>
+                        <p className="text-xs text-zinc-500 truncate">{userEmail}</p>
+                      </div>
+                      <Link
+                        href="/profile"
+                        className="flex items-center gap-2 px-4 py-2 text-sm text-zinc-700 hover:bg-zinc-50 transition-colors"
+                        onClick={() => setMenuOpen(false)}
+                      >
+                        <User size={16} className="text-zinc-400" /> Profile
+                      </Link>
+                      {!flags?.isAdmin && (
+                        <Link
+                          href="/mysalary"
+                          className="flex items-center gap-2 px-4 py-2 text-sm text-zinc-700 hover:bg-zinc-50 transition-colors"
+                          onClick={() => setMenuOpen(false)}
+                        >
+                          <Coffee size={16} className="text-zinc-400" /> My Salary
+                        </Link>
+                      )}
+                      <button
+                        onClick={handleLogout}
+                        className="w-full text-left flex items-center gap-2 px-4 py-2 text-sm text-rose-600 hover:bg-rose-50 transition-colors"
+                      >
+                        <LogOut size={16} /> Sign out
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
           </div>
-        ) : (
-          <Link href="/login" className="hidden sm:inline-flex px-2.5 py-1 rounded-lg border border-sky-200 bg-sky-50 text-sky-700 text-sm">Login</Link>
-        )}
-      </div>
-    </nav>
+        </div>
+      </nav>
+
+      {/* Mobile Bottom Nav - Only show if NOT in focus mode */}
+      {!isFocusMode && (
+        <div className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-zinc-200 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] safe-area-pb">
+          <div className="flex items-center justify-around h-16 px-2">
+            {allLinks.slice(0, 4).map(l => {
+              const isActive = pathname === l.href;
+              return (
+                <Link
+                  key={l.href}
+                  href={l.href}
+                  className={cn(
+                    "flex flex-col items-center justify-center w-full h-full space-y-1 transition-colors",
+                    isActive ? "text-sky-600" : "text-zinc-400 hover:text-zinc-600"
+                  )}
+                >
+                  <div className={cn(
+                    "p-1.5 rounded-xl transition-all",
+                    isActive ? "bg-sky-50" : "bg-transparent"
+                  )}>
+                    <l.icon size={20} className={isActive ? "fill-current" : "stroke-current"} />
+                  </div>
+                  <span className="text-[10px] font-medium">{l.label}</span>
+                </Link>
+              );
+            })}
+            <Link
+              href="/profile"
+              className={cn(
+                "flex flex-col items-center justify-center w-full h-full space-y-1 transition-colors",
+                pathname === '/profile' ? "text-sky-600" : "text-zinc-400 hover:text-zinc-600"
+              )}
+            >
+              <div className={cn(
+                "p-1.5 rounded-xl transition-all",
+                pathname === '/profile' ? "bg-sky-50" : "bg-transparent"
+              )}>
+                <User size={20} />
+              </div>
+              <span className="text-[10px] font-medium">Profile</span>
+            </Link>
+          </div>
+        </div>
+      )}
+    </>
   );
 }

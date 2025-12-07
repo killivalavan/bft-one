@@ -1,12 +1,15 @@
 "use client";
-import Link from "next/link";
+import { useEffect, useState } from "react";
 import { supabaseClient } from "@/lib/supabaseClient";
 import { useUser } from "@/lib/hooks/useUser";
 import { useProfile } from "@/lib/hooks/useProfile";
 import { preloadBillingCache } from "@/lib/utils/billing";
-import { useEffect, useState } from "react";
-import { Card, CardContent } from "@/components/ui/Card";
-import { CalendarCheck2, Coffee, ClipboardList, Shield, CalendarDays, Wallet, Boxes, Bell } from "lucide-react";
+import { HomeHeader } from "@/components/home/HomeHeader";
+import { DashboardGrid } from "@/components/home/DashboardGrid";
+import {
+  CalendarCheck2, Coffee, ClipboardList, Shield,
+  CalendarDays, Wallet, Boxes, Bell, LayoutDashboard
+} from "lucide-react";
 
 export default function Home() {
   const { user } = useUser();
@@ -17,102 +20,93 @@ export default function Home() {
     if (user?.email) {
       setUserEmail(user.email);
       try { localStorage.setItem('bftone_display_email', user.email); } catch { }
-
-      // Billing cache logic
       preloadBillingCache(supabaseClient);
-
     } else if (user === null) {
       setUserEmail(null);
       try { localStorage.removeItem('bftone_display_email'); } catch { }
     }
   }, [user]);
 
+  // Define Items
+  const items = [
+    {
+      label: "Timesheet",
+      href: "/timesheet",
+      icon: CalendarCheck2,
+      colorClass: "text-sky-600",
+      bgClass: "bg-sky-50",
+      description: "Log attendance and daily work."
+    },
+    {
+      label: "Calendar",
+      href: "/calendar",
+      icon: CalendarDays,
+      colorClass: "text-indigo-600",
+      bgClass: "bg-indigo-50",
+      description: "View important dates and holidays."
+    },
+    ...(userEmail && (flags ? !flags.isAdmin : true) ? [{
+      label: "My Salary",
+      href: "/mysalary",
+      icon: Wallet,
+      colorClass: "text-emerald-600",
+      bgClass: "bg-emerald-50",
+      description: "Check your earnings and stats."
+    }] : []),
+    {
+      label: "Billing",
+      href: "/billing",
+      icon: Coffee,
+      colorClass: "text-amber-600",
+      bgClass: "bg-amber-50",
+      description: "Manage billing and invoices."
+    },
+    {
+      label: "Glass Register",
+      href: "/glass",
+      icon: ClipboardList,
+      colorClass: "text-blue-600",
+      bgClass: "bg-blue-50",
+      description: "Track glass inventory logs."
+    },
+    {
+      label: "Pending Orders",
+      href: "/pending",
+      icon: LayoutDashboard,
+      colorClass: "text-rose-600",
+      bgClass: "bg-rose-50",
+      description: "View and manage active orders."
+    },
+    ...(flags?.isAdmin ? [{
+      label: "Admin Panel",
+      href: "/admin",
+      icon: Shield,
+      colorClass: "text-purple-600",
+      bgClass: "bg-purple-50",
+      description: "Manage users and settings."
+    }] : []),
+    ...(flags?.isStockManager ? [{
+      label: "Stock Manager",
+      href: "/stock",
+      icon: Boxes,
+      colorClass: "text-orange-600",
+      bgClass: "bg-orange-50",
+      description: "Control inventory and supplies."
+    }] : []),
+    {
+      label: "Notifications",
+      href: "/notifications",
+      icon: Bell,
+      colorClass: "text-pink-600",
+      bgClass: "bg-pink-50",
+      description: "View alerts and messages."
+    }
+  ];
+
   return (
-    <div className="grid gap-4">
-      <div>
-        <h1 className="text-2xl font-semibold text-sky-700">Hello{userEmail ? `, ${userEmail.split("@")[0] || userEmail}` : ""}</h1>
-        <p className="text-sm text-zinc-600">What would you like to do?</p>
-      </div>
-      <div className="grid grid-cols-2 gap-3">
-        <Link href="/timesheet">
-          <Card className="h-28 active:scale-[.99]">
-            <CardContent className="h-full flex flex-col items-center justify-center text-center font-medium text-zinc-900">
-              <CalendarCheck2 className="mb-1 text-sky-600" />
-              Timesheet
-            </CardContent>
-          </Card>
-        </Link>
-        {(userEmail && (flags ? !flags.isAdmin : true)) && (
-          <Link href="/mysalary">
-            <Card className="h-28 active:scale-[.99]">
-              <CardContent className="h-full flex flex-col items-center justify-center text-center font-medium text-zinc-900">
-                <Wallet className="mb-1 text-emerald-600" />
-                My Salary
-              </CardContent>
-            </Card>
-          </Link>
-        )}
-        <Link href="/calendar">
-          <Card className="h-28 active:scale-[.99]">
-            <CardContent className="h-full flex flex-col items-center justify-center text-center font-medium text-zinc-900">
-              <CalendarDays className="mb-1 text-sky-600" />
-              Calendar
-            </CardContent>
-          </Card>
-        </Link>
-        <Link href="/billing">
-          <Card className="h-28 active:scale-[.99]">
-            <CardContent className="h-full flex flex-col items-center justify-center text-center font-medium text-zinc-900">
-              <Coffee className="mb-1 text-sky-600" />
-              Billing
-            </CardContent>
-          </Card>
-        </Link>
-        <Link href="/glass">
-          <Card className="h-28 active:scale-[.99]">
-            <CardContent className="h-full flex flex-col items-center justify-center text-center font-medium text-zinc-900">
-              <ClipboardList className="mb-1 text-sky-600" />
-              Glass Register
-            </CardContent>
-          </Card>
-        </Link>
-        <Link href="/pending">
-          <Card className="h-28 active:scale-[.99]">
-            <CardContent className="h-full flex flex-col items-center justify-center text-center font-medium text-zinc-900">
-              <ClipboardList className="mb-1 text-sky-600" />
-              Pending Orders
-            </CardContent>
-          </Card>
-        </Link>
-        {flags?.isAdmin && (
-          <Link href="/admin">
-            <Card className="h-28 active:scale-[.99]">
-              <CardContent className="h-full flex flex-col items-center justify-center text-center font-medium text-zinc-900">
-                <Shield className="mb-1 text-sky-600" />
-                Admin
-              </CardContent>
-            </Card>
-          </Link>
-        )}
-        {flags?.isStockManager && (
-          <Link href="/stock">
-            <Card className="h-28 active:scale-[.99]">
-              <CardContent className="h-full flex flex-col items-center justify-center text-center font-medium text-zinc-900">
-                <Boxes className="mb-1 text-amber-600" />
-                Stock Manager
-              </CardContent>
-            </Card>
-          </Link>
-        )}
-        <Link href="/notifications">
-          <Card className="h-28 active:scale-[.99]">
-            <CardContent className="h-full flex flex-col items-center justify-center text-center font-medium text-zinc-900">
-              <Bell className="mb-1 text-rose-600" />
-              Stock Notifications
-            </CardContent>
-          </Card>
-        </Link>
-      </div>
+    <div className="min-h-screen pb-20 space-y-8">
+      <HomeHeader name={userEmail} />
+      <DashboardGrid items={items} />
     </div>
   );
 }
