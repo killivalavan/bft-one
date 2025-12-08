@@ -7,6 +7,7 @@ import { AdminTabs } from "@/components/admin/AdminTabs";
 import { UserList } from "@/components/admin/UserList";
 import { ProductManager } from "@/components/admin/ProductManager";
 import { SalesReports } from "@/components/admin/SalesReports";
+import { generatePayslipPdf } from "@/lib/utils/payslip";
 import { Loader2, ShieldAlert } from "lucide-react";
 
 type Profile = { id: string; email: string; is_admin: boolean; is_stock_manager?: boolean | null; in_time?: string | null; base_salary_cents?: number | null; per_day_salary_cents?: number | null; age?: number | null; contact_number?: string | null; emergency_contact_number?: string | null };
@@ -78,6 +79,33 @@ export default function AdminPage() {
     await supabaseClient.from('profiles').update({ [field]: val }).eq('id', id);
   }
 
+  async function handleDownloadPayslip(userId: string, targetDate: Date) {
+    try {
+      const start = new Date(targetDate.getFullYear(), targetDate.getMonth(), 1);
+      const end = new Date(targetDate.getFullYear(), targetDate.getMonth() + 1, 0);
+      const startStr = start.toISOString().slice(0, 10);
+      const endStr = end.toISOString().slice(0, 10);
+      const monthLabel = start.toLocaleString(undefined, { month: 'long', year: 'numeric' });
+
+      const { data: prof, error: profErr } = await supabaseClient.from('profiles').select('email, base_salary_cents').eq('id', userId).single();
+      if (profErr || !prof) throw new Error("Profile not found");
+
+      const { data: ents, error: entsErr } = await supabaseClient.from('salary_entries').select('entry_date, amount_cents, reason').eq('user_id', userId).gte('entry_date', startStr).lte('entry_date', endStr).order('entry_date', { ascending: false });
+      if (entsErr) throw new Error("Failed to load entries");
+
+      const entries = ents || [];
+      const deductions = entries.reduce((s, e) => s + (e.amount_cents || 0), 0);
+      const baseSalary = prof.base_salary_cents || 0;
+      const netPay = Math.max(0, baseSalary - deductions);
+
+      await generatePayslipPdf({ userEmail: prof.email, monthLabel, baseSalary, deductions, netPay, entries: entries as any });
+      toast({ title: `Payslip downloaded for ${prof.email}`, variant: "success" });
+    } catch (e: any) {
+      console.error(e);
+      toast({ title: "Payslip failed", description: e.message, variant: "error" });
+    }
+  }
+
   // Product Actions
   async function addCategory(name: string) {
     if (!name.trim()) return null;
@@ -99,7 +127,6 @@ export default function AdminPage() {
       image_url = pub.publicUrl;
     }
     const payload: any = { name, price_cents: Math.round(price * 100), category_id, image_url, active: true };
-    // simplistic extras handling for now as per previous logic, but cleaner in component
     const { error } = await supabaseClient.from("products").insert(payload);
     if (error) { toast({ title: "Product failed", description: error.message, variant: "error" }); }
     else { await load(); toast({ title: "Product added", variant: "success" }); }
@@ -161,6 +188,7 @@ export default function AdminPage() {
             onUpdatePass={updatePasswordFor}
             onToggleStockManager={toggleStockManager}
             onUpdateMeta={updateMeta}
+            onDownloadPayslip={handleDownloadPayslip}
           />
         )}
 

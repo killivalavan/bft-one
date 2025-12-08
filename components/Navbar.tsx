@@ -79,9 +79,19 @@ export default function Navbar() {
   const visibleLinks = isFocusMode ? focusLinks : allLinks;
 
   async function handleLogout() {
-    await supabaseClient.auth.signOut();
-    setMenuOpen(false);
-    location.href = '/login';
+    try {
+      // Race signOut against a 2-second timeout so it never hangs
+      await Promise.race([
+        supabaseClient.auth.signOut(),
+        new Promise(resolve => setTimeout(resolve, 2000))
+      ]);
+    } catch (e) {
+      console.error("Logout error/timeout", e);
+    } finally {
+      setMenuOpen(false);
+      try { localStorage.removeItem('bftone_display_email'); } catch { }
+      window.location.href = '/login';
+    }
   }
 
   return (

@@ -6,7 +6,7 @@ interface StatCardProps {
     value: string | number;
     icon?: LucideIcon;
     subtext?: string;
-    color?: "sky" | "rose" | "indigo" | "amber";
+    color?: "sky" | "rose" | "indigo" | "amber" | "emerald";
     className?: string;
 }
 
@@ -16,6 +16,7 @@ export function StatCard({ label, value, icon: Icon, subtext, color = "sky", cla
         rose: "bg-rose-50 border-rose-100 text-rose-700",
         indigo: "bg-indigo-50 border-indigo-100 text-indigo-700",
         amber: "bg-amber-50 border-amber-100 text-amber-700",
+        emerald: "bg-emerald-50 border-emerald-100 text-emerald-700",
     };
 
     const iconColors = {
@@ -23,6 +24,7 @@ export function StatCard({ label, value, icon: Icon, subtext, color = "sky", cla
         rose: "bg-rose-100 text-rose-600",
         indigo: "bg-indigo-100 text-indigo-600",
         amber: "bg-amber-100 text-amber-600",
+        emerald: "bg-emerald-100 text-emerald-600",
     };
 
     return (

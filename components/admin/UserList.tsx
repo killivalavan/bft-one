@@ -3,10 +3,9 @@ import { Card, CardContent } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { UserPlus, UserX, Shield, Briefcase, Key, Clock, CreditCard, Phone, Heart } from "lucide-react";
-import SalaryManager from "@/app/(protected)/admin/SalaryManager"; // Import existing logic
+import SalaryManager from "@/app/(protected)/admin/SalaryManager";
 import { cn } from "@/lib/utils/cn";
 
-// We re-declare types or import if available. Assuming Profile type is standard.
 type Profile = { id: string; email: string; is_admin: boolean; is_stock_manager?: boolean | null; in_time?: string | null; base_salary_cents?: number | null; per_day_salary_cents?: number | null; age?: number | null; contact_number?: string | null; emergency_contact_number?: string | null };
 
 interface UserListProps {
@@ -16,18 +15,19 @@ interface UserListProps {
     onUpdatePass: (email: string, pass: string) => Promise<void>;
     onToggleStockManager: (id: string, current: boolean) => Promise<void>;
     onUpdateMeta: (id: string, field: string, val: any) => Promise<void>;
+    onDownloadPayslip: (userId: string, date: Date) => Promise<void>;
 }
 
-export function UserList({ users, onAddUser, onRemoveUser, onUpdatePass, onToggleStockManager, onUpdateMeta }: UserListProps) {
+export function UserList({ users, onAddUser, onRemoveUser, onUpdatePass, onToggleStockManager, onUpdateMeta, onDownloadPayslip }: UserListProps) {
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("123456");
     const [pwByUser, setPwByUser] = useState<Record<string, string>>({});
 
     return (
         <div className="space-y-6 animate-in slide-in-from-bottom-2 fade-in duration-500">
-            {/* Create User Block */}
+            {/* Create User Block Only */}
             <Card className="border-indigo-100 bg-indigo-50/30">
-                <CardContent className="p-4 sm:p-6 flex flex-col sm:flex-row gap-3 items-end sm:items-center">
+                <CardContent className="p-4 sm:p-5 flex flex-col sm:flex-row gap-3 items-end sm:items-center">
                     <div className="flex-1 w-full space-y-1">
                         <label className="text-xs font-semibold text-indigo-900 uppercase">Create New User</label>
                         <div className="flex gap-2">
@@ -35,17 +35,17 @@ export function UserList({ users, onAddUser, onRemoveUser, onUpdatePass, onToggl
                                 placeholder="Email address"
                                 value={email}
                                 onChange={e => setEmail(e.target.value)}
-                                className="bg-white"
+                                className="bg-white h-9"
                             />
                             <Input
                                 placeholder="Password"
                                 value={password}
                                 onChange={e => setPassword(e.target.value)}
-                                className="bg-white w-32 shrink-0"
+                                className="bg-white w-32 shrink-0 h-9"
                             />
                         </div>
                     </div>
-                    <Button onClick={() => onAddUser(email, password)} className="bg-indigo-600 hover:bg-indigo-700 text-white w-full sm:w-auto">
+                    <Button onClick={() => onAddUser(email, password)} className="bg-indigo-600 hover:bg-indigo-700 text-white w-full sm:w-auto h-9">
                         <UserPlus size={16} className="mr-2" /> Add User
                     </Button>
                 </CardContent>
@@ -137,7 +137,7 @@ export function UserList({ users, onAddUser, onRemoveUser, onUpdatePass, onToggl
                                 </div>
 
                                 <div className="pt-2 border-t border-zinc-100">
-                                    <SalaryManager userId={u.id} />
+                                    <SalaryManager userId={u.id} onDownloadPayslip={onDownloadPayslip} />
                                 </div>
                             </div>
                         )}

@@ -26,7 +26,7 @@ export function HomeHeader({ name }: HomeHeaderProps) {
                     <span>{dateStr}</span>
                 </div>
                 <h1 className="text-3xl md:text-4xl font-bold text-zinc-900 tracking-tight">
-                    {greeting}, <span className="text-indigo-600">{name ? name.split('@')[0] : 'Guest'}</span>
+                    {greeting}, <span className="text-sky-600">{name ? name.split('@')[0] : 'Guest'}</span>
                 </h1>
                 <p className="text-zinc-500 max-w-md">
                     Welcome back to your dashboard. Here is what is happening today.
