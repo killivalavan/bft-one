@@ -107,7 +107,7 @@ export default function AdminPage() {
       if (errFallback) {
         toast({ title: "Update failed", description: errFallback.message, variant: "error" });
       } else {
-        toast({ title: "Updated (Partial)", description: "Saved details, but DOB failed (missing DB column)", variant: "warning" });
+        toast({ title: "Updated (Partial)", description: "Saved details, but DOB failed (missing DB column)", variant: "error" });
         await load();
       }
       return;

@@ -135,10 +135,13 @@ export default function GlassEntryPage() {
       return null;
     };
 
-    return {
+    const result = {
       mSubmittedBy: getName(m),
       nSubmittedBy: getName(n)
     };
+    console.log("DEBUG: Glass Logs", logs);
+    console.log("DEBUG: Submitter Info for date", logDate, result);
+    return result;
   }, [logs, logDate]);
 
   const monthSummary = useMemo(() => {
