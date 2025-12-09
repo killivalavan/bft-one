@@ -14,6 +14,7 @@ import { DailyTable } from "@/components/glass/DailyTable";
 type GlassLog = {
   id: string; created_at: string; log_date: string; shift: "morning" | "night";
   small_count: number; large_count: number; broken_count: number;
+  user_id?: string | null;
   profiles?: { full_name: string | null } | null;
 };
 
@@ -125,9 +126,13 @@ export default function GlassEntryPage() {
     const n = dayLogs.find((l) => l.shift === "night");
 
     const getName = (l?: GlassLog) => {
-      if (!l?.profiles) return null;
-      const p = Array.isArray(l.profiles) ? l.profiles[0] : l.profiles;
-      return p?.full_name || null;
+      if (!l) return null;
+      if (l.profiles) {
+        const p = Array.isArray(l.profiles) ? l.profiles[0] : l.profiles;
+        if (p?.full_name) return p.full_name;
+      }
+      if (l.user_id) return `User ${l.user_id.slice(0, 5)}...`;
+      return null;
     };
 
     return {

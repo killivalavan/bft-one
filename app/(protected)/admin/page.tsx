@@ -40,8 +40,8 @@ export default function AdminPage() {
         toast({ title: "Error loading users", description: errFallback.message, variant: "error" });
         setUsers([]);
       } else {
-        us = usFallback;
-        toast({ title: "Schema Mismatch", description: "Missing 'dob' column. Please add it to Supabase.", variant: "warning" });
+        us = usFallback as any;
+        toast({ title: "Schema Mismatch", description: "Missing 'dob' column. Please add it to Supabase.", variant: "error" });
       }
     }
 
