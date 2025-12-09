@@ -14,6 +14,7 @@ import { DailyTable } from "@/components/glass/DailyTable";
 type GlassLog = {
   id: string; created_at: string; log_date: string; shift: "morning" | "night";
   small_count: number; large_count: number; broken_count: number;
+  profiles?: { full_name: string | null } | null;
 };
 
 export default function GlassEntryPage() {
@@ -43,12 +44,25 @@ export default function GlassEntryPage() {
       const { data: s } = await supabaseClient.auth.getSession();
       if (!s?.session) await new Promise(r => setTimeout(r, 250));
 
-      const { data, error } = await supabaseClient
+      // Try fetching with profiles to get submitter name
+      let result = await supabaseClient
         .from("glass_logs")
-        .select("*")
+        .select("*, profiles(full_name)")
         .gte("log_date", from.toISOString().slice(0, 10))
         .order("log_date", { ascending: false })
         .order("created_at", { ascending: false });
+
+      if (result.error) {
+        console.warn("Failed to join profiles, falling back to basic select.", result.error.message);
+        result = await supabaseClient
+          .from("glass_logs")
+          .select("*")
+          .gte("log_date", from.toISOString().slice(0, 10))
+          .order("log_date", { ascending: false })
+          .order("created_at", { ascending: false });
+      }
+
+      const { data, error } = result;
 
       if (error) throw error;
       if (mounted.current) setLogs((data as any) || []);
@@ -105,6 +119,23 @@ export default function GlassEntryPage() {
     return { hasBoth, bSmall, bLarge, broken };
   }, [logs, logDate]);
 
+  const submitterInfo = useMemo(() => {
+    const dayLogs = logs.filter((l) => l.log_date === logDate);
+    const m = dayLogs.find((l) => l.shift === "morning");
+    const n = dayLogs.find((l) => l.shift === "night");
+
+    const getName = (l?: GlassLog) => {
+      if (!l?.profiles) return null;
+      const p = Array.isArray(l.profiles) ? l.profiles[0] : l.profiles;
+      return p?.full_name || null;
+    };
+
+    return {
+      mSubmittedBy: getName(m),
+      nSubmittedBy: getName(n)
+    };
+  }, [logs, logDate]);
+
   const monthSummary = useMemo(() => {
     const map = new Map<string, { m?: GlassLog; n?: GlassLog }>();
     for (const l of logs) {
@@ -134,7 +165,14 @@ export default function GlassEntryPage() {
     const mLargeNum = parseInt(mLarge || "0", 10) || 0;
 
     await supabaseClient.from("glass_logs").delete().eq("log_date", logDate).eq("shift", "morning");
-    const { error } = await supabaseClient.from("glass_logs").insert([{ log_date: logDate, shift: "morning", small_count: mSmallNum, large_count: mLargeNum, broken_count: 0 }]);
+    const { error } = await supabaseClient.from("glass_logs").insert([{
+      log_date: logDate,
+      shift: "morning",
+      small_count: mSmallNum,
+      large_count: mLargeNum,
+      broken_count: 0,
+      user_id: user?.id
+    }]);
 
     if (error) { toast({ title: "Failed to save", description: error.message, variant: "error" }); return; }
 
@@ -151,7 +189,14 @@ export default function GlassEntryPage() {
     const brokenNum = computedBroken;
 
     await supabaseClient.from("glass_logs").delete().eq("log_date", logDate).eq("shift", "night");
-    const { error } = await supabaseClient.from("glass_logs").insert([{ log_date: logDate, shift: "night", small_count: nSmallNum, large_count: nLargeNum, broken_count: brokenNum }]);
+    const { error } = await supabaseClient.from("glass_logs").insert([{
+      log_date: logDate,
+      shift: "night",
+      small_count: nSmallNum,
+      large_count: nLargeNum,
+      broken_count: brokenNum,
+      user_id: user?.id
+    }]);
 
     if (error) { toast({ title: "Failed to save", description: error.message, variant: "error" }); return; }
 
@@ -224,6 +269,10 @@ export default function GlassEntryPage() {
               onSaveMorning={saveMorning}
               nSmall={nSmall} setNSmall={setNSmall} nLarge={nLarge} setNLarge={setNLarge}
               onSaveNight={saveNight}
+              isMorningSaved={!!logs.find(l => l.log_date === logDate && l.shift === 'morning')}
+              isNightSaved={!!logs.find(l => l.log_date === logDate && l.shift === 'night')}
+              mSubmittedBy={submitterInfo.mSubmittedBy}
+              nSubmittedBy={submitterInfo.nSubmittedBy}
               showWarning={!savedDay.hasBoth}
             />
           )}

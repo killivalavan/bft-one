@@ -16,6 +16,14 @@ interface EntryFormProps {
     nLarge: string; setNLarge: (v: string) => void;
     onSaveNight: () => void;
 
+    // State
+    isMorningSaved: boolean;
+    isNightSaved: boolean;
+
+    // Submitter Info
+    mSubmittedBy?: string | null;
+    nSubmittedBy?: string | null;
+
     showWarning?: boolean;
 }
 
@@ -55,7 +63,8 @@ export function EntryForm(props: EntryFormProps) {
                                     type="number"
                                     value={props.mSmall}
                                     onChange={(e) => props.setMSmall(e.target.value)}
-                                    className="bg-zinc-50 border-zinc-200 focus:bg-white transition-colors"
+                                    disabled={props.isMorningSaved || props.isNightSaved}
+                                    className="bg-zinc-50 border-zinc-200 focus:bg-white transition-colors disabled:opacity-70 disabled:cursor-not-allowed"
                                 />
                             </div>
                             <div className="space-y-1.5">
@@ -64,14 +73,26 @@ export function EntryForm(props: EntryFormProps) {
                                     type="number"
                                     value={props.mLarge}
                                     onChange={(e) => props.setMLarge(e.target.value)}
-                                    className="bg-zinc-50 border-zinc-200 focus:bg-white transition-colors"
+                                    disabled={props.isMorningSaved || props.isNightSaved}
+                                    className="bg-zinc-50 border-zinc-200 focus:bg-white transition-colors disabled:opacity-70 disabled:cursor-not-allowed"
                                 />
                             </div>
                         </div>
-                        <Button onClick={props.onSaveMorning} className="w-full bg-amber-500 hover:bg-amber-600 text-white shadow-amber-200 shadow-md">
-                            <Save size={16} className="mr-2" />
-                            Save Morning
-                        </Button>
+                        <div>
+                            <Button
+                                onClick={props.onSaveMorning}
+                                disabled={props.isMorningSaved || props.isNightSaved}
+                                className="w-full bg-amber-500 hover:bg-amber-600 text-white shadow-amber-200 shadow-md disabled:bg-zinc-300 disabled:shadow-none disabled:text-zinc-500"
+                            >
+                                <Save size={16} className="mr-2" />
+                                {props.isMorningSaved ? "Saved" : "Save Morning"}
+                            </Button>
+                            {props.mSubmittedBy && (
+                                <p className="text-xs text-center text-zinc-400 mt-2 animate-in fade-in">
+                                    Submitted by <span className="font-medium text-zinc-600">{props.mSubmittedBy}</span>
+                                </p>
+                            )}
+                        </div>
                     </CardContent>
                 </Card>
 
@@ -89,7 +110,8 @@ export function EntryForm(props: EntryFormProps) {
                                     type="number"
                                     value={props.nSmall}
                                     onChange={(e) => props.setNSmall(e.target.value)}
-                                    className="bg-zinc-50 border-zinc-200 focus:bg-white transition-colors"
+                                    disabled={props.isNightSaved}
+                                    className="bg-zinc-50 border-zinc-200 focus:bg-white transition-colors disabled:opacity-70 disabled:cursor-not-allowed"
                                 />
                             </div>
                             <div className="space-y-1.5">
@@ -98,14 +120,26 @@ export function EntryForm(props: EntryFormProps) {
                                     type="number"
                                     value={props.nLarge}
                                     onChange={(e) => props.setNLarge(e.target.value)}
-                                    className="bg-zinc-50 border-zinc-200 focus:bg-white transition-colors"
+                                    disabled={props.isNightSaved}
+                                    className="bg-zinc-50 border-zinc-200 focus:bg-white transition-colors disabled:opacity-70 disabled:cursor-not-allowed"
                                 />
                             </div>
                         </div>
-                        <Button onClick={props.onSaveNight} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-200 shadow-md">
-                            <Save size={16} className="mr-2" />
-                            Save Night
-                        </Button>
+                        <div>
+                            <Button
+                                onClick={props.onSaveNight}
+                                disabled={props.isNightSaved}
+                                className="w-full bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-200 shadow-md disabled:bg-zinc-300 disabled:shadow-none disabled:text-zinc-500"
+                            >
+                                <Save size={16} className="mr-2" />
+                                {props.isNightSaved ? "Saved" : "Save Night"}
+                            </Button>
+                            {props.nSubmittedBy && (
+                                <p className="text-xs text-center text-zinc-400 mt-2 animate-in fade-in">
+                                    Submitted by <span className="font-medium text-zinc-600">{props.nSubmittedBy}</span>
+                                </p>
+                            )}
+                        </div>
                     </CardContent>
                 </Card>
             </div>

@@ -10,7 +10,7 @@ import { SalesReports } from "@/components/admin/SalesReports";
 import { generatePayslipPdf } from "@/lib/utils/payslip";
 import { Loader2, ShieldAlert } from "lucide-react";
 
-type Profile = { id: string; email: string; is_admin: boolean; is_stock_manager?: boolean | null; in_time?: string | null; base_salary_cents?: number | null; per_day_salary_cents?: number | null; age?: number | null; contact_number?: string | null; emergency_contact_number?: string | null };
+type Profile = { id: string; email: string; is_admin: boolean; is_stock_manager?: boolean | null; in_time?: string | null; base_salary_cents?: number | null; per_day_salary_cents?: number | null; age?: number | null; dob?: string | null; contact_number?: string | null; emergency_contact_number?: string | null };
 type Category = { id: string; name: string; icon_url?: string | null };
 type Product = { id: string; name: string; price_cents: number; category_id: string; image_url?: string | null; mrp_cents?: number | null; unit_label?: string | null; subtitle?: string | null; options_json?: any; active?: boolean };
 
@@ -27,7 +27,24 @@ export default function AdminPage() {
   const [report, setReport] = useState<{ name: string; qty: number; revenue: number }[]>([]);
 
   async function load() {
-    const { data: us } = await supabaseClient.from("profiles").select("id,email,is_admin,is_stock_manager,in_time,base_salary_cents,per_day_salary_cents,age,contact_number,emergency_contact_number").order("email");
+    // Try fetching with new 'dob' column
+    let { data: us, error } = await supabaseClient.from("profiles").select("id,email,is_admin,is_stock_manager,in_time,base_salary_cents,per_day_salary_cents,age,dob,contact_number,emergency_contact_number").order("email");
+
+    if (error) {
+      console.warn("Full fetch failed, trying fallback...", error);
+      // Fallback: Fetch without 'dob' in case column is missing
+      const { data: usFallback, error: errFallback } = await supabaseClient.from("profiles").select("id,email,is_admin,is_stock_manager,in_time,base_salary_cents,per_day_salary_cents,age,contact_number,emergency_contact_number").order("email");
+
+      if (errFallback) {
+        console.error("Fallback fetch failed", errFallback);
+        toast({ title: "Error loading users", description: errFallback.message, variant: "error" });
+        setUsers([]);
+      } else {
+        us = usFallback;
+        toast({ title: "Schema Mismatch", description: "Missing 'dob' column. Please add it to Supabase.", variant: "warning" });
+      }
+    }
+
     setUsers(us || []);
     const { data: cats } = await supabaseClient.from("categories").select("*").order("name");
     setCategories(cats || []);
@@ -77,6 +94,26 @@ export default function AdminPage() {
 
   async function updateMeta(id: string, field: string, val: any) {
     await supabaseClient.from('profiles').update({ [field]: val }).eq('id', id);
+  }
+
+  async function updateFullProfile(id: string, updates: any) {
+    const { error } = await supabaseClient.from('profiles').update(updates).eq('id', id);
+    if (error) {
+      console.warn("Update failed, trying fallback...", error.message);
+      // Fallback: Try updating without dob/age in case column missing
+      const { dob, age, ...safeUpdates } = updates;
+      const { error: errFallback } = await supabaseClient.from('profiles').update(safeUpdates).eq('id', id);
+
+      if (errFallback) {
+        toast({ title: "Update failed", description: errFallback.message, variant: "error" });
+      } else {
+        toast({ title: "Updated (Partial)", description: "Saved details, but DOB failed (missing DB column)", variant: "warning" });
+        await load();
+      }
+      return;
+    }
+    toast({ title: "Profile updated", variant: "success" });
+    await load();
   }
 
   async function handleDownloadPayslip(userId: string, targetDate: Date) {
@@ -187,7 +224,7 @@ export default function AdminPage() {
             onRemoveUser={removeUser}
             onUpdatePass={updatePasswordFor}
             onToggleStockManager={toggleStockManager}
-            onUpdateMeta={updateMeta}
+            onUpdateFullProfile={updateFullProfile}
             onDownloadPayslip={handleDownloadPayslip}
           />
         )}

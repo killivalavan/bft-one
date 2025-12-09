@@ -28,7 +28,15 @@ export default function Home() {
   }, [user]);
 
   // Define Items
-  const items = [
+  const baseItems = [
+    {
+      label: "Glass Register",
+      href: "/glass",
+      icon: ClipboardList,
+      colorClass: "text-blue-600",
+      bgClass: "bg-blue-50",
+      description: "Track glass inventory logs."
+    },
     {
       label: "Timesheet",
       href: "/timesheet",
@@ -60,14 +68,6 @@ export default function Home() {
       colorClass: "text-amber-600",
       bgClass: "bg-amber-50",
       description: "Manage billing and invoices."
-    },
-    {
-      label: "Glass Register",
-      href: "/glass",
-      icon: ClipboardList,
-      colorClass: "text-blue-600",
-      bgClass: "bg-blue-50",
-      description: "Track glass inventory logs."
     },
     {
       label: "Pending Orders",
@@ -102,6 +102,13 @@ export default function Home() {
       description: "View alerts and messages."
     }
   ];
+
+  // Apply "Under Construction" restriction for non-admins
+  const items = baseItems.map(item => {
+    if (flags?.isAdmin) return item; // Admins see everything
+    if (item.href === "/glass") return item; // Glass Register is open for everyone
+    return { ...item, disabled: true, blur: true }; // EVERYTHING else is blurred
+  });
 
   return (
     <div className="min-h-screen pb-20 space-y-8">
