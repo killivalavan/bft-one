@@ -8,7 +8,7 @@ import { HomeHeader } from "@/components/home/HomeHeader";
 import { DashboardGrid } from "@/components/home/DashboardGrid";
 import {
   CalendarCheck2, Coffee, ClipboardList, Shield,
-  CalendarDays, Wallet, Boxes, Bell, LayoutDashboard
+  CalendarDays, Wallet, Boxes, Bell, LayoutDashboard, Contact
 } from "lucide-react";
 
 export default function Home() {
@@ -77,6 +77,14 @@ export default function Home() {
       bgClass: "bg-rose-50",
       description: "View and manage active orders."
     },
+    {
+      label: "All Contacts",
+      href: "/contacts",
+      icon: Contact,
+      colorClass: "text-teal-600",
+      bgClass: "bg-teal-50",
+      description: "Employee & Emergency directory."
+    },
     ...(flags?.isAdmin ? [{
       label: "Admin Panel",
       href: "/admin",
@@ -103,17 +111,10 @@ export default function Home() {
     }
   ];
 
-  // Apply "Under Construction" restriction for non-admins
-  const items = baseItems.map(item => {
-    if (flags?.isAdmin) return item; // Admins see everything
-    if (item.href === "/glass") return item; // Glass Register is open for everyone
-    return { ...item, disabled: true, blur: true }; // EVERYTHING else is blurred
-  });
-
   return (
     <div className="min-h-screen pb-20 space-y-8">
       <HomeHeader name={userEmail} />
-      <DashboardGrid items={items} />
+      <DashboardGrid items={baseItems} />
     </div>
   );
 }

@@ -8,22 +8,25 @@ import { UserList } from "@/components/admin/UserList";
 import { ProductManager } from "@/components/admin/ProductManager";
 import { SalesReports } from "@/components/admin/SalesReports";
 import { generatePayslipPdf } from "@/lib/utils/payslip";
+import { ContactManager } from "@/components/admin/ContactManager";
 import { Loader2, ShieldAlert } from "lucide-react";
 
 type Profile = { id: string; email: string; is_admin: boolean; is_stock_manager?: boolean | null; in_time?: string | null; base_salary_cents?: number | null; per_day_salary_cents?: number | null; age?: number | null; dob?: string | null; contact_number?: string | null; emergency_contact_number?: string | null };
 type Category = { id: string; name: string; icon_url?: string | null };
 type Product = { id: string; name: string; price_cents: number; category_id: string; image_url?: string | null; mrp_cents?: number | null; unit_label?: string | null; subtitle?: string | null; options_json?: any; active?: boolean };
+type ExternalContact = { id: string; name: string; role: string; phone: string; };
 
 enum AdminView { Loading, NotAdmin, Ready }
 
 export default function AdminPage() {
   const { toast } = useToast();
   const [gate, setGate] = useState<AdminView>(AdminView.Loading);
-  const [tab, setTab] = useState<"users" | "products" | "reports">("users");
+  const [tab, setTab] = useState<"users" | "products" | "reports" | "contacts">("users");
 
   const [users, setUsers] = useState<Profile[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
+  const [contacts, setContacts] = useState<ExternalContact[]>([]);
   const [report, setReport] = useState<{ name: string; qty: number; revenue: number }[]>([]);
 
   async function load() {
@@ -50,6 +53,8 @@ export default function AdminPage() {
     setCategories(cats || []);
     const { data: prods } = await supabaseClient.from("products").select("*").order("name");
     setProducts(prods || []);
+    const { data: conts } = await supabaseClient.from("external_contacts").select("*").order("role", { ascending: true });
+    setContacts(conts || []);
   }
 
   useEffect(() => {
@@ -197,6 +202,29 @@ export default function AdminPage() {
     doc.save("report.pdf");
   }
 
+  // Contact Actions
+  async function addContact(contact: Omit<ExternalContact, "id">) {
+    const { error } = await supabaseClient.from("external_contacts").insert([contact]);
+    if (error) { toast({ title: "Failed to add contact", description: error.message, variant: "error" }); return; }
+    await load();
+    toast({ title: "Contact added", variant: "success" });
+  }
+
+  async function updateContact(contact: ExternalContact) {
+    const { error } = await supabaseClient.from("external_contacts").update(contact).eq('id', contact.id);
+    if (error) { toast({ title: "Failed to update contact", description: error.message, variant: "error" }); return; }
+    await load();
+    toast({ title: "Contact updated", variant: "success" });
+  }
+
+  async function deleteContact(id: string) {
+    if (!confirm("Delete this contact?")) return;
+    const { error } = await supabaseClient.from("external_contacts").delete().eq('id', id);
+    if (error) { toast({ title: "Failed to delete contact", description: error.message, variant: "error" }); return; }
+    await load();
+    toast({ title: "Contact deleted", variant: "success" });
+  }
+
   if (gate === AdminView.Loading) return <div className="min-h-[50vh] flex items-center justify-center gap-2 text-zinc-500"><Loader2 className="animate-spin" /> Loading Admin...</div>;
   if (gate === AdminView.NotAdmin) return (
     <div className="min-h-[50vh] flex flex-col items-center justify-center text-center p-6">
@@ -244,6 +272,18 @@ export default function AdminPage() {
             report={report}
             onGenerate={buildReport}
             onExport={exportPdf}
+          />
+        )}
+
+        {tab === 'contacts' && (
+          <ContactManager
+            contacts={contacts}
+            systemUsers={users}
+            onAddContact={addContact}
+            onUpdateContact={updateContact}
+            onDeleteContact={deleteContact}
+            onUpdateSystemUser={updateFullProfile}
+            onDeleteSystemUser={removeUser}
           />
         )}
       </div>

@@ -117,8 +117,8 @@ export default function Navbar() {
             <div className={cn("flex items-center space-x-2", !isFocusMode && "hidden md:flex")}>
               {visibleLinks.map(l => {
                 const isActive = pathname === l.href;
-                // Restriction Logic: Lock everything except Home (and Glass if it were here) for non-admins
-                const isLocked = !flags?.isAdmin && l.href !== '/';
+                // Restriction Logic: Lock everything except Home, Billing, Pending for non-admins
+                const isLocked = !flags?.isAdmin && l.href !== '/' && l.href !== '/billing' && l.href !== '/pending';
 
                 if (isLocked) {
                   return (
@@ -216,7 +216,7 @@ export default function Navbar() {
           <div className="flex items-center justify-around h-16 px-2">
             {allLinks.slice(0, 4).map(l => {
               const isActive = pathname === l.href;
-              const isLocked = !flags?.isAdmin && l.href !== '/';
+              const isLocked = !flags?.isAdmin && l.href !== '/' && l.href !== '/billing' && l.href !== '/pending';
 
               if (isLocked) {
                 return (
