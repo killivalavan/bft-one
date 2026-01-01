@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
-import { UserPlus, UserX, Shield, Briefcase, Key, Clock, CreditCard, Phone, Heart, Save, Calendar } from "lucide-react";
+import { UserPlus, UserX, Shield, Briefcase, Key, Clock, CreditCard, Phone, Heart, Save, Calendar, ChevronDown, ChevronUp } from "lucide-react";
 import SalaryManager from "@/app/(protected)/admin/SalaryManager";
 import { cn } from "@/lib/utils/cn";
 
@@ -46,6 +46,7 @@ function UserRow({ user, onRemoveUser, onUpdatePass, onToggleStockManager, onUpd
     onDownloadPayslip: (userId: string, date: Date) => Promise<void>;
 }) {
     const [password, setPassword] = useState("");
+    const [isExpanded, setIsExpanded] = useState(false);
 
     // Editable State
     const [formData, setFormData] = useState({
@@ -57,13 +58,6 @@ function UserRow({ user, onRemoveUser, onUpdatePass, onToggleStockManager, onUpd
         emergency_contact_number: user.emergency_contact_number || ""
     });
 
-    // Sync state if prop changes (optional, but good for reliable refreshes)
-    // useEffect(() => {
-    //    setFormData({ ... })
-    // }, [user]); 
-    // Commented out to prevent overwriting user typing if re-fetch happens quickly, 
-    // though typically re-fetch happens after save.
-
     const age = formData.dob ? calculateAge(formData.dob) : (user.age || "N/A");
     const [isSaving, setIsSaving] = useState(false);
 
@@ -74,7 +68,7 @@ function UserRow({ user, onRemoveUser, onUpdatePass, onToggleStockManager, onUpd
             base_salary_cents: formData.base_salary_cents ? Math.round(parseFloat(formData.base_salary_cents) * 100) : null,
             per_day_salary_cents: formData.per_day_salary_cents ? Math.round(parseFloat(formData.per_day_salary_cents) * 100) : null,
             dob: formData.dob || null,
-            age: typeof age === 'number' ? age : null, // Persist age too if we want, or rely on calc. Let's persist it.
+            age: typeof age === 'number' ? age : null,
             contact_number: formData.contact_number || null,
             emergency_contact_number: formData.emergency_contact_number || null,
         };
@@ -85,7 +79,10 @@ function UserRow({ user, onRemoveUser, onUpdatePass, onToggleStockManager, onUpd
     return (
         <div className="bg-white rounded-xl border border-zinc-200 shadow-sm overflow-hidden mb-4">
             {/* Header */}
-            <div className="px-4 py-3 bg-zinc-50/50 border-b border-zinc-100 flex flex-wrap items-center justify-between gap-3">
+            <div
+                className="px-4 py-3 bg-zinc-50/50 border-b border-zinc-100 flex flex-wrap items-center justify-between gap-3 cursor-pointer hover:bg-zinc-50 transition-colors"
+                onClick={() => !user.is_admin && setIsExpanded(!isExpanded)}
+            >
                 <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-full bg-zinc-100 flex items-center justify-center text-zinc-500 font-bold text-lg">
                         {user.email[0].toUpperCase()}
@@ -107,7 +104,18 @@ function UserRow({ user, onRemoveUser, onUpdatePass, onToggleStockManager, onUpd
                     </div>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2" onClick={e => e.stopPropagation()}>
+                    {!user.is_admin && (
+                        <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-8 w-8 p-0 text-zinc-400 hover:text-zinc-600 mr-2"
+                            onClick={() => setIsExpanded(!isExpanded)}
+                        >
+                            {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                        </Button>
+                    )}
+
                     {!user.is_admin && (
                         <Button
                             size="sm"
@@ -137,8 +145,8 @@ function UserRow({ user, onRemoveUser, onUpdatePass, onToggleStockManager, onUpd
             </div>
 
             {/* Editable Fields */}
-            {!user.is_admin && (
-                <div className="p-4 space-y-4">
+            {!user.is_admin && isExpanded && (
+                <div className="p-4 space-y-4 animate-in slide-in-from-top-1 duration-200">
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                         <div className="space-y-1">
                             <label className="text-[10px] font-semibold text-zinc-400 uppercase flex items-center gap-1"><Clock size={10} /> In Time</label>

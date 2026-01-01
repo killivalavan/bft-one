@@ -30,8 +30,9 @@ export default function ContactsPage() {
 
     const [employees, setEmployees] = useState<Employee[]>([]);
     const [others, setOthers] = useState<ExternalContact[]>([]);
+    const [emergencyContacts, setEmergencyContacts] = useState<ExternalContact[]>([]);
     const [loading, setLoading] = useState(true);
-    const [tab, setTab] = useState<"employees" | "other">("employees");
+    const [tab, setTab] = useState<"employees" | "emergency" | "vendors">("employees");
 
     useEffect(() => {
         if (user) loadData();
@@ -65,7 +66,12 @@ export default function ContactsPage() {
 
             // Separate External Contacts
             const manualEmps = allExt.filter(c => c.role.trim().toLowerCase() === 'employee');
-            const otherContacts = allExt.filter(c => c.role.trim().toLowerCase() !== 'employee' && c.role.trim().toLowerCase() !== 'owner');
+            const emergency = allExt.filter(c => c.role.trim().toLowerCase() === 'emergency');
+            const otherContacts = allExt.filter(c =>
+                c.role.trim().toLowerCase() !== 'employee' &&
+                c.role.trim().toLowerCase() !== 'owner' &&
+                c.role.trim().toLowerCase() !== 'emergency'
+            );
 
             // Merge System + Manual Employees
             const mergedEmps: Employee[] = [
@@ -82,6 +88,7 @@ export default function ContactsPage() {
 
             setEmployees(mergedEmps);
             setOthers(otherContacts);
+            setEmergencyContacts(emergency);
 
         } catch (e: any) {
             toast({ title: "Error loading contacts", description: e.message, variant: "error" });
@@ -123,7 +130,7 @@ export default function ContactsPage() {
                     </div>
 
                     {/* Tabs */}
-                    <div className="flex bg-zinc-100 p-1 rounded-xl w-full max-w-sm border border-zinc-200 mt-6">
+                    <div className="flex bg-zinc-100 p-1 rounded-xl w-full max-w-lg border border-zinc-200 mt-6">
                         <button
                             onClick={() => setTab("employees")}
                             className={cn(
@@ -135,14 +142,23 @@ export default function ContactsPage() {
                             Employees
                         </button>
                         <button
-                            onClick={() => setTab("other")}
+                            onClick={() => setTab("emergency")}
                             className={cn(
                                 "flex-1 flex items-center justify-center gap-2 py-2 text-sm font-medium rounded-lg transition-all",
-                                tab === "other" ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-500 hover:text-zinc-700"
+                                tab === "emergency" ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-500 hover:text-zinc-700"
                             )}
                         >
                             <ShieldAlert size={16} />
-                            Other Contacts
+                            Emergency
+                        </button>
+                        <button
+                            onClick={() => setTab("vendors")}
+                            className={cn(
+                                "flex-1 flex items-center justify-center gap-2 py-2 text-sm font-medium rounded-lg transition-all",
+                                tab === "vendors" ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-500 hover:text-zinc-700"
+                            )}
+                        >
+                            <span>Vendors</span>
                         </button>
                     </div>
                 </div>
@@ -153,22 +169,24 @@ export default function ContactsPage() {
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                             {employees.map(emp => (
                                 <div key={emp.id} className="bg-white p-4 rounded-xl border border-sky-100 shadow-sm flex flex-col gap-3 relative overflow-hidden group hover:border-sky-300 transition-colors">
-                                    <div className="absolute top-0 right-0 w-16 h-16 bg-gradient-to-br from-sky-50 to-transparent rounded-bl-full -mr-4 -mt-4 z-0"></div>
-                                    <div className="relative z-10">
-                                        <div className="font-semibold text-zinc-900 truncate text-lg group-hover:text-sky-700 transition-colors capitalize">{emp.full_name || emp.email.split('@')[0]}</div>
+                                    <div className="absolute top-0 right-0 w-20 h-20 bg-gradient-to-br from-sky-50 to-transparent rounded-bl-full -mr-6 -mt-6 z-0"></div>
+                                    <div className="flex justify-between items-start relative z-10">
+                                        <div>
+                                            <span className="inline-block px-2 py-1 rounded-md bg-sky-50 text-sky-700 text-xs font-bold uppercase tracking-wide mb-1 border border-sky-100">
+                                                Employee
+                                            </span>
+                                            <div className="font-semibold text-zinc-900 truncate text-lg group-hover:text-sky-700 transition-colors capitalize">{emp.full_name || emp.email.split('@')[0]}</div>
+                                        </div>
                                     </div>
                                     <div className="mt-auto relative z-10">
                                         {emp.contact_number ? (
-                                            <a href={`tel:${emp.contact_number}`} className="flex items-center justify-between px-3 py-2 rounded-lg bg-sky-50 text-sky-700 hover:bg-sky-600 hover:text-white text-sm font-medium transition-all">
-                                                <span>Call</span>
-                                                <div className="flex items-center gap-2">
-                                                    {emp.contact_number} <Phone size={14} />
-                                                </div>
+                                            <a href={`tel:${emp.contact_number}`} className="flex items-center justify-center gap-2 w-full py-2 rounded-lg bg-sky-50 text-sky-700 hover:bg-sky-600 hover:text-white font-medium transition-all border border-sky-100 hover:border-sky-600">
+                                                <Phone size={16} />
+                                                {emp.contact_number}
                                             </a>
                                         ) : (
-                                            <div className="px-3 py-2 rounded-lg bg-zinc-50 text-zinc-400 text-sm flex justify-between">
+                                            <div className="flex items-center justify-center gap-2 w-full py-2 rounded-lg bg-zinc-50 text-zinc-400 border border-zinc-100 italic text-sm">
                                                 <span>No Number</span>
-                                                <span>—</span>
                                             </div>
                                         )}
                                     </div>
@@ -177,21 +195,49 @@ export default function ContactsPage() {
                         </div>
                     )}
 
-                    {tab === "other" && (
+                    {tab === "emergency" && (
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                            {emergencyContacts.map(contact => (
+                                <div key={contact.id} className="bg-white p-4 rounded-xl border border-red-100 shadow-sm flex flex-col gap-3 relative group hover:border-red-300 transition-colors overflow-hidden">
+                                    <div className="absolute top-0 right-0 w-20 h-20 bg-gradient-to-br from-red-50 to-transparent rounded-bl-full -mr-6 -mt-6 z-0"></div>
+                                    <div className="flex justify-between items-start relative z-10">
+                                        <div>
+                                            <span className="inline-block px-2 py-1 rounded-md bg-red-50 text-red-700 text-xs font-bold uppercase tracking-wide mb-1 border border-red-100">
+                                                Emergency
+                                            </span>
+                                            <div className="font-semibold text-zinc-900 text-lg group-hover:text-red-700 transition-colors capitalize">{contact.name}</div>
+                                        </div>
+                                    </div>
+                                    <a href={`tel:${contact.phone}`} className="mt-auto flex items-center justify-center gap-2 w-full py-2 rounded-lg bg-red-50 text-red-700 hover:bg-red-600 hover:text-white font-medium transition-all border border-red-100 hover:border-red-600 relative z-10">
+                                        <Phone size={16} />
+                                        {contact.phone}
+                                    </a>
+                                </div>
+                            ))}
+                            {emergencyContacts.length === 0 && !loading && (
+                                <div className="col-span-full py-12 text-center flex flex-col items-center justify-center text-zinc-400 bg-zinc-50/50 rounded-xl border border-dashed border-zinc-200">
+                                    <ShieldAlert size={32} className="mb-2 opacity-50" />
+                                    <p>No emergency contacts listed.</p>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {tab === "vendors" && (
                         <div className="space-y-4">
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                                 {others.map(contact => (
-                                    <div key={contact.id} className="bg-white p-4 rounded-xl border border-rose-100 shadow-sm flex flex-col gap-3 relative group hover:border-rose-300 transition-colors overflow-hidden">
-                                        <div className="absolute top-0 right-0 w-20 h-20 bg-gradient-to-br from-rose-50 to-transparent rounded-bl-full -mr-6 -mt-6 z-0"></div>
+                                    <div key={contact.id} className="bg-white p-4 rounded-xl border border-yellow-100 shadow-sm flex flex-col gap-3 relative group hover:border-yellow-300 transition-colors overflow-hidden">
+                                        <div className="absolute top-0 right-0 w-20 h-20 bg-gradient-to-br from-yellow-50 to-transparent rounded-bl-full -mr-6 -mt-6 z-0"></div>
                                         <div className="flex justify-between items-start relative z-10">
                                             <div>
-                                                <span className="inline-block px-2 py-1 rounded-md bg-rose-50 text-rose-700 text-xs font-bold uppercase tracking-wide mb-1 border border-rose-100">
+                                                <span className="inline-block px-2 py-1 rounded-md bg-yellow-50 text-yellow-700 text-xs font-bold uppercase tracking-wide mb-1 border border-yellow-100">
                                                     {contact.role}
                                                 </span>
-                                                <div className="font-semibold text-zinc-900 text-lg group-hover:text-rose-700 transition-colors capitalize">{contact.name}</div>
+                                                <div className="font-semibold text-zinc-900 text-lg group-hover:text-yellow-700 transition-colors capitalize">{contact.name}</div>
                                             </div>
                                         </div>
-                                        <a href={`tel:${contact.phone}`} className="mt-auto flex items-center justify-center gap-2 w-full py-2 rounded-lg bg-zinc-50 text-zinc-600 hover:bg-rose-600 hover:text-white font-medium transition-all border border-zinc-100 hover:border-rose-600 relative z-10">
+                                        <a href={`tel:${contact.phone}`} className="mt-auto flex items-center justify-center gap-2 w-full py-2 rounded-lg bg-zinc-50 text-zinc-600 hover:bg-yellow-600 hover:text-white font-medium transition-all border border-zinc-100 hover:border-yellow-600 relative z-10">
                                             <Phone size={16} />
                                             {contact.phone}
                                         </a>
@@ -200,7 +246,7 @@ export default function ContactsPage() {
                                 {others.length === 0 && !loading && (
                                     <div className="col-span-full py-12 text-center flex flex-col items-center justify-center text-zinc-400 bg-zinc-50/50 rounded-xl border border-dashed border-zinc-200">
                                         <ShieldAlert size={32} className="mb-2 opacity-50" />
-                                        <p>No other contacts listed.</p>
+                                        <p>No vendors listed.</p>
                                     </div>
                                 )}
                             </div>

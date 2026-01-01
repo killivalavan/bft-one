@@ -77,21 +77,52 @@ export function ContactManager({
             {isEditing && !isEditing.startsWith('sys-') && (
                 <div className="bg-white p-4 rounded-xl shadow-sm border border-zinc-200 space-y-4 animate-in zoom-in-95">
                     <h3 className="text-sm font-bold text-zinc-900 uppercase tracking-wide">{isEditing === 'new' ? 'New Contact' : 'Edit Contact'}</h3>
+
+                    {/* Category Selection */}
+                    <div className="flex flex-col gap-2">
+                        <label className="text-xs font-semibold text-zinc-500 uppercase">Contact Category</label>
+                        <div className="flex bg-zinc-100 p-1 rounded-lg">
+                            {(['other', 'emergency', 'employee'] as const).map(cat => (
+                                <button
+                                    key={cat}
+                                    onClick={() => {
+                                        const role = cat === 'emergency' ? 'Emergency' : cat === 'employee' ? 'Employee' : '';
+                                        setEditForm(prev => ({ ...prev, role }));
+                                    }}
+                                    className={`flex-1 py-1.5 text-xs font-medium rounded-md transition-all ${(editForm.role?.toLowerCase() === 'emergency' && cat === 'emergency') ||
+                                        (editForm.role?.toLowerCase() === 'employee' && cat === 'employee') ||
+                                        (editForm.role && !['emergency', 'employee'].includes(editForm.role.toLowerCase()) && cat === 'other') ||
+                                        (!editForm.role && cat === 'other')
+                                        ? 'bg-white text-zinc-900 shadow-sm'
+                                        : 'text-zinc-500 hover:text-zinc-700'
+                                        }`}
+                                >
+                                    {cat === 'other' ? 'Other' : cat === 'emergency' ? 'Emergency' : 'System Emp'}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <Input
-                            placeholder="Role (e.g. Police, Owner)"
-                            value={editForm.role || ''}
-                            onChange={e => setEditForm({ ...editForm, role: e.target.value })}
-                        />
+                        {/* Show Role Input only for 'Other' */}
+                        {(!editForm.role || (!['emergency', 'employee'].includes(editForm.role.toLowerCase()))) && (
+                            <Input
+                                placeholder="Role (e.g. Police, Owner)"
+                                value={editForm.role || ''}
+                                onChange={e => setEditForm({ ...editForm, role: e.target.value })}
+                            />
+                        )}
                         <Input
                             placeholder="Name"
                             value={editForm.name || ''}
                             onChange={e => setEditForm({ ...editForm, name: e.target.value })}
+                            className={(!editForm.role || (!['emergency', 'employee'].includes(editForm.role.toLowerCase()))) ? "" : "md:col-span-1.5"}
                         />
                         <Input
                             placeholder="Phone Number"
                             value={editForm.phone || ''}
                             onChange={e => setEditForm({ ...editForm, phone: e.target.value })}
+                            className={(!editForm.role || (!['emergency', 'employee'].includes(editForm.role.toLowerCase()))) ? "" : "md:col-span-1.5"}
                         />
                     </div>
                     <div className="flex justify-end gap-2">
@@ -123,7 +154,7 @@ export function ContactManager({
             {/* --- System Users Section --- */}
             <h3 className="text-lg font-semibold text-zinc-800 flex items-center gap-2 mt-8">
                 <Database size={18} className="text-sky-600" />
-                System Employees
+                Employees
                 <span className="text-xs font-normal text-zinc-500 bg-zinc-100 px-2 py-0.5 rounded-full">Registered Users</span>
             </h3>
 
@@ -166,15 +197,48 @@ export function ContactManager({
                 )}
             </div>
 
-            {/* --- External Contacts Section --- */}
+            {/* --- Emergency Contacts Section --- */}
+            <h3 className="text-lg font-semibold text-zinc-800 flex items-center gap-2 border-t pt-8">
+                <ShieldAlert size={18} className="text-red-600" />
+                Emergency Contacts
+                <span className="text-xs font-normal text-zinc-500 bg-zinc-100 px-2 py-0.5 rounded-full">Emergency</span>
+            </h3>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
+                {contacts.filter(c => c.role.toLowerCase() === 'emergency').map(contact => (
+                    <div key={contact.id} className="bg-white p-4 rounded-xl border border-red-100 shadow-sm flex flex-col gap-3 relative group hover:border-red-300 transition-colors">
+                        <div className="flex justify-between items-start">
+                            <div>
+                                <span className="inline-block px-2 py-1 rounded-md text-xs font-bold uppercase tracking-wide mb-1 border bg-red-50 text-red-700 border-red-100">
+                                    {contact.role}
+                                </span>
+                                <div className="font-semibold text-zinc-900 text-lg">{contact.name}</div>
+                            </div>
+                            <div className="flex gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity bg-white/50 backdrop-blur-sm rounded-lg p-1">
+                                <button onClick={() => { setIsEditing(contact.id); setEditForm(contact); }} className="p-1.5 hover:bg-zinc-100 rounded-md text-zinc-500"><Edit2 size={14} /></button>
+                                <button onClick={() => onDeleteContact(contact.id)} className="p-1.5 hover:bg-rose-50 rounded-md text-rose-500"><Trash2 size={14} /></button>
+                            </div>
+                        </div>
+                        <div className="mt-auto flex items-center gap-2 text-zinc-600 font-medium">
+                            <Phone size={16} className="text-red-400" />
+                            {contact.phone}
+                        </div>
+                    </div>
+                ))}
+                {contacts.filter(c => c.role.toLowerCase() === 'emergency').length === 0 && (
+                    <div className="col-span-full py-6 text-center text-zinc-400 italic">No emergency contacts found.</div>
+                )}
+            </div>
+
+            {/* --- Manual Entries Section --- */}
             <h3 className="text-lg font-semibold text-zinc-800 flex items-center gap-2 border-t pt-8">
                 <User size={18} className="text-indigo-600" />
-                Manual Entries
+                Vendors
                 <span className="text-xs font-normal text-zinc-500 bg-zinc-100 px-2 py-0.5 rounded-full">External & Owners</span>
             </h3>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {contacts.map(contact => (
+                {contacts.filter(c => c.role.toLowerCase() !== 'emergency').map(contact => (
                     <div key={contact.id} className="bg-white p-4 rounded-xl border border-zinc-200 shadow-sm flex flex-col gap-3 relative group hover:border-zinc-300 transition-colors">
                         <div className="flex justify-between items-start">
                             <div>
@@ -195,7 +259,7 @@ export function ContactManager({
                         </div>
                     </div>
                 ))}
-                {contacts.length === 0 && (
+                {contacts.filter(c => c.role.toLowerCase() !== 'emergency').length === 0 && (
                     <div className="col-span-full py-12 text-center flex flex-col items-center justify-center text-zinc-400 bg-zinc-50/50 rounded-xl border border-dashed border-zinc-200">
                         <ShieldAlert size={32} className="mb-2 opacity-50" />
                         <p>No manual contacts found.</p>
