@@ -8,6 +8,9 @@ import { useToast } from "@/components/ui/Toast";
 import { TimesheetCalendar } from "@/components/timesheet/TimesheetCalendar";
 import { ActionTabs } from "@/components/timesheet/ActionTabs";
 import { LogForm } from "@/components/timesheet/LogForm";
+import { PresentStaffModal } from "@/components/timesheet/PresentStaffModal";
+import { Button } from "@/components/ui/Button";
+import { Users } from "lucide-react";
 
 export default function TimesheetPage() {
   const { toast } = useToast();
@@ -19,6 +22,8 @@ export default function TimesheetPage() {
   const [leaveDate, setLeaveDate] = useState<string>(format(new Date(), "yyyy-MM-dd"));
   const [reason, setReason] = useState("");
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [showPresentModal, setShowPresentModal] = useState(false);
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const dropdownDate = useMemo(() => dateChoice === "today" ? new Date() : addDays(new Date(), -1), [dateChoice]);
@@ -27,6 +32,10 @@ export default function TimesheetPage() {
     (async () => {
       const { data: { user } } = await supabaseClient.auth.getUser();
       if (!user) return;
+
+      const { data: prof } = await supabaseClient.from("profiles").select("is_admin").eq("id", user.id).maybeSingle();
+      setIsAdmin(!!prof?.is_admin);
+
       const start = format(new Date(today.getFullYear(), today.getMonth(), 1), "yyyy-MM-01");
       const end = format(new Date(today.getFullYear(), today.getMonth() + 1, 0), "yyyy-MM-dd");
       const { data: ts } = await supabaseClient.from("timesheets").select("work_date").gte("work_date", start).lte("work_date", end);
@@ -114,12 +123,20 @@ export default function TimesheetPage() {
     <div className="min-h-screen bg-neutral-50/50 pb-20 md:pb-10">
       <div className="max-w-md mx-auto p-4 space-y-6">
         {/* Header */}
-        <div className="space-y-4">
-          <Link href="/" className="inline-flex items-center gap-2 text-zinc-500 hover:text-zinc-800 transition-colors text-sm font-medium">
-            <ChevronLeft size={16} />
-            Back Home
-          </Link>
-          <h1 className="text-2xl font-bold text-zinc-900 tracking-tight">Timesheet</h1>
+        <div className="flex items-center justify-between">
+          <div className="space-y-4">
+            <Link href="/" className="inline-flex items-center gap-2 text-zinc-500 hover:text-zinc-800 transition-colors text-sm font-medium">
+              <ChevronLeft size={16} />
+              Back Home
+            </Link>
+            <h1 className="text-2xl font-bold text-zinc-900 tracking-tight">Timesheet</h1>
+          </div>
+          {isAdmin && (
+            <Button size="sm" variant="outline" onClick={() => setShowPresentModal(true)} className="gap-2 bg-white border-zinc-200 text-zinc-700 hover:bg-zinc-50">
+              <Users size={16} />
+              <span className="hidden sm:inline">Present Staff</span>
+            </Button>
+          )}
         </div>
 
         {/* Components */}
@@ -149,8 +166,15 @@ export default function TimesheetPage() {
             onReasonChange={setReason}
             onSubmitLeave={submitLeave}
           />
+
+          <PresentStaffModal
+            open={showPresentModal}
+            onClose={() => setShowPresentModal(false)}
+            date={selectedDate}
+          />
         </div>
       </div>
     </div>
   );
 }
+

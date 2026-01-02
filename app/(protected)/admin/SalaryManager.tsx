@@ -42,7 +42,7 @@ export default function SalaryManager({ userId, onDownloadPayslip }: SalaryManag
   const monthLabel = month.toLocaleString(undefined, { month: 'long', year: 'numeric' });
   const totals = (() => {
     const deductions = (rows || []).reduce((s, r) => s + (r.amount_cents || 0), 0);
-    const net = Math.max(0, (base || 0) - deductions);
+    const net = (base || 0) - deductions;
     return { deductions, net };
   })();
 

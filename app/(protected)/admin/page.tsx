@@ -147,7 +147,7 @@ export default function AdminPage() {
       const entries = ents || [];
       const deductions = entries.reduce((s, e) => s + (e.amount_cents || 0), 0);
       const baseSalary = prof.base_salary_cents || 0;
-      const netPay = Math.max(0, baseSalary - deductions);
+      const netPay = baseSalary - deductions;
 
       await generatePayslipPdf({ userEmail: prof.email, monthLabel, baseSalary, deductions, netPay, entries: entries as any });
       toast({ title: `Payslip downloaded for ${prof.email}`, variant: "success" });
