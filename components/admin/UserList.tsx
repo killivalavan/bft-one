@@ -37,6 +37,29 @@ function calculateAge(dob: string) {
     return Math.abs(new Date(diff).getUTCFullYear() - 1970);
 }
 
+function convertTime12to24(time12h: string | null | undefined): string {
+    if (!time12h) return "";
+    const match = time12h.match(/^(\d{1,2}):(\d{2})\s?(AM|PM)$/i);
+    if (!match) return time12h; // Assume already 24h or invalid
+
+    let [_, h, m, ap] = match;
+    let hh = parseInt(h, 10);
+    if (ap.toUpperCase() === 'PM' && hh < 12) hh += 12;
+    if (ap.toUpperCase() === 'AM' && hh === 12) hh = 0;
+
+    return `${hh.toString().padStart(2, '0')}:${m}`;
+}
+
+function convertTime24to12(time24h: string): string {
+    if (!time24h) return "";
+    const [h, m] = time24h.split(':');
+    let hh = parseInt(h, 10);
+    const ap = hh >= 12 ? 'PM' : 'AM';
+    if (hh > 12) hh -= 12;
+    if (hh === 0) hh = 12;
+    return `${hh}:${m} ${ap}`;
+}
+
 function UserRow({ user, onRemoveUser, onUpdatePass, onToggleStockManager, onUpdateFullProfile, onDownloadPayslip }: {
     user: Profile;
     onRemoveUser: (id: string) => Promise<void>;
@@ -105,6 +128,8 @@ function UserRow({ user, onRemoveUser, onUpdatePass, onToggleStockManager, onUpd
                 </div>
 
                 <div className="flex items-center gap-2" onClick={e => e.stopPropagation()}>
+
+
                     {!user.is_admin && (
                         <Button
                             size="sm"
@@ -112,7 +137,7 @@ function UserRow({ user, onRemoveUser, onUpdatePass, onToggleStockManager, onUpd
                             className="h-8 w-8 p-0 text-zinc-400 hover:text-zinc-600 mr-2"
                             onClick={() => setIsExpanded(!isExpanded)}
                         >
-                            {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                            <ChevronDown size={16} className={cn("transition-transform", isExpanded && "rotate-180")} />
                         </Button>
                     )}
 
@@ -120,7 +145,7 @@ function UserRow({ user, onRemoveUser, onUpdatePass, onToggleStockManager, onUpd
                         <Button
                             size="sm"
                             variant="outline"
-                            className={cn("text-xs h-8", user.is_stock_manager ? "border-amber-200 text-amber-700 bg-amber-50" : "bg-white text-zinc-600")}
+                            className={cn("text-xs h-8 whitespace-nowrap", user.is_stock_manager ? "border-amber-200 text-amber-700 bg-amber-50" : "bg-white text-zinc-600")}
                             onClick={() => onToggleStockManager(user.id, !!user.is_stock_manager)}
                         >
                             {user.is_stock_manager ? "Revoke Stock Mgr" : "Grant Stock Mgr"}
@@ -151,8 +176,9 @@ function UserRow({ user, onRemoveUser, onUpdatePass, onToggleStockManager, onUpd
                         <div className="space-y-1">
                             <label className="text-[10px] font-semibold text-zinc-400 uppercase flex items-center gap-1"><Clock size={10} /> In Time</label>
                             <Input
-                                value={formData.in_time}
-                                onChange={e => setFormData({ ...formData, in_time: e.target.value })}
+                                type="time"
+                                value={convertTime12to24(formData.in_time)}
+                                onChange={e => setFormData({ ...formData, in_time: convertTime24to12(e.target.value) })}
                                 className="h-9 text-sm"
                             />
                         </div>
@@ -161,7 +187,12 @@ function UserRow({ user, onRemoveUser, onUpdatePass, onToggleStockManager, onUpd
                             <Input
                                 type="number"
                                 value={formData.base_salary_cents}
-                                onChange={e => setFormData({ ...formData, base_salary_cents: e.target.value })}
+                                onChange={e => {
+                                    const val = e.target.value;
+                                    const num = parseFloat(val);
+                                    const perDay = !isNaN(num) ? (num / 30).toFixed(2) : "";
+                                    setFormData({ ...formData, base_salary_cents: val, per_day_salary_cents: perDay });
+                                }}
                                 className="h-9 text-sm"
                             />
                         </div>
@@ -228,6 +259,12 @@ export function UserList({ users, onAddUser, onRemoveUser, onUpdatePass, onToggl
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("123456");
 
+    async function handleAddUser() {
+        await onAddUser(email, password);
+        setEmail("");
+        setPassword("");
+    }
+
     return (
         <div className="space-y-6 animate-in slide-in-from-bottom-2 fade-in duration-500">
             {/* Create User Block */}
@@ -250,7 +287,7 @@ export function UserList({ users, onAddUser, onRemoveUser, onUpdatePass, onToggl
                             />
                         </div>
                     </div>
-                    <Button onClick={() => onAddUser(email, password)} className="bg-indigo-600 hover:bg-indigo-700 text-white w-full sm:w-auto h-9">
+                    <Button onClick={handleAddUser} className="bg-indigo-600 hover:bg-indigo-700 text-white w-full sm:w-auto h-9">
                         <UserPlus size={16} className="mr-2" /> Add User
                     </Button>
                 </CardContent>

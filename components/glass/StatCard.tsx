@@ -3,7 +3,7 @@ import { cn } from "@/lib/utils/cn";
 
 interface StatCardProps {
     label: string;
-    value: string | number;
+    value: string | number | React.ReactNode;
     icon?: LucideIcon;
     subtext?: string;
     color?: "sky" | "rose" | "indigo" | "amber" | "emerald";

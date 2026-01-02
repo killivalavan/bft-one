@@ -7,6 +7,8 @@ import { ChevronLeft, ChevronRight, Wallet, MinusCircle, PiggyBank, Download, Lo
 import { StatCard } from "@/components/glass/StatCard";
 import jsPDF from "jspdf";
 import { useToast } from "@/components/ui/Toast";
+import { SalaryChart } from "@/components/mysalary/SalaryChart";
+import { AnimatedNumber } from "@/components/ui/AnimatedNumber";
 
 export default function MySalaryPage() {
   const { toast } = useToast();
@@ -201,29 +203,51 @@ export default function MySalaryPage() {
           </div>
         </div>
 
-        {/* Stats Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <StatCard
-            label="Base Salary"
-            value={`₹ ${(base / 100).toFixed(2)}`}
-            icon={Wallet}
-            color="emerald"
-            subtext="Monthly Rate"
-          />
-          <StatCard
-            label="Deductions"
-            value={`₹ ${(totals.deductions / 100).toFixed(2)}`}
-            icon={MinusCircle}
-            color="rose"
-            subtext={`${entries.length} records`}
-          />
-          <StatCard
-            label="Net Pay"
-            value={`₹ ${(totals.net / 100).toFixed(2)}`}
-            icon={PiggyBank}
-            color="indigo"
-            subtext="Estimated payout"
-          />
+        {/* Visualization & Stats */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+
+          {/* Left Col: Chart */}
+          <div className="lg:col-span-1 bg-white rounded-2xl p-6 border border-zinc-200 shadow-sm flex flex-col items-center justify-center relative overflow-hidden">
+            <div className="absolute top-0 w-full h-1 bg-gradient-to-r from-emerald-400 to-rose-400"></div>
+            <h3 className="text-sm font-semibold text-zinc-900 uppercase tracking-wide mb-6">Salary Composition</h3>
+            <SalaryChart base={base} deductions={totals.deductions} net={totals.net} />
+
+            <div className="flex gap-6 mt-8 w-full justify-center">
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 rounded-full bg-emerald-500"></div>
+                <span className="text-xs font-medium text-zinc-600">Net: <AnimatedNumber value={totals.net / 100} prefix="₹" /></span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 rounded-full bg-rose-500"></div>
+                <span className="text-xs font-medium text-zinc-600">Ded: <AnimatedNumber value={totals.deductions / 100} prefix="₹" /></span>
+              </div>
+            </div>
+          </div>
+
+          {/* Right Col: Cards */}
+          <div className="lg:col-span-2 grid grid-cols-1 md:grid-cols-3 gap-4">
+            <StatCard
+              label="Base Salary"
+              value={<AnimatedNumber value={base / 100} prefix="₹ " />}
+              icon={Wallet}
+              color="emerald"
+              subtext="Monthly Rate"
+            />
+            <StatCard
+              label="Deductions"
+              value={<AnimatedNumber value={totals.deductions / 100} prefix="₹ " />}
+              icon={MinusCircle}
+              color="rose"
+              subtext={`${entries.length} records`}
+            />
+            <StatCard
+              label="Net Pay"
+              value={<AnimatedNumber value={totals.net / 100} prefix="₹ " />}
+              icon={PiggyBank}
+              color="indigo"
+              subtext="Estimated payout"
+            />
+          </div>
         </div>
 
         {/* Entries List */}

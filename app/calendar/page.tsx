@@ -102,23 +102,29 @@ export default function CalendarPage() {
         </div>
 
         {/* Title & Controls */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <h1 className="text-2xl md:text-3xl font-bold text-zinc-900 tracking-tight flex items-center gap-3">
-            <CalendarDays className="text-sky-600" size={28} />
-            Global Leave Calendar
-          </h1>
-
-          <div className="flex items-center gap-3 bg-white p-1 rounded-xl shadow-sm border border-zinc-200">
-            <Button variant="ghost" size="sm" onClick={prevMonth} className="h-8 w-8 p-0 rounded-lg hover:bg-zinc-100">
-              <ChevronLeft size={18} />
-            </Button>
-            <span className="min-w-[140px] text-center font-semibold text-zinc-800 tabular-nums">
-              {monthLabel}
-            </span>
-            <Button variant="ghost" size="sm" onClick={nextMonth} className="h-8 w-8 p-0 rounded-lg hover:bg-zinc-100">
-              <ChevronRight size={18} />
-            </Button>
+        <div className="grid grid-cols-1 md:grid-cols-3 items-center gap-4">
+          <div className="flex justify-center md:justify-start">
+            <h1 className="text-2xl md:text-3xl font-bold text-zinc-900 tracking-tight flex items-center gap-3">
+              <CalendarDays className="text-sky-600" size={28} />
+              Global Leave Calendar
+            </h1>
           </div>
+
+          <div className="flex justify-center">
+            <div className="flex items-center gap-3 bg-white p-1 rounded-xl shadow-sm border border-zinc-200">
+              <Button variant="ghost" size="sm" onClick={prevMonth} className="h-8 w-8 p-0 rounded-lg hover:bg-zinc-100">
+                <ChevronLeft size={18} />
+              </Button>
+              <span className="min-w-[140px] text-center font-semibold text-zinc-800 tabular-nums">
+                {monthLabel}
+              </span>
+              <Button variant="ghost" size="sm" onClick={nextMonth} className="h-8 w-8 p-0 rounded-lg hover:bg-zinc-100">
+                <ChevronRight size={18} />
+              </Button>
+            </div>
+          </div>
+
+          <div className="hidden md:block" aria-hidden="true" />
         </div>
 
         {/* Calendar Grid */}

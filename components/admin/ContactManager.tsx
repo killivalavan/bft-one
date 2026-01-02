@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Edit2, Plus, Save, Trash2, Phone, ShieldAlert, User, Database } from "lucide-react";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 
 type ExternalContact = {
     id: string;
@@ -41,6 +42,8 @@ export function ContactManager({
     const [editForm, setEditForm] = useState<Partial<ExternalContact>>({});
     const [sysEditForm, setSysEditForm] = useState<{ id: string, phone: string }>({ id: '', phone: '' });
 
+    const [confirmState, setConfirmState] = useState<{ open: boolean; title: string; desc: string; action?: () => Promise<void> }>({ open: false, title: "", desc: "" });
+
     async function handleSave() {
         // External Contact Save
         if (isEditing === 'new' || (isEditing && !isEditing.startsWith('sys-'))) {
@@ -60,6 +63,33 @@ export function ContactManager({
         setEditForm({});
         setSysEditForm({ id: '', phone: '' });
     }
+
+    async function handleDelete(id: string) {
+        setConfirmState({
+            open: true,
+            title: "Delete Contact?",
+            desc: "This will permanently delete this contact. This action cannot be undone.",
+            action: async () => {
+                await onDeleteContact(id);
+            }
+        });
+    }
+
+    async function handleSystemDelete(id: string) {
+        setConfirmState({
+            open: true,
+            title: "Remove System Employee?",
+            desc: "This will remove the employee from the system record. They may lose access.",
+            action: async () => {
+                await onDeleteSystemUser(id);
+            }
+        });
+    }
+
+    // Filter lists
+    const employees = systemUsers.filter(u => !u.is_admin);
+    const emergencyContacts = contacts.filter(c => c.role.toLowerCase() === 'emergency');
+    const manualEntries = contacts.filter(c => c.role.toLowerCase() !== 'emergency');
 
     return (
         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -158,8 +188,9 @@ export function ContactManager({
                 <span className="text-xs font-normal text-zinc-500 bg-zinc-100 px-2 py-0.5 rounded-full">Registered Users</span>
             </h3>
 
+            {/* List System Employees */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
-                {systemUsers.filter(u => !u.is_admin).map(user => (
+                {employees.map(user => (
                     <div key={user.id} className="bg-white p-4 rounded-xl border border-sky-100 shadow-sm flex flex-col gap-3 relative group hover:border-sky-300 transition-colors">
                         <div className="flex justify-between items-start">
                             <div>
@@ -178,7 +209,7 @@ export function ContactManager({
                                     <Edit2 size={14} />
                                 </button>
                                 <button
-                                    onClick={() => onDeleteSystemUser(user.id)}
+                                    onClick={() => handleSystemDelete(user.id)}
                                     className="p-1.5 hover:bg-rose-50 rounded-md text-rose-500"
                                     title="Delete User"
                                 >
@@ -192,7 +223,7 @@ export function ContactManager({
                         </div>
                     </div>
                 ))}
-                {systemUsers.filter(u => !u.is_admin).length === 0 && (
+                {employees.length === 0 && (
                     <div className="col-span-full py-6 text-center text-zinc-400 italic">No system employees found.</div>
                 )}
             </div>
@@ -205,7 +236,7 @@ export function ContactManager({
             </h3>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
-                {contacts.filter(c => c.role.toLowerCase() === 'emergency').map(contact => (
+                {emergencyContacts.map(contact => (
                     <div key={contact.id} className="bg-white p-4 rounded-xl border border-red-100 shadow-sm flex flex-col gap-3 relative group hover:border-red-300 transition-colors">
                         <div className="flex justify-between items-start">
                             <div>
@@ -216,7 +247,7 @@ export function ContactManager({
                             </div>
                             <div className="flex gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity bg-white/50 backdrop-blur-sm rounded-lg p-1">
                                 <button onClick={() => { setIsEditing(contact.id); setEditForm(contact); }} className="p-1.5 hover:bg-zinc-100 rounded-md text-zinc-500"><Edit2 size={14} /></button>
-                                <button onClick={() => onDeleteContact(contact.id)} className="p-1.5 hover:bg-rose-50 rounded-md text-rose-500"><Trash2 size={14} /></button>
+                                <button onClick={() => handleDelete(contact.id)} className="p-1.5 hover:bg-rose-50 rounded-md text-rose-500"><Trash2 size={14} /></button>
                             </div>
                         </div>
                         <div className="mt-auto flex items-center gap-2 text-zinc-600 font-medium">
@@ -225,7 +256,7 @@ export function ContactManager({
                         </div>
                     </div>
                 ))}
-                {contacts.filter(c => c.role.toLowerCase() === 'emergency').length === 0 && (
+                {emergencyContacts.length === 0 && (
                     <div className="col-span-full py-6 text-center text-zinc-400 italic">No emergency contacts found.</div>
                 )}
             </div>
@@ -238,7 +269,7 @@ export function ContactManager({
             </h3>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {contacts.filter(c => c.role.toLowerCase() !== 'emergency').map(contact => (
+                {manualEntries.map(contact => (
                     <div key={contact.id} className="bg-white p-4 rounded-xl border border-zinc-200 shadow-sm flex flex-col gap-3 relative group hover:border-zinc-300 transition-colors">
                         <div className="flex justify-between items-start">
                             <div>
@@ -250,7 +281,7 @@ export function ContactManager({
                             </div>
                             <div className="flex gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity bg-white/50 backdrop-blur-sm rounded-lg p-1">
                                 <button onClick={() => { setIsEditing(contact.id); setEditForm(contact); }} className="p-1.5 hover:bg-zinc-100 rounded-md text-zinc-500"><Edit2 size={14} /></button>
-                                <button onClick={() => onDeleteContact(contact.id)} className="p-1.5 hover:bg-rose-50 rounded-md text-rose-500"><Trash2 size={14} /></button>
+                                <button onClick={() => handleDelete(contact.id)} className="p-1.5 hover:bg-rose-50 rounded-md text-rose-500"><Trash2 size={14} /></button>
                             </div>
                         </div>
                         <div className="mt-auto flex items-center gap-2 text-zinc-600 font-medium">
@@ -259,13 +290,25 @@ export function ContactManager({
                         </div>
                     </div>
                 ))}
-                {contacts.filter(c => c.role.toLowerCase() !== 'emergency').length === 0 && (
+                {manualEntries.length === 0 && (
                     <div className="col-span-full py-12 text-center flex flex-col items-center justify-center text-zinc-400 bg-zinc-50/50 rounded-xl border border-dashed border-zinc-200">
                         <ShieldAlert size={32} className="mb-2 opacity-50" />
-                        <p>No manual contacts found.</p>
+                        <p>No vendors found.</p>
                     </div>
                 )}
             </div>
+
+            <ConfirmDialog
+                open={!!confirmState.open}
+                title={confirmState.title}
+                description={confirmState.desc}
+                onConfirm={async () => {
+                    if (confirmState.action) await confirmState.action();
+                    setConfirmState({ open: false, title: "", desc: "", action: undefined });
+                }}
+                onCancel={() => setConfirmState({ open: false, title: "", desc: "", action: undefined })}
+                confirmLabel="Delete"
+            />
         </div>
     );
 }

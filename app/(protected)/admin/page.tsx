@@ -10,6 +10,7 @@ import { SalesReports } from "@/components/admin/SalesReports";
 import { generatePayslipPdf } from "@/lib/utils/payslip";
 import { ContactManager } from "@/components/admin/ContactManager";
 import { Loader2, ShieldAlert } from "lucide-react";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 
 type Profile = { id: string; email: string; is_admin: boolean; is_stock_manager?: boolean | null; in_time?: string | null; base_salary_cents?: number | null; per_day_salary_cents?: number | null; age?: number | null; dob?: string | null; contact_number?: string | null; emergency_contact_number?: string | null };
 type Category = { id: string; name: string; icon_url?: string | null };
@@ -28,6 +29,8 @@ export default function AdminPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [contacts, setContacts] = useState<ExternalContact[]>([]);
   const [report, setReport] = useState<{ name: string; qty: number; revenue: number }[]>([]);
+
+  const [confirmState, setConfirmState] = useState<{ open: boolean; title: string; desc: string; action?: () => Promise<void> }>({ open: false, title: "", desc: "" });
 
   async function load() {
     // Try fetching with new 'dob' column
@@ -84,11 +87,17 @@ export default function AdminPage() {
   }
 
   async function removeUser(userId: string) {
-    if (!confirm("Remove this user?")) return;
-    const res = await fetch("/api/admin-users", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId }) });
-    if (!res.ok) { toast({ title: "Failed to remove user", variant: "error" }); return; }
-    await load();
-    toast({ title: "User removed", variant: "success" });
+    setConfirmState({
+      open: true,
+      title: "Remove User?",
+      desc: "This will permanently remove the user from the system. This action cannot be undone.",
+      action: async () => {
+        const res = await fetch("/api/admin-users", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId }) });
+        if (!res.ok) { toast({ title: "Failed to remove user", variant: "error" }); return; }
+        await load();
+        toast({ title: "User removed", variant: "success" });
+      }
+    });
   }
 
   async function toggleStockManager(userId: string, current: boolean) {
@@ -147,6 +156,8 @@ export default function AdminPage() {
       toast({ title: "Payslip failed", description: e.message, variant: "error" });
     }
   }
+
+
 
   // Product Actions
   async function addCategory(name: string) {
@@ -286,6 +297,18 @@ export default function AdminPage() {
             onDeleteSystemUser={removeUser}
           />
         )}
+
+        <ConfirmDialog
+          open={!!confirmState.open}
+          title={confirmState.title}
+          description={confirmState.desc}
+          onConfirm={async () => {
+            if (confirmState.action) await confirmState.action();
+            setConfirmState({ open: false, title: "", desc: "", action: undefined });
+          }}
+          onCancel={() => setConfirmState({ open: false, title: "", desc: "", action: undefined })}
+          confirmLabel="Delete User"
+        />
       </div>
     </div>
   );
