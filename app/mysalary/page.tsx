@@ -46,7 +46,7 @@ export default function MySalaryPage() {
   const totals = useMemo(() => {
     const deductions = (entries || []).reduce((s, e) => s + (e.amount_cents || 0), 0);
     // Salary calculation: Net = Base - Deductions
-    const net = Math.max(0, (base || 0) - deductions);
+    const net = (base || 0) - deductions;
     return { deductions, net };
   }, [entries, base]);
 

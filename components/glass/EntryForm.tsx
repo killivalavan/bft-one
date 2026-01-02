@@ -25,6 +25,13 @@ interface EntryFormProps {
     nSubmittedBy?: string | null;
 
     showWarning?: boolean;
+
+    // Reasons
+    brokenCount?: number;
+    reasons?: string[];
+    onReasonChange?: (idx: number, val: string) => void;
+    onSaveReasons?: () => void;
+    reasonsSaved?: boolean;
 }
 
 export function EntryForm(props: EntryFormProps) {
@@ -149,6 +156,44 @@ export function EntryForm(props: EntryFormProps) {
                     <span className="text-lg">⚠️</span>
                     <p>Please ensure you save <strong>both</strong> Morning and Night shifts to correctly compute and record the 'Broken' count for the day.</p>
                 </div>
+            )}
+
+            {/* Reasons Section - Only if Night is saved and there is broken glass */}
+            {props.isNightSaved && (props.brokenCount || 0) > 0 && (
+                <Card className="border-amber-100 bg-amber-50/30 shadow-sm animate-in fade-in slide-in-from-top-2">
+                    <CardContent className="p-5 space-y-4">
+                        <div className="flex items-center gap-2 text-amber-800 mb-2">
+                            <span className="text-lg">📝</span>
+                            <h3 className="font-semibold">Broken Glass Reasons</h3>
+                        </div>
+                        <p className="text-xs text-zinc-500">
+                            Please provide a reason for each of the <strong className="text-zinc-900">{props.brokenCount}</strong> broken glasses.
+                        </p>
+
+                        <div className="space-y-3">
+                            {Array.from({ length: props.brokenCount || 0 }).map((_, idx) => (
+                                <div key={idx} className="flex gap-3 items-center">
+                                    <span className="text-xs font-bold text-zinc-400 w-6 text-right">#{idx + 1}</span>
+                                    <Input
+                                        placeholder={`Reason for broken glass #${idx + 1}...`}
+                                        value={props.reasons?.[idx] || ""}
+                                        onChange={(e) => props.onReasonChange?.(idx, e.target.value)}
+                                        disabled={props.reasonsSaved}
+                                        className="bg-white border-amber-200 focus:border-amber-400 disabled:opacity-70 disabled:cursor-not-allowed"
+                                    />
+                                </div>
+                            ))}
+                        </div>
+
+                        <Button
+                            onClick={props.onSaveReasons}
+                            disabled={props.reasonsSaved}
+                            className="w-full bg-amber-600 hover:bg-amber-700 text-white mt-2 disabled:bg-zinc-300 disabled:shadow-none disabled:text-zinc-500"
+                        >
+                            {props.reasonsSaved ? "Reasons Submitted" : "Submit Reasons"}
+                        </Button>
+                    </CardContent>
+                </Card>
             )}
         </div>
     );

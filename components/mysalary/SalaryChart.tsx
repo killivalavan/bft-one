@@ -22,7 +22,8 @@ export function SalaryChart({ base, deductions, net }: SalaryChartProps) {
     }, [net]);
 
     // Calculate percentages
-    const netPercent = base > 0 ? (animatedNet / base) * 100 : 0;
+    const rawPercent = base > 0 ? (animatedNet / base) * 100 : 0;
+    const netPercent = Math.max(0, Math.min(100, rawPercent));
 
     return (
         <div className="relative w-48 h-48 mx-auto group cursor-default">

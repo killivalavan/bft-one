@@ -1,10 +1,13 @@
-import { ArrowUp, ArrowDown, Minus } from "lucide-react";
+import { ArrowUp, ArrowDown, Minus, FileText } from "lucide-react";
+import { useState } from "react";
+import { ReasonsModal } from "../ui/ReasonsModal";
 
 interface DailyRow {
     date: string;
     bSmall: number;
     bLarge: number;
     broken: number;
+    reasons?: string[] | null;
 }
 
 interface DailyTableProps {
@@ -12,56 +15,82 @@ interface DailyTableProps {
 }
 
 export function DailyTable({ rows }: DailyTableProps) {
+    const [viewReasons, setViewReasons] = useState<{ date: string, reasons: string[] } | null>(null);
+
     if (rows.length === 0) {
         return <div className="p-8 text-center text-zinc-500 italic">No daily records found.</div>
     }
 
     return (
-        <div className="rounded-xl border border-zinc-200 overflow-hidden bg-white shadow-sm">
-            <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                    <thead className="bg-zinc-50 border-b border-zinc-200">
-                        <tr>
-                            <th className="px-4 py-3 text-left font-semibold text-zinc-600">Date</th>
-                            <th className="px-4 py-3 text-right font-semibold text-zinc-600">Small</th>
-                            <th className="px-4 py-3 text-right font-semibold text-zinc-600">Large</th>
-                            <th className="px-4 py-3 text-right font-semibold text-zinc-900">Total Broken</th>
-                            <th className="px-4 py-3 text-right font-semibold text-zinc-600">Daily Δ</th>
-                        </tr>
-                    </thead>
-                    <tbody className="divide-y divide-zinc-100">
-                        {rows.map((row, idx) => {
-                            const prev = rows[idx + 1];
-                            const delta = prev ? (row.broken - prev.broken) : 0;
+        <>
+            <div className="rounded-xl border border-zinc-200 overflow-hidden bg-white shadow-sm">
+                <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                        <thead className="bg-zinc-50 border-b border-zinc-200">
+                            <tr>
+                                <th className="px-4 py-3 text-left font-semibold text-zinc-600">Date</th>
+                                <th className="px-4 py-3 text-right font-semibold text-zinc-600">Small</th>
+                                <th className="px-4 py-3 text-right font-semibold text-zinc-600">Large</th>
+                                <th className="px-4 py-3 text-right font-semibold text-zinc-900">Total Broken</th>
+                                <th className="px-4 py-3 text-center font-semibold text-zinc-600">Avg. Reason</th>
+                                <th className="px-4 py-3 text-right font-semibold text-zinc-600">Daily Δ</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-zinc-100">
+                            {rows.map((row, idx) => {
+                                const prev = rows[idx + 1];
+                                const delta = prev ? (row.broken - prev.broken) : 0;
+                                const hasReasons = row.reasons && row.reasons.length > 0;
 
-                            return (
-                                <tr key={row.date} className="hover:bg-zinc-50/50 transition-colors group">
-                                    <td className="px-4 py-3 font-medium text-zinc-900">{row.date}</td>
-                                    <td className="px-4 py-3 text-right text-zinc-600 tabular-nums">{row.bSmall}</td>
-                                    <td className="px-4 py-3 text-right text-zinc-600 tabular-nums">{row.bLarge}</td>
-                                    <td className="px-4 py-3 text-right font-bold text-zinc-900 tabular-nums">
-                                        <span className="inline-block py-0.5 px-2 bg-zinc-100 rounded-md">
-                                            {row.broken}
-                                        </span>
-                                    </td>
-                                    <td className="px-4 py-3 text-right">
-                                        {delta !== 0 ? (
-                                            <span className={`inline-flex items-center gap-1 text-xs font-medium px-1.5 py-0.5 rounded-full ${delta > 0 ? "bg-rose-100 text-rose-700" : "bg-emerald-100 text-emerald-700"}`}>
-                                                {delta > 0 ? <ArrowUp size={10} /> : <ArrowDown size={10} />}
-                                                {Math.abs(delta)}
+                                return (
+                                    <tr key={row.date} className="hover:bg-zinc-50/50 transition-colors group">
+                                        <td className="px-4 py-3 font-medium text-zinc-900">{row.date}</td>
+                                        <td className="px-4 py-3 text-right text-zinc-600 tabular-nums">{row.bSmall}</td>
+                                        <td className="px-4 py-3 text-right text-zinc-600 tabular-nums">{row.bLarge}</td>
+                                        <td className="px-4 py-3 text-right font-bold text-zinc-900 tabular-nums">
+                                            <span className="inline-block py-0.5 px-2 bg-zinc-100 rounded-md">
+                                                {row.broken}
                                             </span>
-                                        ) : (
-                                            <span className="text-zinc-300">
-                                                <Minus size={12} className="inline" />
-                                            </span>
-                                        )}
-                                    </td>
-                                </tr>
-                            );
-                        })}
-                    </tbody>
-                </table>
+                                        </td>
+                                        <td className="px-4 py-3 text-center">
+                                            {hasReasons ? (
+                                                <button
+                                                    onClick={() => setViewReasons({ date: row.date, reasons: row.reasons || [] })}
+                                                    className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-amber-50 text-amber-600 hover:bg-amber-100 hover:text-amber-700 transition-colors"
+                                                    title="View Reasons"
+                                                >
+                                                    <FileText size={14} />
+                                                </button>
+                                            ) : (
+                                                <span className="text-zinc-300">-</span>
+                                            )}
+                                        </td>
+                                        <td className="px-4 py-3 text-right">
+                                            {delta !== 0 ? (
+                                                <span className={`inline-flex items-center gap-1 text-xs font-medium px-1.5 py-0.5 rounded-full ${delta > 0 ? "bg-rose-100 text-rose-700" : "bg-emerald-100 text-emerald-700"}`}>
+                                                    {delta > 0 ? <ArrowUp size={10} /> : <ArrowDown size={10} />}
+                                                    {Math.abs(delta)}
+                                                </span>
+                                            ) : (
+                                                <span className="text-zinc-300">
+                                                    <Minus size={12} className="inline" />
+                                                </span>
+                                            )}
+                                        </td>
+                                    </tr>
+                                );
+                            })}
+                        </tbody>
+                    </table>
+                </div>
             </div>
-        </div>
+
+            <ReasonsModal
+                open={!!viewReasons}
+                onClose={() => setViewReasons(null)}
+                date={viewReasons?.date || ""}
+                reasons={viewReasons?.reasons}
+            />
+        </>
     );
 }

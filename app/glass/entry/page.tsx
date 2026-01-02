@@ -10,10 +10,12 @@ import { GlassTabs } from "@/components/glass/GlassTabs";
 import { EntryForm } from "@/components/glass/EntryForm";
 import { StatCard } from "@/components/glass/StatCard";
 import { DailyTable } from "@/components/glass/DailyTable";
+import { generateGlassReportPdf } from "@/lib/utils/glassReport";
 
 type GlassLog = {
   id: string; created_at: string; log_date: string; shift: "morning" | "night";
   small_count: number; large_count: number; broken_count: number;
+  broken_reasons?: string[] | null;
   user_id?: string | null;
   profiles?: { full_name: string | null } | null;
 };
@@ -30,6 +32,9 @@ export default function GlassEntryPage() {
   const [loading, setLoading] = useState(false);
   const [suppressPrefillForDate, setSuppressPrefillForDate] = useState<string | null>(null);
   const [tab, setTab] = useState<"entry" | "logs" | "daily">("entry");
+  const [reasons, setReasons] = useState<string[]>([]);
+
+  const [userMap, setUserMap] = useState<Record<string, string>>({});
 
   const mounted = useRef(true);
   const loadingInFlight = useRef(false);
@@ -45,28 +50,35 @@ export default function GlassEntryPage() {
       const { data: s } = await supabaseClient.auth.getSession();
       if (!s?.session) await new Promise(r => setTimeout(r, 250));
 
-      // Try fetching with profiles to get submitter name
-      let result = await supabaseClient
+      const { data, error } = await supabaseClient
         .from("glass_logs")
-        .select("*, profiles(full_name)")
+        .select("*")
         .gte("log_date", from.toISOString().slice(0, 10))
         .order("log_date", { ascending: false })
         .order("created_at", { ascending: false });
 
-      if (result.error) {
-        console.warn("Failed to join profiles, falling back to basic select.", result.error.message);
-        result = await supabaseClient
-          .from("glass_logs")
-          .select("*")
-          .gte("log_date", from.toISOString().slice(0, 10))
-          .order("log_date", { ascending: false })
-          .order("created_at", { ascending: false });
+      if (error) throw error;
+
+      const logsData = (data as any) || [];
+
+      // Manually fetch profiles
+      const userIds = Array.from(new Set(logsData.map((l: any) => l.user_id).filter(Boolean))) as string[];
+      if (userIds.length > 0) {
+        const { data: profiles } = await supabaseClient
+          .from("profiles")
+          .select("id, full_name, email")
+          .in("id", userIds);
+
+        if (profiles) {
+          const map: Record<string, string> = {};
+          profiles.forEach(p => {
+            map[p.id] = p.full_name || (p.email ? p.email.split('@')[0] : "Unknown");
+          });
+          if (mounted.current) setUserMap(map);
+        }
       }
 
-      const { data, error } = result;
-
-      if (error) throw error;
-      if (mounted.current) setLogs((data as any) || []);
+      if (mounted.current) setLogs(logsData);
     } catch (e: any) {
       if (mounted.current) toast({ title: "Failed to load", description: e?.message, variant: "error" });
     } finally {
@@ -92,6 +104,12 @@ export default function GlassEntryPage() {
     setMLarge(String(m?.large_count ?? 0));
     setNSmall(String(n?.small_count ?? 0));
     setNLarge(String(n?.large_count ?? 0));
+
+    if (n?.broken_reasons && Array.isArray(n.broken_reasons)) {
+      setReasons(n.broken_reasons);
+    } else {
+      setReasons([]);
+    }
   }, [logDate, logs, suppressPrefillForDate]);
 
   // Derived Values
@@ -126,23 +144,17 @@ export default function GlassEntryPage() {
     const n = dayLogs.find((l) => l.shift === "night");
 
     const getName = (l?: GlassLog) => {
-      if (!l) return null;
-      if (l.profiles) {
-        const p = Array.isArray(l.profiles) ? l.profiles[0] : l.profiles;
-        if (p?.full_name) return p.full_name;
-      }
-      if (l.user_id) return `User ${l.user_id.slice(0, 5)}...`;
-      return null;
+      if (!l || !l.user_id) return null;
+      if (userMap[l.user_id]) return userMap[l.user_id];
+      return `User ${l.user_id.slice(0, 5)}...`;
     };
 
     const result = {
       mSubmittedBy: getName(m),
       nSubmittedBy: getName(n)
     };
-    console.log("DEBUG: Glass Logs", logs);
-    console.log("DEBUG: Submitter Info for date", logDate, result);
     return result;
-  }, [logs, logDate]);
+  }, [logs, logDate, userMap]);
 
   const monthSummary = useMemo(() => {
     const map = new Map<string, { m?: GlassLog; n?: GlassLog }>();
@@ -156,12 +168,12 @@ export default function GlassEntryPage() {
       }
       map.set(key, entry);
     }
-    const rows: { date: string; bSmall: number; bLarge: number; broken: number }[] = [];
+    const rows: { date: string; bSmall: number; bLarge: number; broken: number; reasons?: string[] | null }[] = [];
     for (const [date, { m, n }] of map.entries()) {
       if (!n) continue;
       const bSmall = Math.max((m?.small_count || 0) - (n.small_count || 0), 0);
       const bLarge = Math.max((m?.large_count || 0) - (n.large_count || 0), 0);
-      rows.push({ date, bSmall, bLarge, broken: bSmall + bLarge });
+      rows.push({ date, bSmall, bLarge, broken: bSmall + bLarge, reasons: n.broken_reasons });
     }
     return rows.sort((a, b) => (a.date < b.date ? 1 : -1)).slice(0, 31);
   }, [logs]);
@@ -203,7 +215,8 @@ export default function GlassEntryPage() {
       small_count: nSmallNum,
       large_count: nLargeNum,
       broken_count: brokenNum,
-      user_id: user?.id
+      user_id: user?.id,
+      broken_reasons: reasons && reasons.length > 0 ? reasons : null
     }]);
 
     if (error) { toast({ title: "Failed to save", description: error.message, variant: "error" }); return; }
@@ -214,16 +227,100 @@ export default function GlassEntryPage() {
     setSuppressPrefillForDate(null);
   }
 
-  // Export Logic (kept simplified)
-  function handleExportPdf() {
-    // ... (Same export logic, omitted for brevity, but functionality is preserved if we copy it)
-    // For this refactor, I'll assume users know this is a placeholder unless I copy the huge string function again.
-    // To be safe, I will include a basic alert or re-implement if requested, but for now I'll use a toast.
-    toast({ title: "Export Started", description: "Generating PDF report...", variant: "success" });
-    // NOTE: To truly keep the feature, we would need to copy the `computeAggregates` and HTML generation code.
-    // Since the prompt asks for "same ui" enhancements, I will prioritize UI modularity.
-    // *Self-correction*: I should probably keep the export logic to avoid breaking features.
-    // I will inject the export logic back in a compressed way.
+  async function saveReasons() {
+    if (!logDate) return;
+
+    // 1. Fetch existing row to preserve counts/ownership
+    const { data: existing, error: fetchError } = await supabaseClient
+      .from("glass_logs")
+      .select("*")
+      .eq("log_date", logDate)
+      .eq("shift", "night")
+      .maybeSingle();
+
+    if (fetchError) {
+      toast({ title: "Fetch failed", description: fetchError.message, variant: "error" });
+      return;
+    }
+
+    if (!existing) {
+      toast({ title: "Save failed", description: "Night shift not found. Save Night first.", variant: "error" });
+      return;
+    }
+
+    // 2. Delete
+    await supabaseClient.from("glass_logs").delete().eq("id", existing.id);
+
+    // 3. Insert with reasons
+    const { error: insertError } = await supabaseClient.from("glass_logs").insert([{
+      log_date: existing.log_date,
+      shift: "night",
+      small_count: existing.small_count,
+      large_count: existing.large_count,
+      broken_count: existing.broken_count,
+      user_id: existing.user_id, // preserve original submitter
+      broken_reasons: reasons && reasons.length > 0 ? reasons : null
+    }]);
+
+    if (insertError) {
+      toast({ title: "Failed to save reasons", description: insertError.message, variant: "error" });
+      return;
+    }
+
+    toast({ title: "Reasons saved", variant: "success" });
+    setSuppressPrefillForDate(logDate);
+    await load();
+    setSuppressPrefillForDate(null);
+  }
+
+
+
+  async function handleExportPdf() {
+    toast({ title: "Generating Report...", description: "Fetching full history", variant: "info" });
+    try {
+      // 1. Fetch ALL logs
+      const { data: allLogs, error } = await supabaseClient
+        .from("glass_logs")
+        .select("*")
+        .order("log_date", { ascending: false });
+
+      if (error) throw error;
+      const logs = (allLogs || []) as GlassLog[];
+
+      // 2. Fetch Profiles for these logs
+      const userIds = Array.from(new Set(logs.map(l => l.user_id).filter(Boolean))) as string[];
+      const uMap: Record<string, string> = {};
+
+      if (userIds.length > 0) {
+        const { data: profiles } = await supabaseClient
+          .from("profiles")
+          .select("id, full_name, email")
+          .in("id", userIds);
+
+        profiles?.forEach(p => {
+          uMap[p.id] = p.full_name || (p.email ? p.email.split('@')[0] : "Unknown");
+        });
+      }
+
+      // 3. Attach names (cast to any or extend type if needed, but passing to utility handles it if utility accepts intersection)
+      // The utility expects GlassLog which has optional submitter_name in my definition? 
+      // Wait, in page.tsx GlassLog is defined locally (Line 14), and in utility it's defined too.
+      // I should update the local type or just cast it.
+      // The utility defines its own type. I'll cast `logs` to `any` when mapping to avoid conflict with local type.
+
+      const enrichedLogs = logs.map(l => ({
+        ...l,
+        submitter_name: l.user_id ? (uMap[l.user_id] || "User " + l.user_id.slice(0, 5)) : "Unknown"
+      }));
+
+      // 4. Generate PDF
+      await generateGlassReportPdf(enrichedLogs as any);
+      toast({ title: "Export Complete", variant: "success" });
+
+    } catch (e: any) {
+      console.error(e);
+      toast({ title: "Export Failed", description: e.message, variant: "error" });
+    }
   }
 
   return (
@@ -282,6 +379,16 @@ export default function GlassEntryPage() {
               mSubmittedBy={submitterInfo.mSubmittedBy}
               nSubmittedBy={submitterInfo.nSubmittedBy}
               showWarning={!savedDay.hasBoth}
+              brokenCount={savedDay.broken || 0}
+              reasons={reasons}
+              onReasonChange={(i, v) => {
+                const newR = [...reasons];
+                while (newR.length <= i) newR.push("");
+                newR[i] = v;
+                setReasons(newR);
+              }}
+              onSaveReasons={saveReasons}
+              reasonsSaved={!!logs.find(l => l.log_date === logDate && l.shift === 'night')?.broken_reasons?.length}
             />
           )}
 
