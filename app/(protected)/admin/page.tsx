@@ -35,7 +35,7 @@ export default function AdminPage() {
 
   async function load() {
     // Try fetching with new 'dob' column
-    let { data: us, error } = await supabaseClient.from("profiles").select("id,email,is_admin,is_stock_manager,in_time,base_salary_cents,per_day_salary_cents,age,dob,contact_number,emergency_contact_number").order("email");
+    let { data: us, error } = await supabaseClient.from("profiles").select("id,email,is_admin,is_stock_manager,in_time,base_salary_cents,fixed_allowance_cents,per_day_salary_cents,age,dob,contact_number,emergency_contact_number").order("email");
 
     if (error) {
       console.warn("Full fetch failed, trying fallback...", error);

@@ -3,7 +3,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { supabaseClient } from "@/lib/supabaseClient";
 import { Button } from "@/components/ui/Button";
-import { ChevronLeft, ChevronRight, Wallet, MinusCircle, PiggyBank, Download, Loader2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Wallet, MinusCircle, PiggyBank, Download, Loader2, TrendingUp } from "lucide-react";
 import { StatCard } from "@/components/glass/StatCard";
 import jsPDF from "jspdf";
 import { useToast } from "@/components/ui/Toast";
@@ -14,6 +14,7 @@ export default function MySalaryPage() {
   const { toast } = useToast();
   const [month, setMonth] = useState<Date>(() => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1); });
   const [base, setBase] = useState<number>(0);
+  const [fixedAllowance, setFixedAllowance] = useState<number>(0);
   const [entries, setEntries] = useState<{ id: string; entry_date: string; amount_cents: number; reason: string; kind: string }[]>([]);
   const [isAdmin, setIsAdmin] = useState(false);
   const [userEmail, setUserEmail] = useState("");
@@ -34,21 +35,27 @@ export default function MySalaryPage() {
       setUserEmail(user.email || "");
 
       const [{ data: prof }, { data: ents }] = await Promise.all([
-        supabaseClient.from('profiles').select('base_salary_cents, is_admin').eq('id', user.id).maybeSingle(),
+        supabaseClient.from('profiles').select('base_salary_cents, is_admin, fixed_allowance_cents').eq('id', user.id).maybeSingle(),
         supabaseClient.from('salary_entries').select('id,entry_date,amount_cents,reason,kind').eq('user_id', user.id).gte('entry_date', range.startStr).lte('entry_date', range.endStr).order('entry_date', { ascending: false })
       ]);
       setBase(prof?.base_salary_cents || 0);
+      setFixedAllowance(prof?.fixed_allowance_cents || 0);
       setIsAdmin(!!prof?.is_admin);
       setEntries(ents || []);
     })();
   }, [range.startStr, range.endStr]);
 
   const totals = useMemo(() => {
-    const deductions = (entries || []).reduce((s, e) => s + (e.amount_cents || 0), 0);
-    // Salary calculation: Net = Base - Deductions
-    const net = (base || 0) - deductions;
-    return { deductions, net };
-  }, [entries, base]);
+    let ded = 0;
+    let add = 0;
+    (entries || []).forEach(e => {
+      if (['allowance', 'bonus'].includes(e.kind)) add += (e.amount_cents || 0);
+      else ded += (e.amount_cents || 0);
+    });
+    // Salary calculation: Net = Base + Fixed + Additions - Deductions
+    const net = (base || 0) + (fixedAllowance || 0) + add - ded;
+    return { deductions: ded, additions: add, net };
+  }, [entries, base, fixedAllowance]);
 
   function prevMonth() { setMonth(m => new Date(m.getFullYear(), m.getMonth() - 1, 1)); }
   function nextMonth() { setMonth(m => new Date(m.getFullYear(), m.getMonth() + 1, 1)); }
@@ -98,13 +105,16 @@ export default function MySalaryPage() {
       doc.rect(10, summaryY, 190, 25, 'F');
 
       doc.setFontSize(10);
-      doc.text("Base Salary", 20, summaryY + 8);
+      doc.text("Total Earnings", 20, summaryY + 8);
       doc.text("Total Deductions", 90, summaryY + 8);
       doc.text("Net Pay", 160, summaryY + 8);
 
+      const totalEarnings = (base + fixedAllowance + totals.additions);
+
       doc.setFontSize(12);
       doc.setFont("helvetica", "bold");
-      doc.text(`Rs ${(base / 100).toFixed(2)}`, 20, summaryY + 18);
+      doc.setTextColor(16, 185, 129); // emerald
+      doc.text(`Rs ${(totalEarnings / 100).toFixed(2)}`, 20, summaryY + 18);
 
       doc.setTextColor(220, 38, 38); // red for deductions
       doc.text(`Rs ${(totals.deductions / 100).toFixed(2)}`, 90, summaryY + 18);
@@ -116,7 +126,7 @@ export default function MySalaryPage() {
       let y = summaryY + 35;
       doc.setFontSize(12);
       doc.setFont("helvetica", "bold");
-      doc.text("Deductions Detail", 10, y);
+      doc.text("Pay Details", 10, y);
       y += 5;
 
       // Table Header
@@ -125,7 +135,8 @@ export default function MySalaryPage() {
       doc.setFontSize(9);
       doc.setFont("helvetica", "bold");
       doc.text("Date", 15, y + 5);
-      doc.text("Reason", 50, y + 5);
+      doc.text("Description", 50, y + 5);
+      doc.text("Type", 120, y + 5);
       doc.text("Amount", 180, y + 5, { align: 'right' });
       y += 10;
 
@@ -133,9 +144,18 @@ export default function MySalaryPage() {
       doc.setFont("helvetica", "normal");
       entries.forEach((e, i) => {
         if (y > 280) { doc.addPage(); y = 20; }
+        const isPos = ['allowance', 'bonus'].includes(e.kind);
+
         doc.text(e.entry_date, 15, y);
         doc.text(e.reason, 50, y);
-        doc.text(`- Rs ${(e.amount_cents / 100).toFixed(2)}`, 180, y, { align: 'right' });
+        doc.text(e.kind.toUpperCase(), 120, y);
+
+        if (isPos) doc.setTextColor(16, 185, 129);
+        else doc.setTextColor(220, 38, 38);
+
+        doc.text(`${isPos ? '+' : '-'} Rs ${(e.amount_cents / 100).toFixed(2)}`, 180, y, { align: 'right' });
+        doc.setTextColor(0, 0, 0);
+
         y += 7;
         // Light separator
         doc.setDrawColor(240);
@@ -225,34 +245,41 @@ export default function MySalaryPage() {
           </div>
 
           {/* Right Col: Cards */}
-          <div className="lg:col-span-2 grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="lg:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-4">
             <StatCard
-              label="Base Salary"
-              value={<AnimatedNumber value={base / 100} prefix="₹ " />}
+              label="Standard Pay"
+              value={<AnimatedNumber value={(base + fixedAllowance) / 100} prefix="₹ " />}
               icon={Wallet}
               color="emerald"
-              subtext="Monthly Rate"
+              subtext="Base + Fixed Allowance"
+            />
+            <StatCard
+              label="Allowances"
+              value={<AnimatedNumber value={totals.additions / 100} prefix="₹ " />}
+              icon={TrendingUp}
+              color="amber"
+              subtext="Bonuses & Extras"
             />
             <StatCard
               label="Deductions"
               value={<AnimatedNumber value={totals.deductions / 100} prefix="₹ " />}
               icon={MinusCircle}
               color="rose"
-              subtext={`${entries.length} records`}
+              subtext="Total debit"
             />
             <StatCard
               label="Net Pay"
               value={<AnimatedNumber value={totals.net / 100} prefix="₹ " />}
               icon={PiggyBank}
               color="indigo"
-              subtext="Estimated payout"
+              subtext="Final Payout"
             />
           </div>
         </div>
 
         {/* Entries List */}
         <div className="space-y-4">
-          <h3 className="font-semibold text-zinc-900 px-1">Deduction Entries</h3>
+          <h3 className="font-semibold text-zinc-900 px-1">Details</h3>
 
           <div className="rounded-2xl border border-neutral-200 bg-white overflow-hidden shadow-sm">
             {entries.length === 0 ? (
@@ -267,10 +294,11 @@ export default function MySalaryPage() {
               <div className="divide-y divide-neutral-100">
                 {entries.map((e) => {
                   const reason = (e.reason || '').toLowerCase();
-                  const badge = reason === 'late' ? 'bg-rose-50 text-rose-700 border-rose-200'
-                    : reason === 'leave' ? 'bg-sky-50 text-sky-700 border-sky-200'
-                      : reason === 'advance' ? 'bg-amber-50 text-amber-700 border-amber-200'
-                        : reason === 'adjustment' ? 'bg-violet-50 text-violet-700 border-violet-200'
+                  const isPositive = ['allowance', 'bonus'].includes(e.kind);
+                  const badge = isPositive ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                    : reason === 'late' ? 'bg-rose-50 text-rose-700 border-rose-200'
+                      : reason === 'leave' ? 'bg-sky-50 text-sky-700 border-sky-200'
+                        : reason === 'advance' ? 'bg-amber-50 text-amber-700 border-amber-200'
                           : 'bg-zinc-50 text-zinc-700 border-zinc-200';
 
                   return (
@@ -284,8 +312,8 @@ export default function MySalaryPage() {
                         </div>
                       </div>
                       <div className="text-right">
-                        <div className="font-semibold text-zinc-900 tabular-nums">
-                          - ₹{(e.amount_cents / 100).toFixed(2)}
+                        <div className={`font-semibold tabular-nums ${isPositive ? 'text-emerald-600' : 'text-zinc-900'}`}>
+                          {isPositive ? '+' : '-'} ₹{(e.amount_cents / 100).toFixed(2)}
                         </div>
                       </div>
                     </div>

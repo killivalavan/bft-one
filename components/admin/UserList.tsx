@@ -13,6 +13,7 @@ type Profile = {
     is_stock_manager?: boolean | null;
     in_time?: string | null;
     base_salary_cents?: number | null;
+    fixed_allowance_cents?: number | null;
     per_day_salary_cents?: number | null;
     age?: number | null;
     dob?: string | null;
@@ -75,6 +76,7 @@ function UserRow({ user, onRemoveUser, onUpdatePass, onToggleStockManager, onUpd
     const [formData, setFormData] = useState({
         in_time: user.in_time || "",
         base_salary_cents: user.base_salary_cents ? (user.base_salary_cents / 100).toString() : "",
+        fixed_allowance_cents: user.fixed_allowance_cents ? (user.fixed_allowance_cents / 100).toString() : "",
         per_day_salary_cents: user.per_day_salary_cents ? (user.per_day_salary_cents / 100).toString() : "",
         dob: user.dob || "",
         contact_number: user.contact_number || "",
@@ -89,6 +91,7 @@ function UserRow({ user, onRemoveUser, onUpdatePass, onToggleStockManager, onUpd
         const updates = {
             in_time: formData.in_time || null,
             base_salary_cents: formData.base_salary_cents ? Math.round(parseFloat(formData.base_salary_cents) * 100) : null,
+            fixed_allowance_cents: formData.fixed_allowance_cents ? Math.round(parseFloat(formData.fixed_allowance_cents) * 100) : null,
             per_day_salary_cents: formData.per_day_salary_cents ? Math.round(parseFloat(formData.per_day_salary_cents) * 100) : null,
             dob: formData.dob || null,
             age: typeof age === 'number' ? age : null,
@@ -193,6 +196,15 @@ function UserRow({ user, onRemoveUser, onUpdatePass, onToggleStockManager, onUpd
                                     const perDay = !isNaN(num) ? (num / 30).toFixed(2) : "";
                                     setFormData({ ...formData, base_salary_cents: val, per_day_salary_cents: perDay });
                                 }}
+                                className="h-9 text-sm"
+                            />
+                        </div>
+                        <div className="space-y-1">
+                            <label className="text-[10px] font-semibold text-zinc-400 uppercase flex items-center gap-1"><CreditCard size={10} /> Extra Allowance (₹)</label>
+                            <Input
+                                type="number"
+                                value={formData.fixed_allowance_cents}
+                                onChange={e => setFormData({ ...formData, fixed_allowance_cents: e.target.value })}
                                 className="h-9 text-sm"
                             />
                         </div>

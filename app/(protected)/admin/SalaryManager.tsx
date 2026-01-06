@@ -15,6 +15,7 @@ export default function SalaryManager({ userId, onDownloadPayslip }: SalaryManag
   const [rows, setRows] = useState<any[]>([]);
   const [form, setForm] = useState<{ date: string; reason: string; amount: string; kind: string }>({ date: new Date().toISOString().slice(0, 10), reason: '', amount: '0', kind: 'deduction' });
   const [base, setBase] = useState<number>(0);
+  const [fixedAllowance, setFixedAllowance] = useState<number>(0);
 
   const range = useMemo(() => {
     const start = new Date(month.getFullYear(), month.getMonth(), 1);
@@ -25,10 +26,11 @@ export default function SalaryManager({ userId, onDownloadPayslip }: SalaryManag
   async function load() {
     const [{ data }, { data: prof }] = await Promise.all([
       supabaseClient.from('salary_entries').select('id,entry_date,amount_cents,reason,kind').eq('user_id', userId).gte('entry_date', range.startStr).lte('entry_date', range.endStr).order('entry_date', { ascending: false }),
-      supabaseClient.from('profiles').select('base_salary_cents').eq('id', userId).maybeSingle()
+      supabaseClient.from('profiles').select('base_salary_cents, fixed_allowance_cents').eq('id', userId).maybeSingle()
     ]);
     setRows(data || []);
     setBase(prof?.base_salary_cents || 0);
+    setFixedAllowance(prof?.fixed_allowance_cents || 0);
   }
   useEffect(() => { load(); }, [userId, range.startStr, range.endStr]);
 
@@ -41,9 +43,15 @@ export default function SalaryManager({ userId, onDownloadPayslip }: SalaryManag
 
   const monthLabel = month.toLocaleString(undefined, { month: 'long', year: 'numeric' });
   const totals = (() => {
-    const deductions = (rows || []).reduce((s, r) => s + (r.amount_cents || 0), 0);
-    const net = (base || 0) - deductions;
-    return { deductions, net };
+    let ded = 0;
+    let add = 0;
+    (rows || []).forEach(r => {
+      if (['allowance', 'bonus'].includes(r.kind)) add += (r.amount_cents || 0);
+      else ded += (r.amount_cents || 0);
+    });
+
+    const net = (base || 0) + (fixedAllowance || 0) + add - ded;
+    return { deductions: ded, additions: add, net };
   })();
 
   return (
@@ -55,18 +63,22 @@ export default function SalaryManager({ userId, onDownloadPayslip }: SalaryManag
           <Button size="sm" onClick={() => setMonth(m => new Date(m.getFullYear(), m.getMonth() + 1, 1))}>Next</Button>
         </div>
       </div>
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
         <div className="rounded-xl border p-2 bg-white text-center">
           <div className="text-[11px] text-zinc-600">Base salary</div>
           <div className="text-lg font-semibold text-zinc-900">₹ {(base / 100).toFixed(2)}</div>
+        </div>
+        <div className="rounded-xl border p-2 bg-white text-center">
+          <div className="text-[11px] text-zinc-600">Fixed + Extra</div>
+          <div className="text-lg font-semibold text-emerald-600">₹ {((fixedAllowance + totals.additions) / 100).toFixed(2)}</div>
         </div>
         <div className="rounded-xl border p-2 bg-white text-center">
           <div className="text-[11px] text-zinc-600">Deductions</div>
           <div className="text-lg font-semibold text-red-600">₹ {(totals.deductions / 100).toFixed(2)}</div>
         </div>
         <div className="rounded-xl border p-2 bg-white text-center">
-          <div className="text-[11px] text-zinc-600">Net</div>
-          <div className="text-lg font-semibold text-zinc-900">₹ {(totals.net / 100).toFixed(2)}</div>
+          <div className="text-[11px] text-zinc-600">Net Pay</div>
+          <div className="text-lg font-bold text-zinc-900">₹ {(totals.net / 100).toFixed(2)}</div>
         </div>
       </div>
       <div className="grid gap-2 text-zinc-900">
@@ -86,7 +98,9 @@ export default function SalaryManager({ userId, onDownloadPayslip }: SalaryManag
                 <div className="text-[12px] text-zinc-700">{r.entry_date} • {r.kind}</div>
               </div>
               <div className="flex items-center gap-2">
-                <div className="font-semibold text-red-600">₹ {(r.amount_cents / 100).toFixed(2)}</div>
+                <div className={`font-semibold ${['allowance', 'bonus'].includes(r.kind) ? 'text-emerald-600' : 'text-red-600'}`}>
+                  {['allowance', 'bonus'].includes(r.kind) ? '+' : '-'} ₹ {(r.amount_cents / 100).toFixed(2)}
+                </div>
                 <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => del(r.id)}>Delete</Button>
               </div>
             </div>
@@ -102,6 +116,8 @@ export default function SalaryManager({ userId, onDownloadPayslip }: SalaryManag
         <Input type="number" placeholder="Amount (₹)" value={form.amount} onChange={e => setForm(f => ({ ...f, amount: e.target.value }))} />
         <select className="h-11 px-3 rounded-lg border border-zinc-300" value={form.kind} onChange={e => setForm(f => ({ ...f, kind: e.target.value }))}>
           <option value="deduction">Deduction</option>
+          <option value="allowance">Allowance</option>
+          <option value="bonus">Bonus</option>
           <option value="advance">Advance</option>
           <option value="adjustment">Adjustment</option>
         </select>
