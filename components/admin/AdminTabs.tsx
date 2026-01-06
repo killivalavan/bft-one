@@ -1,16 +1,17 @@
 import { cn } from "@/lib/utils/cn";
-import { Users, Package, FileText, Contact } from "lucide-react";
+import { Users, Package, FileText, Contact, Banknote } from "lucide-react";
 
 interface AdminTabsProps {
-    activeTab: "users" | "products" | "reports" | "contacts";
-    onChange: (tab: "users" | "products" | "reports" | "contacts") => void;
+    activeTab: "users" | "products" | "reports" | "contacts" | "sales";
+    onChange: (tab: "users" | "products" | "reports" | "contacts" | "sales") => void;
 }
 
 export function AdminTabs({ activeTab, onChange }: AdminTabsProps) {
     const tabs = [
+        { id: "sales", label: "Daily Sales", icon: Banknote },
         { id: "users", label: "Users & Roles", icon: Users },
         { id: "products", label: "Product Catalog", icon: Package },
-        { id: "reports", label: "Sales Reports", icon: FileText },
+        { id: "reports", label: "Order Reports", icon: FileText },
         { id: "contacts", label: "Contacts", icon: Contact },
     ] as const;
 

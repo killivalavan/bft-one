@@ -9,6 +9,7 @@ import { ProductManager } from "@/components/admin/ProductManager";
 import { SalesReports } from "@/components/admin/SalesReports";
 import { generatePayslipPdf } from "@/lib/utils/payslip";
 import { ContactManager } from "@/components/admin/ContactManager";
+import { SalesManager } from "@/components/admin/SalesManager";
 import { Loader2, ShieldAlert } from "lucide-react";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 
@@ -22,7 +23,7 @@ enum AdminView { Loading, NotAdmin, Ready }
 export default function AdminPage() {
   const { toast } = useToast();
   const [gate, setGate] = useState<AdminView>(AdminView.Loading);
-  const [tab, setTab] = useState<"users" | "products" | "reports" | "contacts">("users");
+  const [tab, setTab] = useState<"users" | "products" | "reports" | "contacts" | "sales">("sales");
 
   const [users, setUsers] = useState<Profile[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -256,6 +257,10 @@ export default function AdminPage() {
 
         <AdminTabs activeTab={tab} onChange={setTab} />
 
+        {tab === 'sales' && (
+          <SalesManager />
+        )}
+
         {tab === 'users' && (
           <UserList
             users={users}
@@ -297,6 +302,8 @@ export default function AdminPage() {
             onDeleteSystemUser={removeUser}
           />
         )}
+
+
 
         <ConfirmDialog
           open={!!confirmState.open}

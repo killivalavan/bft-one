@@ -8,7 +8,7 @@ import { HomeHeader } from "@/components/home/HomeHeader";
 import { DashboardGrid } from "@/components/home/DashboardGrid";
 import {
   CalendarCheck2, Coffee, ClipboardList, Shield,
-  CalendarDays, Wallet, Boxes, Bell, LayoutDashboard, Contact
+  CalendarDays, Wallet, Boxes, Bell, LayoutDashboard, Contact, Banknote
 } from "lucide-react";
 
 export default function Home() {
@@ -101,6 +101,14 @@ export default function Home() {
       bgClass: "bg-orange-50",
       description: "Control inventory and supplies."
     }] : []),
+    {
+      label: "Daily Sales",
+      href: "/sales",
+      icon: Banknote,
+      colorClass: "text-emerald-600",
+      bgClass: "bg-emerald-50",
+      description: "Track daily cash and UPI sales."
+    },
     {
       label: "Notifications",
       href: "/notifications",
