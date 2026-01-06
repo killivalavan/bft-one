@@ -118,20 +118,6 @@ export default function Navbar() {
               {visibleLinks.map(l => {
                 const isActive = pathname === l.href;
                 // Restriction Logic: Lock everything except Home, Billing, Pending for non-admins
-                const isLocked = !flags?.isAdmin && l.href !== '/' && l.href !== '/billing' && l.href !== '/pending';
-
-                if (isLocked) {
-                  return (
-                    <div
-                      key={l.href}
-                      className="px-3 py-2 rounded-full text-sm font-medium flex items-center gap-2 text-sky-200/50 cursor-not-allowed select-none bg-sky-800/20"
-                    >
-                      <l.icon size={16} className="opacity-50" />
-                      <span className={cn(isFocusMode ? "inline" : "")}>Coming Soon</span>
-                    </div>
-                  );
-                }
-
                 return (
                   <Link
                     key={l.href}
@@ -216,19 +202,6 @@ export default function Navbar() {
           <div className="flex items-center justify-around h-16 px-2">
             {allLinks.slice(0, 4).map(l => {
               const isActive = pathname === l.href;
-              const isLocked = !flags?.isAdmin && l.href !== '/' && l.href !== '/billing' && l.href !== '/pending';
-
-              if (isLocked) {
-                return (
-                  <div key={l.href} className="flex flex-col items-center justify-center w-full h-full space-y-1 opacity-40 cursor-not-allowed">
-                    <div className="p-1.5 rounded-xl bg-transparent">
-                      <l.icon size={20} className="stroke-current text-zinc-400" />
-                    </div>
-                    <span className="text-[9px] font-medium text-zinc-400">Soon</span>
-                  </div>
-                );
-              }
-
               return (
                 <Link
                   key={l.href}

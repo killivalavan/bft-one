@@ -107,7 +107,7 @@ export default function Home() {
       icon: Banknote,
       colorClass: "text-emerald-600",
       bgClass: "bg-emerald-50",
-      description: "Track daily cash and UPI sales."
+      description: "Add daily sales."
     },
     {
       label: "Notifications",
