@@ -49,7 +49,7 @@ export default function MySalaryPage() {
     let ded = 0;
     let add = 0;
     (entries || []).forEach(e => {
-      if (['allowance', 'bonus'].includes(e.kind)) add += (e.amount_cents || 0);
+      if (['allowance', 'bonus', 'addition'].includes(e.kind)) add += (e.amount_cents || 0);
       else ded += (e.amount_cents || 0);
     });
     // Salary calculation: Net = Base + Fixed + Additions - Deductions
@@ -144,7 +144,7 @@ export default function MySalaryPage() {
       doc.setFont("helvetica", "normal");
       entries.forEach((e, i) => {
         if (y > 280) { doc.addPage(); y = 20; }
-        const isPos = ['allowance', 'bonus'].includes(e.kind);
+        const isPos = ['allowance', 'bonus', 'addition'].includes(e.kind);
 
         doc.text(e.entry_date, 15, y);
         doc.text(e.reason, 50, y);
@@ -294,7 +294,7 @@ export default function MySalaryPage() {
               <div className="divide-y divide-neutral-100">
                 {entries.map((e) => {
                   const reason = (e.reason || '').toLowerCase();
-                  const isPositive = ['allowance', 'bonus'].includes(e.kind);
+                  const isPositive = ['allowance', 'bonus', 'addition'].includes(e.kind);
                   const badge = isPositive ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
                     : reason === 'late' ? 'bg-rose-50 text-rose-700 border-rose-200'
                       : reason === 'leave' ? 'bg-sky-50 text-sky-700 border-sky-200'

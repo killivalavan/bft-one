@@ -46,7 +46,7 @@ export default function SalaryManager({ userId, onDownloadPayslip }: SalaryManag
     let ded = 0;
     let add = 0;
     (rows || []).forEach(r => {
-      if (['allowance', 'bonus'].includes(r.kind)) add += (r.amount_cents || 0);
+      if (['allowance', 'bonus', 'addition'].includes(r.kind)) add += (r.amount_cents || 0);
       else ded += (r.amount_cents || 0);
     });
 
@@ -99,8 +99,8 @@ export default function SalaryManager({ userId, onDownloadPayslip }: SalaryManag
                 <div className="text-[12px] text-zinc-700">{r.entry_date} • {r.kind}</div>
               </div>
               <div className="flex items-center gap-2">
-                <div className={`font-semibold ${['allowance', 'bonus'].includes(r.kind) ? 'text-emerald-600' : 'text-red-600'}`}>
-                  {['allowance', 'bonus'].includes(r.kind) ? '+' : '-'} ₹ {(r.amount_cents / 100).toFixed(2)}
+                <div className={`font-semibold ${['allowance', 'bonus', 'addition'].includes(r.kind) ? 'text-emerald-600' : 'text-red-600'}`}>
+                  {['allowance', 'bonus', 'addition'].includes(r.kind) ? '+' : '-'} ₹ {(r.amount_cents / 100).toFixed(2)}
                 </div>
                 <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => del(r.id)}>Delete</Button>
               </div>
@@ -121,6 +121,7 @@ export default function SalaryManager({ userId, onDownloadPayslip }: SalaryManag
           <option value="bonus">Bonus</option>
           <option value="advance">Advance</option>
           <option value="adjustment">Adjustment</option>
+          <option value="addition">Addition</option>
         </select>
         <div className="sm:col-span-4 flex items-center gap-2">
           <Button onClick={add}>Add entry</Button>

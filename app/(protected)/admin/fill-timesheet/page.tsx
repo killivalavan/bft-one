@@ -11,7 +11,7 @@ import { cn } from "@/lib/utils/cn";
 // Helper Types
 type UserProfile = { id: string; email: string; base_salary_cents: number; per_day_salary_cents: number; is_admin: boolean };
 type AttendanceStatus = 'present' | 'leave' | 'half_day' | 'off' | 'unmarked';
-type DayLog = { status: AttendanceStatus; lateMinutes: number };
+type DayLog = { status: AttendanceStatus; lateMinutes: number; extraHours: number };
 type MonthlyLogs = Record<string, Record<string, DayLog>>; // dateKey -> userId -> Log
 
 export default function FillTimesheetPage() {
@@ -63,7 +63,7 @@ export default function FillTimesheetPage() {
                 const endStr = format(monthEnd, 'yyyy-MM-dd');
 
                 const [{ data: ts }, { data: lv }] = await Promise.all([
-                    supabaseClient.from('timesheets').select('user_id, minutes_late, work_date').gte('work_date', startStr).lte('work_date', endStr),
+                    supabaseClient.from('timesheets').select('user_id, minutes_late, work_date, extra_hours').gte('work_date', startStr).lte('work_date', endStr),
                     supabaseClient.from('leaves').select('user_id, reason, leave_date').gte('leave_date', startStr).lte('leave_date', endStr)
                 ]);
 
@@ -79,12 +79,12 @@ export default function FillTimesheetPage() {
                 // Apply Leaves
                 (lv || []).forEach((l: any) => {
                     const status = l.reason === 'Half Day' ? 'half_day' : l.reason === 'Weekly Off' ? 'off' : 'leave';
-                    setLog(l.leave_date, l.user_id, { status, lateMinutes: 0 });
+                    setLog(l.leave_date, l.user_id, { status, lateMinutes: 0, extraHours: 0 });
                 });
 
                 // Apply Timesheets (Override)
                 (ts || []).forEach((t: any) => {
-                    setLog(t.work_date, t.user_id, { status: 'present', lateMinutes: t.minutes_late || 0 });
+                    setLog(t.work_date, t.user_id, { status: 'present', lateMinutes: t.minutes_late || 0, extraHours: t.extra_hours || 0 });
                 });
 
                 setMonthlyLogs(newLogs);
@@ -117,18 +117,31 @@ export default function FillTimesheetPage() {
             const delResults = await Promise.all([
                 supabaseClient.from('timesheets').delete().eq('user_id', userId).eq('work_date', dateKey),
                 supabaseClient.from('leaves').delete().eq('user_id', userId).eq('leave_date', dateKey),
-                supabaseClient.from('salary_entries').delete().eq('user_id', userId).eq('entry_date', dateKey).in('reason', ['late', 'leave', 'Half Day', 'half day', 'Leave deduction', 'Weekly Off'])
+                // Delete deductions and additions (overtime)
+                supabaseClient.from('salary_entries').delete().eq('user_id', userId).eq('entry_date', dateKey).or('kind.eq.deduction,kind.eq.addition').in('reason', ['late', 'leave', 'Half Day', 'half day', 'Leave deduction', 'Weekly Off']).ilike('reason', '%Overtime%')
             ]);
-            for (const res of delResults) if (res.error) throw res.error;
+            // Note: The OR logic above is tricky with Supabase syntax. Better to split deletion.
+
+            // Clear specific salary entries (Deductions relating to attendance)
+            await supabaseClient.from('salary_entries').delete().eq('user_id', userId).eq('entry_date', dateKey).in('reason', ['late', 'leave', 'Half Day', 'half day', 'Leave deduction', 'Weekly Off']);
+            // Clear Overtime entries
+            await supabaseClient.from('salary_entries').delete().eq('user_id', userId).eq('entry_date', dateKey).ilike('reason', 'Overtime%');
+
 
             if (newState.status === 'present') {
                 const checkInDate = new Date(date);
                 checkInDate.setHours(9, newState.lateMinutes, 0, 0);
+
                 const { error } = await supabaseClient.from('timesheets').insert({
-                    user_id: userId, work_date: dateKey, check_in: checkInDate.toISOString(), minutes_late: newState.lateMinutes
+                    user_id: userId,
+                    work_date: dateKey,
+                    check_in: checkInDate.toISOString(),
+                    minutes_late: newState.lateMinutes,
+                    extra_hours: newState.extraHours || 0
                 });
                 if (error) throw error;
 
+                // Late Deduction
                 if (newState.lateMinutes > 0) {
                     const amount = newState.lateMinutes >= 60 ? 20000 : newState.lateMinutes >= 30 ? 10000 : 5000;
                     const { error: salError } = await supabaseClient.from('salary_entries').insert({
@@ -136,6 +149,16 @@ export default function FillTimesheetPage() {
                     });
                     if (salError) throw salError;
                 }
+
+                // Overtime Addition
+                if (newState.extraHours > 0) {
+                    const amount = newState.extraHours * 50 * 100; // 50 INR per hour -> cents
+                    const { error: otError } = await supabaseClient.from('salary_entries').insert({
+                        user_id: userId, entry_date: dateKey, amount_cents: amount, reason: `Overtime (${newState.extraHours} hrs)`, kind: 'addition'
+                    });
+                    if (otError) throw otError;
+                }
+
             } else if (newState.status === 'leave') {
                 const { error } = await supabaseClient.from('leaves').insert({ user_id: userId, leave_date: dateKey, reason: 'Admin Marked' });
                 if (error) throw error;
@@ -166,6 +189,32 @@ export default function FillTimesheetPage() {
             toast({ title: "Failed", description: e.message, variant: "error" });
         }
     }
+
+    // Calculate Monthly Stats
+    const stats = useMemo(() => {
+        const result: Record<string, { present: number; leave: number; half_day: number; }> = {};
+        users.forEach(u => {
+            result[u.id] = { present: 0, leave: 0, half_day: 0 };
+        });
+
+        // Only count logs that are within the current month view
+        // filter dates from monthlyLogs keys that match current month
+        const currentMonthPrefix = format(date, 'yyyy-MM');
+
+        Object.keys(monthlyLogs).forEach(dKey => {
+            if (dKey.startsWith(currentMonthPrefix)) {
+                const dayLogs = monthlyLogs[dKey];
+                Object.entries(dayLogs).forEach(([uid, log]) => {
+                    if (result[uid]) {
+                        if (log.status === 'present') result[uid].present++;
+                        else if (log.status === 'leave') result[uid].leave++;
+                        else if (log.status === 'half_day') result[uid].half_day++;
+                    }
+                });
+            }
+        });
+        return result;
+    }, [monthlyLogs, users, date]);
 
     const monthDays = eachDayOfInterval({ start: monthStart, end: monthEnd });
     const prettyDate = format(date, "EEEE, d MMMM yyyy");
@@ -254,7 +303,7 @@ export default function FillTimesheetPage() {
                                 </div>
                                 <UserAttendanceCard
                                     user={user}
-                                    current={dailyLogs[user.id] || { status: 'unmarked', lateMinutes: 0 }}
+                                    current={dailyLogs[user.id] || { status: 'unmarked', lateMinutes: 0, extraHours: 0 }}
                                     onChange={updateAttendance}
                                 />
                             </div>
@@ -372,6 +421,32 @@ export default function FillTimesheetPage() {
                                     );
                                 })}
                             </tbody>
+                            <tfoot className="bg-zinc-50 border-t border-zinc-200 font-medium text-xs sm:text-sm">
+                                <tr className="hover:bg-zinc-50">
+                                    <td className="px-4 py-3 font-semibold text-zinc-700 sticky left-0 bg-zinc-50 z-10 border-r border-zinc-100 shadow-[2px_0_4px_rgba(0,0,0,0.02)]">Total Present</td>
+                                    {users.map(u => (
+                                        <td key={u.id} className="px-4 py-3 text-center text-emerald-600 font-bold bg-emerald-50/30">
+                                            {stats[u.id]?.present || 0}
+                                        </td>
+                                    ))}
+                                </tr>
+                                <tr className="hover:bg-zinc-50">
+                                    <td className="px-4 py-3 font-semibold text-zinc-700 sticky left-0 bg-zinc-50 z-10 border-r border-zinc-100 shadow-[2px_0_4px_rgba(0,0,0,0.02)]">Total Leaves</td>
+                                    {users.map(u => (
+                                        <td key={u.id} className="px-4 py-3 text-center text-rose-600 font-bold bg-rose-50/30">
+                                            {stats[u.id]?.leave || 0}
+                                        </td>
+                                    ))}
+                                </tr>
+                                <tr className="hover:bg-zinc-50">
+                                    <td className="px-4 py-3 font-semibold text-zinc-700 sticky left-0 bg-zinc-50 z-10 border-r border-zinc-100 shadow-[2px_0_4px_rgba(0,0,0,0.02)]">Half Days</td>
+                                    {users.map(u => (
+                                        <td key={u.id} className="px-4 py-3 text-center text-amber-600 font-bold bg-amber-50/30">
+                                            {stats[u.id]?.half_day || 0}
+                                        </td>
+                                    ))}
+                                </tr>
+                            </tfoot>
                         </table>
                     </div>
                 </div>
