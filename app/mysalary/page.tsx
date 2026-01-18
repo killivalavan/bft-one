@@ -298,8 +298,9 @@ export default function MySalaryPage() {
                   const badge = isPositive ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
                     : reason === 'late' ? 'bg-rose-50 text-rose-700 border-rose-200'
                       : reason === 'leave' ? 'bg-sky-50 text-sky-700 border-sky-200'
-                        : reason === 'advance' ? 'bg-amber-50 text-amber-700 border-amber-200'
-                          : 'bg-zinc-50 text-zinc-700 border-zinc-200';
+                        : reason.includes('half day') ? 'bg-orange-50 text-orange-700 border-orange-200'
+                          : reason === 'advance' ? 'bg-amber-50 text-amber-700 border-amber-200'
+                            : 'bg-zinc-50 text-zinc-700 border-zinc-200';
 
                   return (
                     <div key={e.id} className="group flex items-center justify-between p-4 hover:bg-neutral-50 transition-colors">

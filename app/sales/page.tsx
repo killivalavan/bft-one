@@ -5,15 +5,20 @@ import { supabaseClient } from "@/lib/supabaseClient";
 import { useToast } from "@/components/ui/Toast";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
-import { ChevronLeft, Loader2, Save, Lock } from "lucide-react";
+import { ChevronLeft, ChevronRight, Loader2, Save, Lock, Calendar } from "lucide-react";
 import Link from "next/link";
-import { format } from "date-fns";
+import { format, addDays, isSameDay } from "date-fns";
 
 export default function SalesPage() {
     const { toast } = useToast();
     const [loading, setLoading] = useState(true);
     const [isAdmin, setIsAdmin] = useState(false);
     const [userId, setUserId] = useState<string | null>(null);
+
+    // Date State
+    const [date, setDate] = useState(new Date());
+    const dateStr = format(date, "yyyy-MM-dd");
+    const isToday = isSameDay(date, new Date());
 
     // Form State
     const [cash, setCash] = useState("");
@@ -23,20 +28,19 @@ export default function SalesPage() {
     const [cashSaved, setCashSaved] = useState(false);
     const [upiSaved, setUpiSaved] = useState(false);
 
-    const todayStr = format(new Date(), "yyyy-MM-dd");
-
     useEffect(() => {
         checkUser();
     }, []);
 
+    // Fetch data whenever date changes (if user is loaded)
+    useEffect(() => {
+        if (userId) fetchSales();
+    }, [date, userId]);
+
     async function checkUser() {
         try {
             const { data: { user } } = await supabaseClient.auth.getUser();
-            if (!user) {
-                // Redirect or show generic loading? 
-                // Middleware usually handles this but we'll be safe
-                return;
-            }
+            if (!user) return;
             setUserId(user.id);
 
             const { data: profile } = await supabaseClient
@@ -46,8 +50,6 @@ export default function SalesPage() {
                 .single();
 
             setIsAdmin(!!profile?.is_admin);
-
-            await fetchTodaySales();
         } catch (error) {
             console.error(error);
         } finally {
@@ -55,11 +57,17 @@ export default function SalesPage() {
         }
     }
 
-    async function fetchTodaySales() {
-        const { data, error } = await supabaseClient
+    async function fetchSales() {
+        // Reset state for new date
+        setCash("");
+        setUpi("");
+        setCashSaved(false);
+        setUpiSaved(false);
+
+        const { data } = await supabaseClient
             .from("daily_sales")
             .select("*")
-            .eq("sale_date", todayStr)
+            .eq("sale_date", dateStr)
             .maybeSingle();
 
         if (data) {
@@ -81,43 +89,27 @@ export default function SalesPage() {
         }
 
         const cents = Math.round(Number(cash) * 100);
-
-        // UPSERT logic: conflict on sale_date
-        // We need to fetch existing first to preserve potential UPI data if row exists?
-        // Actually supabase upsert merges if we don't specify columns to ignore, 
-        // but let's be safe and check if row exists to do update vs insert.
-
-        const { data: existing } = await supabaseClient
-            .from("daily_sales")
-            .select("id")
-            .eq("sale_date", todayStr)
-            .maybeSingle();
+        const { data: existing } = await supabaseClient.from("daily_sales").select("id").eq("sale_date", dateStr).maybeSingle();
 
         let error;
         if (existing) {
-            const { error: err } = await supabaseClient
-                .from("daily_sales")
-                .update({
-                    total_cash_cents: cents,
-                    cash_submitted_by: userId,
-                    updated_at: new Date().toISOString()
-                })
-                .eq("id", existing.id);
+            const { error: err } = await supabaseClient.from("daily_sales").update({
+                total_cash_cents: cents,
+                cash_submitted_by: userId,
+                updated_at: new Date().toISOString()
+            }).eq("id", existing.id);
             error = err;
         } else {
-            const { error: err } = await supabaseClient
-                .from("daily_sales")
-                .insert({
-                    sale_date: todayStr,
-                    total_cash_cents: cents,
-                    cash_submitted_by: userId
-                });
+            const { error: err } = await supabaseClient.from("daily_sales").insert({
+                sale_date: dateStr,
+                total_cash_cents: cents,
+                cash_submitted_by: userId
+            });
             error = err;
         }
 
-        if (error) {
-            toast({ title: "Failed to save", description: error.message, variant: "error" });
-        } else {
+        if (error) toast({ title: "Failed to save", description: error.message, variant: "error" });
+        else {
             toast({ title: "Cash Sales Saved", variant: "success" });
             setCashSaved(true);
         }
@@ -130,40 +122,27 @@ export default function SalesPage() {
         }
 
         const cents = Math.round(Number(upi) * 100);
-
-        const { data: existing } = await supabaseClient
-            .from("daily_sales")
-            .select("id")
-            .eq("sale_date", todayStr)
-            .maybeSingle();
+        const { data: existing } = await supabaseClient.from("daily_sales").select("id").eq("sale_date", dateStr).maybeSingle();
 
         let error;
         if (existing) {
-            const { error: err } = await supabaseClient
-                .from("daily_sales")
-                .update({
-                    upi_amount_cents: cents,
-                    upi_submitted_by: userId,
-                    updated_at: new Date().toISOString()
-                })
-                .eq("id", existing.id);
+            const { error: err } = await supabaseClient.from("daily_sales").update({
+                upi_amount_cents: cents,
+                upi_submitted_by: userId,
+                updated_at: new Date().toISOString()
+            }).eq("id", existing.id);
             error = err;
         } else {
-            // Theoretically admin shouldn't be inserting NEW row for UPI before Cash? 
-            // Possibly, so handle insert too.
-            const { error: err } = await supabaseClient
-                .from("daily_sales")
-                .insert({
-                    sale_date: todayStr,
-                    upi_amount_cents: cents,
-                    upi_submitted_by: userId
-                });
+            const { error: err } = await supabaseClient.from("daily_sales").insert({
+                sale_date: dateStr,
+                upi_amount_cents: cents,
+                upi_submitted_by: userId
+            });
             error = err;
         }
 
-        if (error) {
-            toast({ title: "Failed to save", description: error.message, variant: "error" });
-        } else {
+        if (error) toast({ title: "Failed to save", description: error.message, variant: "error" });
+        else {
             toast({ title: "UPI Sales Saved", variant: "success" });
             setUpiSaved(true);
         }
@@ -180,12 +159,40 @@ export default function SalesPage() {
                         <ChevronLeft size={16} />
                         Back Home
                     </Link>
-                    <h1 className="text-2xl font-bold text-zinc-900 tracking-tight">Daily Sales Entry</h1>
-                    <p className="text-zinc-500 text-sm">Log today's sales data ({todayStr})</p>
+
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <h1 className="text-2xl font-bold text-zinc-900 tracking-tight">Daily Sales Entry</h1>
+                            <p className="text-zinc-500 text-sm">Log sales data</p>
+                        </div>
+                        {isAdmin && (
+                            <div className="flex items-center gap-1 bg-white border border-zinc-200 rounded-lg p-1 shadow-sm">
+                                <button onClick={() => setDate(addDays(date, -1))} className="p-2 hover:bg-zinc-50 rounded-md text-zinc-600">
+                                    <ChevronLeft size={18} />
+                                </button>
+                                <div className="px-2 text-sm font-semibold text-zinc-900 min-w-[100px] text-center">
+                                    {isToday ? "Today" : format(date, "MMM dd")}
+                                </div>
+                                <button
+                                    onClick={() => setDate(addDays(date, 1))}
+                                    className="p-2 hover:bg-zinc-50 rounded-md text-zinc-600 disabled:opacity-30"
+                                    disabled={isToday}
+                                >
+                                    <ChevronRight size={18} />
+                                </button>
+                            </div>
+                        )}
+                    </div>
+                    {!isToday && (
+                        <div className="bg-amber-50 text-amber-800 text-xs px-3 py-2 rounded-lg border border-amber-200 flex items-center gap-2">
+                            <Calendar size={12} />
+                            Viewing past entry: <strong>{format(date, "MMMM do, yyyy")}</strong>
+                        </div>
+                    )}
                 </div>
 
                 <div className="grid gap-6">
-                    {/* Cash Section - Visible to All */}
+                    {/* Cash Section */}
                     <div className="bg-white p-6 rounded-2xl shadow-sm border border-zinc-100 space-y-4">
                         <div className="flex items-center justify-between">
                             <h2 className="font-semibold text-zinc-900">Total Cash</h2>
@@ -199,7 +206,7 @@ export default function SalesPage() {
                                 className="text-lg"
                                 value={cash}
                                 onChange={(e) => setCash(e.target.value)}
-                                disabled={cashSaved && !isAdmin}
+                                disabled={cashSaved && !isAdmin} // Admins can always edit
                             />
                             {(!cashSaved || isAdmin) && (
                                 <Button className="w-full gap-2" onClick={saveCash}>
@@ -236,10 +243,7 @@ export default function SalesPage() {
                                 )}
                             </div>
                         </div>
-                    ) : (
-                        // Hidden for normal users, or show placeholder? Requirements say "not visible".
-                        null
-                    )}
+                    ) : null}
                 </div>
             </div>
         </div>

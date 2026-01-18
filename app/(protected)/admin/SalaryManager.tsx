@@ -86,9 +86,10 @@ export default function SalaryManager({ userId, onDownloadPayslip }: SalaryManag
           const reason = String(r.reason || '').toLowerCase();
           const badge = reason === 'late' ? 'bg-red-50 text-red-700 border-red-200'
             : reason === 'leave' ? 'bg-sky-50 text-sky-700 border-sky-200'
-              : reason === 'advance' ? 'bg-amber-50 text-amber-700 border-amber-200'
-                : reason === 'adjustment' ? 'bg-violet-50 text-violet-700 border-violet-200'
-                  : 'bg-zinc-50 text-zinc-700 border-zinc-200';
+              : reason.includes('half day') ? 'bg-orange-50 text-orange-700 border-orange-200'
+                : reason === 'advance' ? 'bg-amber-50 text-amber-700 border-amber-200'
+                  : reason === 'adjustment' ? 'bg-violet-50 text-violet-700 border-violet-200'
+                    : 'bg-zinc-50 text-zinc-700 border-zinc-200';
           return (
             <div key={r.id} className={`rounded-xl border border-zinc-200 p-2 flex items-center justify-between text-sm text-zinc-900 bg-white hover:bg-zinc-50 transition-colors ${idx % 2 === 1 ? 'bg-zinc-50/40' : ''}`}>
               <div>

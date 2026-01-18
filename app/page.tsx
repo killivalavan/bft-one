@@ -8,7 +8,7 @@ import { HomeHeader } from "@/components/home/HomeHeader";
 import { DashboardGrid } from "@/components/home/DashboardGrid";
 import {
   CalendarCheck2, Coffee, ClipboardList, Shield,
-  CalendarDays, Wallet, Boxes, Bell, LayoutDashboard, Contact, Banknote
+  CalendarDays, Wallet, Boxes, Bell, LayoutDashboard, Contact, Banknote, CalendarPlus
 } from "lucide-react";
 
 export default function Home() {
@@ -92,6 +92,14 @@ export default function Home() {
       colorClass: "text-purple-600",
       bgClass: "bg-purple-50",
       description: "Manage users and settings."
+    },
+    {
+      label: "Fill Timesheet",
+      href: "/admin/fill-timesheet",
+      icon: CalendarPlus,
+      colorClass: "text-fuchsia-600",
+      bgClass: "bg-fuchsia-50",
+      description: "Bulk update attendance."
     }] : []),
     ...(flags?.isStockManager ? [{
       label: "Stock Manager",
