@@ -1,6 +1,5 @@
 "use client";
 import { useState, useEffect } from "react";
-import { Avatar, AvatarFallback } from "@/components/ui/Avatar";
 import { cn } from "@/lib/utils/cn";
 import { Check, Clock, X, AlertCircle, Coffee } from "lucide-react";
 
