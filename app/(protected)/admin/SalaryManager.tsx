@@ -3,7 +3,8 @@ import { useEffect, useMemo, useState } from "react";
 import { supabaseClient } from "@/lib/supabaseClient";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
-import { Download } from "lucide-react";
+import { Download, CheckCircle, Circle } from "lucide-react";
+import { cn } from "@/lib/utils/cn";
 
 interface SalaryManagerProps {
   userId: string;
@@ -13,24 +14,43 @@ interface SalaryManagerProps {
 export default function SalaryManager({ userId, onDownloadPayslip }: SalaryManagerProps) {
   const [month, setMonth] = useState<Date>(() => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1); });
   const [rows, setRows] = useState<any[]>([]);
-  const [form, setForm] = useState<{ date: string; reason: string; amount: string; kind: string }>({ date: new Date().toISOString().slice(0, 10), reason: '', amount: '0', kind: 'deduction' });
+  const [form, setForm] = useState<{ date: string; reason: string; amount: string; kind: string }>({
+    date: (() => {
+      const d = new Date();
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${y}-${m}-${day}`;
+    })(),
+    reason: '', amount: '0', kind: 'deduction'
+  });
   const [base, setBase] = useState<number>(0);
   const [fixedAllowance, setFixedAllowance] = useState<number>(0);
+  const [isSettled, setIsSettled] = useState(false);
 
   const range = useMemo(() => {
     const start = new Date(month.getFullYear(), month.getMonth(), 1);
     const end = new Date(month.getFullYear(), month.getMonth() + 1, 0);
-    return { startStr: start.toISOString().slice(0, 10), endStr: end.toISOString().slice(0, 10) };
+    // Use manual formatting to avoid UTC shifts
+    const toDateStr = (d: Date) => {
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${y}-${m}-${day}`;
+    };
+    return { startStr: toDateStr(start), endStr: toDateStr(end), monthKey: `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, '0')}` };
   }, [month]);
 
   async function load() {
-    const [{ data }, { data: prof }] = await Promise.all([
+    const [{ data }, { data: prof }, { data: settlement }] = await Promise.all([
       supabaseClient.from('salary_entries').select('id,entry_date,amount_cents,reason,kind').eq('user_id', userId).gte('entry_date', range.startStr).lte('entry_date', range.endStr).order('entry_date', { ascending: false }),
-      supabaseClient.from('profiles').select('base_salary_cents, fixed_allowance_cents').eq('id', userId).maybeSingle()
+      supabaseClient.from('profiles').select('base_salary_cents, fixed_allowance_cents').eq('id', userId).maybeSingle(),
+      supabaseClient.from('salary_settlements').select('is_settled').eq('user_id', userId).eq('month_key', range.monthKey).maybeSingle()
     ]);
     setRows(data || []);
     setBase(prof?.base_salary_cents || 0);
     setFixedAllowance(prof?.fixed_allowance_cents || 0);
+    setIsSettled(settlement?.is_settled || false);
   }
   useEffect(() => { load(); }, [userId, range.startStr, range.endStr]);
 
@@ -40,6 +60,28 @@ export default function SalaryManager({ userId, onDownloadPayslip }: SalaryManag
     if (!error) { setForm({ ...form, reason: '', amount: '0' }); await load(); }
   }
   async function del(id: string) { await supabaseClient.from('salary_entries').delete().eq('id', id); await load(); }
+
+  async function toggleSettled() {
+    const newVal = !isSettled;
+    setIsSettled(newVal); // Optimistic
+
+    let error;
+    if (newVal) {
+      const { error: err } = await supabaseClient.from('salary_settlements').upsert({ user_id: userId, month_key: range.monthKey, is_settled: true });
+      error = err;
+    } else {
+      const { error: err } = await supabaseClient.from('salary_settlements').delete().eq('user_id', userId).eq('month_key', range.monthKey);
+      error = err;
+    }
+
+    if (error) {
+      console.error("Settlement update failed", error);
+      setIsSettled(!newVal); // Revert
+      alert("Failed to update status. Please check database permissions.");
+    } else {
+      await load();
+    }
+  }
 
   const monthLabel = month.toLocaleString(undefined, { month: 'long', year: 'numeric' });
   const totals = (() => {
@@ -55,9 +97,12 @@ export default function SalaryManager({ userId, onDownloadPayslip }: SalaryManag
   })();
 
   return (
-    <div className="grid gap-2 mt-2">
+    <div className={cn("grid gap-2 mt-2 transition-colors duration-300", isSettled ? "bg-emerald-50/80 p-3 rounded-xl border border-emerald-200" : "")}>
       <div className="flex items-center justify-between text-sm">
-        <div className="font-medium text-zinc-900">Payslip — {monthLabel}</div>
+        <div className="flex items-center gap-2">
+          <div className="font-medium text-zinc-900">Payslip — {monthLabel}</div>
+          {isSettled && <span className="text-[10px] font-bold uppercase bg-emerald-200 text-emerald-800 px-1.5 py-0.5 rounded-md flex items-center gap-1"><CheckCircle size={10} /> Settled</span>}
+        </div>
         <div className="flex gap-2">
           <Button size="sm" variant="outline" onClick={() => setMonth(m => new Date(m.getFullYear(), m.getMonth() - 1, 1))}>Prev</Button>
           <Button size="sm" onClick={() => setMonth(m => new Date(m.getFullYear(), m.getMonth() + 1, 1))}>Next</Button>
@@ -123,8 +168,19 @@ export default function SalaryManager({ userId, onDownloadPayslip }: SalaryManag
           <option value="adjustment">Adjustment</option>
           <option value="addition">Addition</option>
         </select>
-        <div className="sm:col-span-4 flex items-center gap-2">
+        <div className="sm:col-span-4 flex items-center gap-2 flex-wrap">
           <Button onClick={add}>Add entry</Button>
+          <div className="flex-1"></div>
+
+          <Button
+            variant={isSettled ? "secondary" : "outline"}
+            className={cn("gap-2", isSettled ? "bg-emerald-100 text-emerald-800 hover:bg-emerald-200" : "")}
+            onClick={toggleSettled}
+          >
+            {isSettled ? <CheckCircle size={16} /> : <Circle size={16} />}
+            {isSettled ? "Settled" : "Mark as Settled"}
+          </Button>
+
           <Button variant="outline" className="gap-2 text-emerald-600 border-emerald-200 hover:bg-emerald-50" onClick={() => onDownloadPayslip(userId, month)}>
             <Download size={14} /> Download Payslip
           </Button>

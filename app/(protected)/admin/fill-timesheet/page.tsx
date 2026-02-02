@@ -394,20 +394,20 @@ export default function FillTimesheetPage() {
 
                                                     if (status === 'present') {
                                                         cellClass = "text-emerald-600 font-medium";
-                                                        content = "P";
+                                                        content = "Present";
                                                         if (lateMinutes > 0) {
                                                             cellClass = "text-amber-600 font-medium";
-                                                            content = `P (+${lateMinutes}m)`;
+                                                            content = `Present (+${lateMinutes}m)`;
                                                         }
                                                     } else if (status === 'leave') {
                                                         cellClass = "text-rose-600 font-bold";
-                                                        content = "L";
+                                                        content = "Leave";
                                                     } else if (status === 'half_day') {
                                                         cellClass = "text-amber-600 font-bold";
-                                                        content = "HD";
+                                                        content = "Half Day";
                                                     } else if (status === 'off') {
                                                         cellClass = "text-zinc-400 font-medium";
-                                                        content = "OFF";
+                                                        content = "Off";
                                                     }
                                                 }
 

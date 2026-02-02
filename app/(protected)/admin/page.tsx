@@ -135,22 +135,65 @@ export default function AdminPage() {
     try {
       const start = new Date(targetDate.getFullYear(), targetDate.getMonth(), 1);
       const end = new Date(targetDate.getFullYear(), targetDate.getMonth() + 1, 0);
-      const startStr = start.toISOString().slice(0, 10);
-      const endStr = end.toISOString().slice(0, 10);
+
+      const toDateStr = (d: Date) => {
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${y}-${m}-${day}`;
+      };
+
+      const startStr = toDateStr(start);
+      const endStr = toDateStr(end);
       const monthLabel = start.toLocaleString(undefined, { month: 'long', year: 'numeric' });
 
       const { data: prof, error: profErr } = await supabaseClient.from('profiles').select('email, base_salary_cents').eq('id', userId).single();
       if (profErr || !prof) throw new Error("Profile not found");
 
-      const { data: ents, error: entsErr } = await supabaseClient.from('salary_entries').select('entry_date, amount_cents, reason').eq('user_id', userId).gte('entry_date', startStr).lte('entry_date', endStr).order('entry_date', { ascending: false });
+      const { data: ents, error: entsErr } = await supabaseClient.from('salary_entries').select('entry_date, amount_cents, reason, kind').eq('user_id', userId).gte('entry_date', startStr).lte('entry_date', endStr).order('entry_date', { ascending: false });
       if (entsErr) throw new Error("Failed to load entries");
 
       const entries = ents || [];
-      const deductions = entries.reduce((s, e) => s + (e.amount_cents || 0), 0);
-      const baseSalary = prof.base_salary_cents || 0;
-      const netPay = baseSalary - deductions;
 
-      await generatePayslipPdf({ userEmail: prof.email, monthLabel, baseSalary, deductions, netPay, entries: entries as any });
+      // Calculate totals
+      let totalDeductions = 0;
+      let totalAdditions = 0;
+
+      entries.forEach((e: any) => {
+        let isDeduction = false;
+        if (e.kind === 'deduction') isDeduction = true;
+        else if (e.kind === 'addition') isDeduction = false;
+        else {
+          // Fallback
+          const r = (e.reason || '').toLowerCase();
+          if (r.includes('deduction') || r.includes('advance') || r.includes('leave') || r.includes('late') || r.includes('half day')) {
+            isDeduction = true;
+          }
+        }
+
+        if (isDeduction) totalDeductions += (e.amount_cents || 0);
+        else totalAdditions += (e.amount_cents || 0);
+      });
+
+      const [{ count: leaveCount }, { data: weekOffs }] = await Promise.all([
+        supabaseClient.from('leaves').select('*', { count: 'exact', head: true }).eq('user_id', userId).gte('leave_date', startStr).lte('leave_date', endStr),
+        supabaseClient.from('leaves').select('leave_date, reason').eq('user_id', userId).eq('reason', 'Weekly Off').gte('leave_date', startStr).lte('leave_date', endStr)
+      ]);
+
+      const weekOffEntries = (weekOffs || []).map((w: any) => ({
+        entry_date: w.leave_date,
+        reason: 'Weekly Off',
+        amount_cents: 0,
+        kind: 'info'
+      }));
+
+      // Merge and Sort
+      const finalEntries = [...entries, ...weekOffEntries].sort((a: any, b: any) => new Date(b.entry_date).getTime() - new Date(a.entry_date).getTime());
+
+      const baseSalary = prof.base_salary_cents || 0;
+      const netPay = baseSalary + totalAdditions - totalDeductions;
+
+      await generatePayslipPdf({ userEmail: prof.email, monthLabel, baseSalary, totalDeductions, totalAdditions, netPay, entries: finalEntries as any, leaveDays: leaveCount || 0 });
       toast({ title: `Payslip downloaded for ${prof.email}`, variant: "success" });
     } catch (e: any) {
       console.error(e);
