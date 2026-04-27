@@ -8,7 +8,7 @@ import { HomeHeader } from "@/components/home/HomeHeader";
 import { DashboardGrid } from "@/components/home/DashboardGrid";
 import {
   CalendarCheck2, Coffee, ClipboardList, Shield,
-  CalendarDays, Wallet, Boxes, Bell, LayoutDashboard, Contact, Banknote, CalendarPlus
+  CalendarDays, Wallet, Boxes, Bell, LayoutDashboard, Contact, Banknote, CalendarPlus, TrendingDown
 } from "lucide-react";
 
 export default function Home() {
@@ -60,6 +60,14 @@ export default function Home() {
       colorClass: "text-emerald-600",
       bgClass: "bg-emerald-50",
       description: "Check your earnings and stats."
+    }] : []),
+    ...(userEmail ? [{
+      label: "Late Deductions",
+      href: "/deductions",
+      icon: TrendingDown,
+      colorClass: "text-red-600",
+      bgClass: "bg-red-50",
+      description: "View team late deduction details."
     }] : []),
     {
       label: "Billing",

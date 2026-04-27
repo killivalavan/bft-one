@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { supabaseClient } from "@/lib/supabaseClient";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
@@ -71,6 +72,7 @@ function UserRow({ user, onRemoveUser, onUpdatePass, onToggleStockManager, onUpd
 }) {
     const [password, setPassword] = useState("");
     const [isExpanded, setIsExpanded] = useState(false);
+    const [salaryRefreshKey, setSalaryRefreshKey] = useState(0);
 
     // Editable State
     const [formData, setFormData] = useState({
@@ -98,7 +100,36 @@ function UserRow({ user, onRemoveUser, onUpdatePass, onToggleStockManager, onUpd
             contact_number: formData.contact_number || null,
             emergency_contact_number: formData.emergency_contact_number || null,
         };
+
+        // Retroactive update for recent months (current + previous) leaves if per-day is set
+        // We run this on every save to ensure consistency, only updating rows that don't match
+        if (updates.per_day_salary_cents) {
+            const now = new Date();
+            // Go back 1 month to ensure we cover the likely active payroll period
+            const startOfPeriod = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+            const y = startOfPeriod.getFullYear();
+            const m = String(startOfPeriod.getMonth() + 1).padStart(2, '0');
+            const d = String(startOfPeriod.getDate()).padStart(2, '0');
+            const dateStr = `${y}-${m}-${d}`;
+
+            const { count, error: updateErr } = await supabaseClient.from('salary_entries')
+                .update({ amount_cents: updates.per_day_salary_cents })
+                .eq('user_id', user.id)
+                .eq('kind', 'deduction')
+                .ilike('reason', '%leave%')
+                .gte('entry_date', dateStr)
+                .neq('amount_cents', updates.per_day_salary_cents) // Only update if different
+                .select('id', { count: 'exact' });
+
+            if (updateErr) {
+                console.error("Failed to update historic leaves", updateErr);
+            } else if (count && count > 0) {
+                console.log(`Updated ${count} leave entries`);
+            }
+        }
+
         await onUpdateFullProfile(user.id, updates);
+        setSalaryRefreshKey(k => k + 1);
         setIsSaving(false);
     }
 
@@ -259,7 +290,12 @@ function UserRow({ user, onRemoveUser, onUpdatePass, onToggleStockManager, onUpd
                     </div>
 
                     <div className="pt-2 border-t border-zinc-100">
-                        <SalaryManager userId={user.id} onDownloadPayslip={onDownloadPayslip} />
+                        <SalaryManager
+                            key={salaryRefreshKey}
+                            userId={user.id}
+                            perDaySalary={parseFloat(formData.per_day_salary_cents || '0') * 100}
+                            onDownloadPayslip={onDownloadPayslip}
+                        />
                     </div>
                 </div>
             )}

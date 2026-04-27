@@ -8,10 +8,11 @@ import { cn } from "@/lib/utils/cn";
 
 interface SalaryManagerProps {
   userId: string;
+  perDaySalary?: number | null;
   onDownloadPayslip: (userId: string, date: Date) => Promise<void>;
 }
 
-export default function SalaryManager({ userId, onDownloadPayslip }: SalaryManagerProps) {
+export default function SalaryManager({ userId, perDaySalary, onDownloadPayslip }: SalaryManagerProps) {
   const [month, setMonth] = useState<Date>(() => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1); });
   const [rows, setRows] = useState<any[]>([]);
   const [form, setForm] = useState<{ date: string; reason: string; amount: string; kind: string }>({
@@ -27,6 +28,17 @@ export default function SalaryManager({ userId, onDownloadPayslip }: SalaryManag
   const [base, setBase] = useState<number>(0);
   const [fixedAllowance, setFixedAllowance] = useState<number>(0);
   const [isSettled, setIsSettled] = useState(false);
+
+  // Auto-fill amount for 'Leave' based on per-day salary
+  useEffect(() => {
+    if (form.kind === 'deduction' && form.reason.toLowerCase().includes('leave') && perDaySalary) {
+      // Only auto-fill if amount is 0 or matches previous auto-fill (heuristic)
+      // To be safe, just set it if currently 0
+      if (form.amount === '0' || form.amount === '') {
+        setForm(f => ({ ...f, amount: (perDaySalary / 100).toFixed(2) }));
+      }
+    }
+  }, [form.reason, form.kind, perDaySalary]);
 
   const range = useMemo(() => {
     const start = new Date(month.getFullYear(), month.getMonth(), 1);
@@ -55,6 +67,8 @@ export default function SalaryManager({ userId, onDownloadPayslip }: SalaryManag
   useEffect(() => { load(); }, [userId, range.startStr, range.endStr]);
 
   async function add() {
+    // If reason is leave and amount is 0, try to check perDaySalary again?
+    // The useEffect handles the form state.
     const cents = Math.round((parseFloat(form.amount || '0') || 0) * 100);
     const { error } = await supabaseClient.from('salary_entries').insert({ user_id: userId, entry_date: form.date, amount_cents: cents, reason: form.reason || 'Manual entry', kind: form.kind || 'deduction' });
     if (!error) { setForm({ ...form, reason: '', amount: '0' }); await load(); }
