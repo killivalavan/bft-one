@@ -112,19 +112,19 @@ function UserRow({ user, onRemoveUser, onUpdatePass, onToggleStockManager, onUpd
             const d = String(startOfPeriod.getDate()).padStart(2, '0');
             const dateStr = `${y}-${m}-${d}`;
 
-            const { count, error: updateErr } = await supabaseClient.from('salary_entries')
+            const { data, error: updateErr } = await supabaseClient.from('salary_entries')
                 .update({ amount_cents: updates.per_day_salary_cents })
                 .eq('user_id', user.id)
                 .eq('kind', 'deduction')
                 .ilike('reason', '%leave%')
                 .gte('entry_date', dateStr)
                 .neq('amount_cents', updates.per_day_salary_cents) // Only update if different
-                .select('id', { count: 'exact' });
+                .select('id');
 
             if (updateErr) {
                 console.error("Failed to update historic leaves", updateErr);
-            } else if (count && count > 0) {
-                console.log(`Updated ${count} leave entries`);
+            } else if (data && data.length > 0) {
+                console.log(`Updated ${data.length} leave entries`);
             }
         }
 
