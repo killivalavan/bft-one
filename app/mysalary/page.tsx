@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { supabaseClient } from "@/lib/supabaseClient";
 import { Button } from "@/components/ui/Button";
 import { ChevronLeft, ChevronRight, Wallet, MinusCircle, PiggyBank, Download, Loader2, TrendingUp } from "lucide-react";
-import { StatCard } from "@/components/glass/StatCard";
+import { StatCard } from "@/components/ui/StatCard";
 import jsPDF from "jspdf";
 import { useToast } from "@/components/ui/Toast";
 import { SalaryChart } from "@/components/mysalary/SalaryChart";

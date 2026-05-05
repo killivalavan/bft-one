@@ -7,7 +7,7 @@ import { preloadBillingCache } from "@/lib/utils/billing";
 import { HomeHeader } from "@/components/home/HomeHeader";
 import { DashboardGrid } from "@/components/home/DashboardGrid";
 import {
-  CalendarCheck2, Coffee, ClipboardList, Shield,
+  CalendarCheck2, Coffee, Shield,
   CalendarDays, Wallet, Boxes, Bell, LayoutDashboard, Contact, Banknote, CalendarPlus, TrendingDown
 } from "lucide-react";
 
@@ -29,14 +29,6 @@ export default function Home() {
 
   // Define Items
   const baseItems = [
-    {
-      label: "Glass Register",
-      href: "/glass",
-      icon: ClipboardList,
-      colorClass: "text-blue-600",
-      bgClass: "bg-blue-50",
-      description: "Track glass inventory logs."
-    },
     {
       label: "Timesheet",
       href: "/timesheet",
