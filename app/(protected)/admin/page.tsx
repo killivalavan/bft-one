@@ -93,10 +93,18 @@ export default function AdminPage() {
       title: "Remove User?",
       desc: "This will permanently remove the user from the system. This action cannot be undone.",
       action: async () => {
-        const res = await fetch("/api/admin-users", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId }) });
-        if (!res.ok) { toast({ title: "Failed to remove user", variant: "error" }); return; }
-        await load();
-        toast({ title: "User removed", variant: "success" });
+        try {
+          const res = await fetch("/api/admin-users", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId }) });
+          const data = await res.json();
+          if (!res.ok) { 
+            toast({ title: "Failed to remove user", description: data?.error || "Unknown error", variant: "error" });
+            return; 
+          }
+          await load();
+          toast({ title: "User removed", variant: "success" });
+        } catch (e: any) {
+          toast({ title: "Failed to remove user", description: e?.message || "Unknown error", variant: "error" });
+        }
       }
     });
   }

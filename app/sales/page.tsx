@@ -16,7 +16,12 @@ export default function SalesPage() {
     const [userId, setUserId] = useState<string | null>(null);
 
     // Date State
-    const [date, setDate] = useState(new Date());
+    const getInitialDate = () => {
+        const now = new Date();
+        return now.getHours() < 9 ? addDays(now, -1) : now;
+    };
+    const [date, setDate] = useState<Date>(getInitialDate);
+    const [manualOverride, setManualOverride] = useState(false);
     const dateStr = format(date, "yyyy-MM-dd");
     const isToday = isSameDay(date, new Date());
 
@@ -27,6 +32,8 @@ export default function SalesPage() {
     // Status State (Saved/Locked)
     const [cashSaved, setCashSaved] = useState(false);
     const [upiSaved, setUpiSaved] = useState(false);
+    const [cashEditing, setCashEditing] = useState(false);
+    const [upiEditing, setUpiEditing] = useState(false);
 
     useEffect(() => {
         checkUser();
@@ -74,13 +81,30 @@ export default function SalesPage() {
             if (data.total_cash_cents !== null) {
                 setCash((data.total_cash_cents / 100).toString());
                 setCashSaved(true);
+                setCashEditing(false);
             }
             if (data.upi_amount_cents !== null) {
                 setUpi((data.upi_amount_cents / 100).toString());
                 setUpiSaved(true);
+                setUpiEditing(false);
             }
         }
     }
+
+    // Auto-switch visible date to today when clock passes 9:00
+    useEffect(() => {
+        const id = setInterval(() => {
+            const now = new Date();
+            if (now.getHours() >= 9 && !manualOverride) {
+                const yesterday = addDays(now, -1);
+                if (isSameDay(date, yesterday)) {
+                    setDate(now);
+                    toast({ title: "Date switched to today", description: "Automatically switched after 09:00", variant: "info" });
+                }
+            }
+        }, 60 * 1000);
+        return () => clearInterval(id);
+    }, [date]);
 
     async function saveCash() {
         if (!cash || isNaN(Number(cash))) {
@@ -89,7 +113,14 @@ export default function SalesPage() {
         }
 
         const cents = Math.round(Number(cash) * 100);
-        const { data: existing } = await supabaseClient.from("daily_sales").select("id").eq("sale_date", dateStr).maybeSingle();
+        // If user is saving on 'today' before 9:00, record as yesterday
+        const now = new Date();
+        let targetDate = date;
+        if (isSameDay(date, new Date()) && now.getHours() < 9) {
+            targetDate = addDays(date, -1);
+        }
+        const saveDateStr = format(targetDate, "yyyy-MM-dd");
+        const { data: existing } = await supabaseClient.from("daily_sales").select("id").eq("sale_date", saveDateStr).maybeSingle();
 
         let error;
         if (existing) {
@@ -101,7 +132,7 @@ export default function SalesPage() {
             error = err;
         } else {
             const { error: err } = await supabaseClient.from("daily_sales").insert({
-                sale_date: dateStr,
+                sale_date: saveDateStr,
                 total_cash_cents: cents,
                 cash_submitted_by: userId
             });
@@ -112,7 +143,36 @@ export default function SalesPage() {
         else {
             toast({ title: "Cash Sales Saved", variant: "success" });
             setCashSaved(true);
+            setCashEditing(false);
         }
+    }
+
+    async function clearCash() {
+        if (!confirm("Clear cash amount for the selected date?")) return;
+        const now = new Date();
+        let targetDate = date;
+        if (isSameDay(date, new Date()) && now.getHours() < 9) {
+            targetDate = addDays(date, -1);
+        }
+        const saveDateStr = format(targetDate, "yyyy-MM-dd");
+
+        const { data: existing } = await supabaseClient.from("daily_sales").select("id").eq("sale_date", saveDateStr).maybeSingle();
+        if (!existing) {
+            toast({ title: "Nothing to clear", variant: "info" });
+            return;
+        }
+
+        const { error } = await supabaseClient.from("daily_sales").update({ total_cash_cents: null, cash_submitted_by: null, updated_at: new Date().toISOString() }).eq("id", existing.id);
+        if (error) {
+            toast({ title: "Failed to clear", description: error.message, variant: "error" });
+            return;
+        }
+
+        toast({ title: "Cash cleared", variant: "success" });
+        setCash("");
+        setCashSaved(false);
+        setCashEditing(false);
+        await fetchSales();
     }
 
     async function saveUpi() {
@@ -122,7 +182,14 @@ export default function SalesPage() {
         }
 
         const cents = Math.round(Number(upi) * 100);
-        const { data: existing } = await supabaseClient.from("daily_sales").select("id").eq("sale_date", dateStr).maybeSingle();
+        // If user is saving on 'today' before 9:00, record as yesterday
+        const now = new Date();
+        let targetDate = date;
+        if (isSameDay(date, new Date()) && now.getHours() < 9) {
+            targetDate = addDays(date, -1);
+        }
+        const saveDateStr = format(targetDate, "yyyy-MM-dd");
+        const { data: existing } = await supabaseClient.from("daily_sales").select("id").eq("sale_date", saveDateStr).maybeSingle();
 
         let error;
         if (existing) {
@@ -134,7 +201,7 @@ export default function SalesPage() {
             error = err;
         } else {
             const { error: err } = await supabaseClient.from("daily_sales").insert({
-                sale_date: dateStr,
+                sale_date: saveDateStr,
                 upi_amount_cents: cents,
                 upi_submitted_by: userId
             });
@@ -145,6 +212,7 @@ export default function SalesPage() {
         else {
             toast({ title: "UPI Sales Saved", variant: "success" });
             setUpiSaved(true);
+            setUpiEditing(false);
         }
     }
 
@@ -160,26 +228,37 @@ export default function SalesPage() {
                         Back Home
                     </Link>
 
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between gap-4">
                         <div>
                             <h1 className="text-2xl font-bold text-zinc-900 tracking-tight">Daily Sales Entry</h1>
                             <p className="text-zinc-500 text-sm">Log sales data</p>
                         </div>
+
+                        {/* Display the date user is entering for */}
+                        <div className="text-right">
+                            <p className="text-xs text-zinc-500 uppercase tracking-wider">Entering for</p>
+                            <p className="text-lg font-bold text-zinc-900">{format(date, "MMM dd, yyyy")}</p>
+                        </div>
                         {isAdmin && (
                             <div className="flex items-center gap-1 bg-white border border-zinc-200 rounded-lg p-1 shadow-sm">
-                                <button onClick={() => setDate(addDays(date, -1))} className="p-2 hover:bg-zinc-50 rounded-md text-zinc-600">
+                                <button onClick={() => { setDate(addDays(date, -1)); setManualOverride(true); }} className="p-2 hover:bg-zinc-50 rounded-md text-zinc-600">
                                     <ChevronLeft size={18} />
                                 </button>
                                 <div className="px-2 text-sm font-semibold text-zinc-900 min-w-[100px] text-center">
                                     {isToday ? "Today" : format(date, "MMM dd")}
                                 </div>
                                 <button
-                                    onClick={() => setDate(addDays(date, 1))}
+                                    onClick={() => { setDate(addDays(date, 1)); setManualOverride(true); }}
                                     className="p-2 hover:bg-zinc-50 rounded-md text-zinc-600 disabled:opacity-30"
                                     disabled={isToday}
                                 >
                                     <ChevronRight size={18} />
                                 </button>
+                                {manualOverride && (
+                                    <button onClick={() => { setManualOverride(false); setDate(getInitialDate()); }} className="ml-2 text-xs px-2 py-1 rounded bg-zinc-100 hover:bg-zinc-200">
+                                        Auto
+                                    </button>
+                                )}
                             </div>
                         )}
                     </div>
@@ -187,6 +266,13 @@ export default function SalesPage() {
                         <div className="bg-amber-50 text-amber-800 text-xs px-3 py-2 rounded-lg border border-amber-200 flex items-center gap-2">
                             <Calendar size={12} />
                             Viewing past entry: <strong>{format(date, "MMMM do, yyyy")}</strong>
+                        </div>
+                    )}
+                    {/* Helper note when current time is before 9am */}
+                    {new Date().getHours() < 9 && (
+                        <div className="bg-blue-50 text-blue-700 text-sm px-4 py-3 rounded-lg border border-blue-200 flex items-center gap-2">
+                            <Calendar size={14} />
+                            <span><strong>Note:</strong> You are entering sales for yesterday (shop closing). This will auto-switch to today at 9:00 AM.</span>
                         </div>
                     )}
                 </div>
@@ -206,13 +292,30 @@ export default function SalesPage() {
                                 className="text-lg"
                                 value={cash}
                                 onChange={(e) => setCash(e.target.value)}
-                                disabled={cashSaved && !isAdmin} // Admins can always edit
+                                disabled={cashSaved && !cashEditing}
                             />
-                            {(!cashSaved || isAdmin) && (
-                                <Button className="w-full gap-2" onClick={saveCash}>
-                                    <Save size={16} /> {cashSaved ? "Update Cash Entry" : "Save Cash Entry"}
-                                </Button>
-                            )}
+                            <div className="flex gap-2">
+                                {!cashSaved && (
+                                    <Button className="w-full gap-2" onClick={saveCash}>
+                                        <Save size={16} /> Save Cash Entry
+                                    </Button>
+                                )}
+                                {cashSaved && isAdmin && !cashEditing && (
+                                    <div className="flex gap-2 w-full">
+                                        <Button className="flex-1" onClick={() => setCashEditing(true)} variant="outline">
+                                            Edit Cash
+                                        </Button>
+                                        <Button className="w-28" onClick={clearCash} variant="ghost">
+                                            Clear
+                                        </Button>
+                                    </div>
+                                )}
+                                {cashSaved && cashEditing && (
+                                    <Button className="w-full gap-2" onClick={saveCash}>
+                                        <Save size={16} /> Save
+                                    </Button>
+                                )}
+                            </div>
                         </div>
                     </div>
 
@@ -234,13 +337,25 @@ export default function SalesPage() {
                                     className="text-lg"
                                     value={upi}
                                     onChange={(e) => setUpi(e.target.value)}
-                                    disabled={upiSaved}
+                                    disabled={upiSaved && !upiEditing}
                                 />
-                                {!upiSaved && (
-                                    <Button className="w-full gap-2" onClick={saveUpi} variant="primary">
-                                        <Save size={16} /> Save UPI Entry
-                                    </Button>
-                                )}
+                                <div className="flex gap-2">
+                                    {!upiSaved && (
+                                        <Button className="w-full gap-2" onClick={saveUpi} variant="primary">
+                                            <Save size={16} /> Save UPI Entry
+                                        </Button>
+                                    )}
+                                    {upiSaved && isAdmin && !upiEditing && (
+                                        <Button className="w-full gap-2" onClick={() => setUpiEditing(true)} variant="outline">
+                                            Edit UPI
+                                        </Button>
+                                    )}
+                                    {upiSaved && upiEditing && (
+                                        <Button className="w-full gap-2" onClick={saveUpi} variant="primary">
+                                            <Save size={16} /> Save
+                                        </Button>
+                                    )}
+                                </div>
                             </div>
                         </div>
                     ) : null}

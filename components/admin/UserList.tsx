@@ -197,7 +197,10 @@ function UserRow({ user, onRemoveUser, onUpdatePass, onToggleStockManager, onUpd
                             <Key size={12} />
                         </Button>
                     </div>
-                    <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-zinc-400 hover:text-red-600 hover:bg-red-50" onClick={() => onRemoveUser(user.id)}>
+                    <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-zinc-400 hover:text-red-600 hover:bg-red-50" onClick={async (e) => {
+                        e.stopPropagation();
+                        await onRemoveUser(user.id);
+                    }}>
                         <UserX size={16} />
                     </Button>
                 </div>
