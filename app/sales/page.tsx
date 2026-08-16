@@ -159,7 +159,7 @@ export default function SalesPage() {
             // Show success modal for non-admin users
             if (!isAdmin) {
                 setShowSaveSuccess(true);
-                setTimeout(() => setShowSaveSuccess(false), 10000);
+                setTimeout(() => setShowSaveSuccess(false), 5000);
             }
             // Refetch to get updated submitter info
             await fetchSales();

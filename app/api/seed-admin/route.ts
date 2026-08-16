@@ -7,11 +7,10 @@ export async function POST(request: Request) {
 
     const body = await request.json().catch(()=>({})) as { email?:string; password?:string; isAdmin?:boolean };
     const email = body.email || process.env.ADMIN_EMAIL!;
-    const password = body.password || process.env.ADMIN_DEFAULT_PASSWORD!;
     const isAdmin = body.isAdmin ?? true;
 
-    if (!email || !password) {
-      return NextResponse.json({ error: "email/password required" }, { status: 400 });
+    if (!email) {
+      return NextResponse.json({ error: "email required" }, { status: 400 });
     }
 
     const { data: list } = await supa.auth.admin.listUsers();
@@ -19,6 +18,11 @@ export async function POST(request: Request) {
     let userId = found?.id;
 
     if (!userId) {
+      // New user: a password is required to create the auth account.
+      const password = body.password || process.env.ADMIN_DEFAULT_PASSWORD!;
+      if (!password) {
+        return NextResponse.json({ error: "password required to create a new user" }, { status: 400 });
+      }
       const { data, error } = await supa.auth.admin.createUser({
         email,
         password,
@@ -26,10 +30,10 @@ export async function POST(request: Request) {
       });
       if (error) return NextResponse.json({ error: error.message }, { status: 500 });
       userId = data.user?.id!;
-    } else {
-      // Ensure password is set/updated and email confirmed
+    } else if (body.password) {
+      // Existing user: only touch the password/email confirmation if one was explicitly provided.
       const { error: upErr } = await supa.auth.admin.updateUserById(userId, {
-        password,
+        password: body.password,
         email_confirm: true,
       } as any);
       if (upErr) return NextResponse.json({ error: upErr.message }, { status: 500 });
