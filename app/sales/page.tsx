@@ -90,7 +90,7 @@ export default function SalesPage() {
                     const { data: profile } = await supabaseClient.from("profiles").select("email").eq("id", data.cash_submitted_by).maybeSingle();
                     if (profile?.email) {
                         const name = profile.email.split("@")[0].replace(/[._-]/g, " ");
-                        const capitalizedName = name.split(" ").map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(" ");
+                        const capitalizedName = name.split(" ").map((word: any) => word.charAt(0).toUpperCase() + word.slice(1)).join(" ");
                         setCashSubmittedBy(capitalizedName);
                     }
                 }
