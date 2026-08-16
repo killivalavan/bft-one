@@ -5,6 +5,7 @@ import { supabaseClient } from "@/lib/supabaseClient";
 import { Card } from "@/components/ui/Card";
 import { Loader2, Clock, AlertCircle, ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
+import { useUser } from "@/lib/hooks/useUser";
 
 interface DeductionRecord {
     id: string;
@@ -23,6 +24,7 @@ export function DeductionsList() {
         const d = new Date();
         return new Date(d.getFullYear(), d.getMonth(), 1);
     });
+    const { user, loading: authLoading } = useUser();
 
     const toggleUser = (email: string) => {
         setExpandedUsers(prev => {
@@ -45,52 +47,46 @@ export function DeductionsList() {
     };
 
     useEffect(() => {
+        if (authLoading) return;
+
+        let mounted = true;
+
         (async () => {
             try {
                 setLoading(true);
 
-                // Fetch salary entries with user emails - only late deductions
-                const { data: entries, error } = await supabaseClient
-                    .from('salary_entries')
-                    .select(`
-                        id,
-                        entry_date,
-                        amount_cents,
-                        reason,
-                        kind,
-                        user_id,
-                        profiles!inner(id, email)
-                    `)
-                    .eq('kind', 'deduction')
-                    .order('entry_date', { ascending: false });
-
-                if (error) {
-                    console.error('Failed to fetch deductions:', error);
+                if (!user) {
+                    setDeductions([]);
                     return;
                 }
 
-                // Transform and filter data - only late deductions
-                const transformedData: DeductionRecord[] = (entries || [])
-                    .map((entry: any) => ({
-                        id: entry.id,
-                        user_email: entry.profiles?.email || 'Unknown',
-                        user_id: entry.user_id,
-                        reason: entry.reason,
-                        amount_cents: entry.amount_cents,
-                        entry_date: entry.entry_date,
-                    }))
-                    .filter((record) => record.reason.toLowerCase().includes('late'));
+                const res = await fetch(`/api/deductions?userId=${encodeURIComponent(user.id)}`);
 
-                setDeductions(transformedData);
+                if (!res.ok) {
+                    const errorBody = await res.json().catch(() => ({}));
+                    throw new Error(errorBody?.error || "Failed to load deductions");
+                }
+
+                const payload = await res.json();
+                const records = Array.isArray(payload?.deductions) ? payload.deductions : [];
+
+                if (mounted) {
+                    setDeductions(records);
+                }
             } catch (err) {
-                console.error('Error loading deductions:', err);
+                console.error("Error loading deductions:", err);
+                if (mounted) setDeductions([]);
             } finally {
-                setLoading(false);
+                if (mounted) setLoading(false);
             }
         })();
-    }, []);
 
-    if (loading) {
+        return () => {
+            mounted = false;
+        };
+    }, [authLoading, user]);
+
+    if (authLoading || loading) {
         return (
             <div className="flex items-center justify-center py-12">
                 <Loader2 className="w-6 h-6 animate-spin text-blue-600" />
@@ -258,18 +254,23 @@ export function DeductionsList() {
                                 <div className="space-y-2 pt-2 border-t border-zinc-100">
                                     {records.map((record) => (
                                         <div key={record.id} className="flex items-center justify-between bg-red-50 p-3 rounded-lg">
-                                            <div className="flex items-center gap-3 flex-1">
-                                                <div className="w-8 h-8 rounded-full bg-red-200 flex items-center justify-center flex-shrink-0">
-                                                    <Clock className="w-4 h-4 text-red-600" />
+                                            <div className="flex items-start gap-3">
+                                                <div className="mt-0.5 rounded-full bg-red-100 p-1.5 text-red-600">
+                                                    <Clock className="w-3.5 h-3.5" />
                                                 </div>
-                                                <div className="flex-1 min-w-0">
-                                                    <p className="text-xs text-zinc-500">
-                                                        {new Date(record.entry_date).toLocaleDateString()}
+                                                <div>
+                                                    <p className="font-medium text-zinc-800 text-sm">{record.reason}</p>
+                                                    <p className="text-xs text-zinc-500 mt-1">
+                                                        {new Date(record.entry_date).toLocaleDateString('en-GB', {
+                                                            day: '2-digit',
+                                                            month: 'short',
+                                                            year: 'numeric'
+                                                        })}
                                                     </p>
                                                 </div>
                                             </div>
-                                            <div className="text-right ml-2 flex-shrink-0">
-                                                <p className="font-semibold text-red-600">₹ {(record.amount_cents / 100).toFixed(2)}</p>
+                                            <div className="text-right">
+                                                <p className="font-bold text-red-600 text-sm">₹ {(record.amount_cents / 100).toFixed(2)}</p>
                                             </div>
                                         </div>
                                     ))}

@@ -30,6 +30,9 @@ export default function AdminPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [contacts, setContacts] = useState<ExternalContact[]>([]);
   const [report, setReport] = useState<{ name: string; qty: number; revenue: number }[]>([]);
+  const [previousReport, setPreviousReport] = useState<{ name: string; qty: number; revenue: number }[]>([]);
+  const [totalPayroll, setTotalPayroll] = useState(0);
+  const [totalNetPayroll, setTotalNetPayroll] = useState(0);
 
   const [confirmState, setConfirmState] = useState<{ open: boolean; title: string; desc: string; action?: () => Promise<void> }>({ open: false, title: "", desc: "" });
 
@@ -52,7 +55,62 @@ export default function AdminPage() {
       }
     }
 
-    setUsers(us || []);
+    const allUsers = us || [];
+    setUsers(allUsers);
+
+    const monthStart = new Date();
+    monthStart.setDate(1);
+    monthStart.setHours(0, 0, 0, 0);
+
+    const monthEnd = new Date(monthStart.getFullYear(), monthStart.getMonth() + 1, 0, 23, 59, 59, 999);
+    const startStr = monthStart.toISOString().slice(0, 10);
+    const endStr = monthEnd.toISOString().slice(0, 10);
+
+    const { data: salaryEntries } = await supabaseClient
+      .from("salary_entries")
+      .select("user_id, amount_cents, kind")
+      .gte("entry_date", startStr)
+      .lte("entry_date", endStr);
+
+    const salaryTotals = new Map<string, { base: number; allowance: number; additions: number; deductions: number }>();
+
+    allUsers.forEach((user: any) => {
+      if (user.is_admin) return;
+      salaryTotals.set(user.id, {
+        base: Number(user.base_salary_cents || 0),
+        allowance: Number(user.fixed_allowance_cents || 0),
+        additions: 0,
+        deductions: 0,
+      });
+    });
+
+    (salaryEntries || []).forEach((entry: any) => {
+      const userId = entry.user_id;
+      const totals = salaryTotals.get(userId);
+      if (!totals) return;
+
+      const amount = Number(entry.amount_cents || 0);
+      const kind = String(entry.kind || "").toLowerCase();
+
+      if (["allowance", "bonus", "addition"].includes(kind)) {
+        totals.additions += amount;
+      } else {
+        totals.deductions += amount;
+      }
+    });
+
+    let payrollTotal = 0;
+    let netPayrollTotal = 0;
+
+    salaryTotals.forEach((totals) => {
+      const structureSalary = totals.base + totals.allowance;
+      payrollTotal += structureSalary;
+      netPayrollTotal += structureSalary + totals.additions - totals.deductions;
+    });
+
+    setTotalPayroll(payrollTotal);
+    setTotalNetPayroll(netPayrollTotal);
+
     const { data: cats } = await supabaseClient.from("categories").select("*").order("name");
     setCategories(cats || []);
     const { data: prods } = await supabaseClient.from("products").select("*").order("name");
@@ -246,16 +304,43 @@ export default function AdminPage() {
 
   // Reports
   async function buildReport() {
-    const { data: items } = await supabaseClient.from("order_items").select("product_id, qty, price_cents");
+    // Get today's report
+    const { data: items } = await supabaseClient.from("order_items").select("product_id, qty, price_cents, order_id");
+    const { data: ordersToday } = await supabaseClient.from("orders").select("id");
+    const todayOrderIds = new Set((ordersToday || []).map(o => o.id));
+    
     const { data: prods } = await supabaseClient.from("products").select("id,name");
     const nameById = new Map((prods || []).map(p => [p.id, p.name]));
+    
     const agg = new Map<string, { qty: number; revenue: number }>();
     (items || []).forEach((it: any) => {
-      const name = nameById.get(it.product_id) || "Unknown";
-      const prev = agg.get(name) || { qty: 0, revenue: 0 };
-      prev.qty += it.qty; prev.revenue += it.qty * it.price_cents; agg.set(name, prev);
+      if (todayOrderIds.has(it.order_id)) {
+        const name = nameById.get(it.product_id) || "Unknown";
+        const prev = agg.get(name) || { qty: 0, revenue: 0 };
+        prev.qty += it.qty; prev.revenue += it.qty * it.price_cents; agg.set(name, prev);
+      }
     });
-    setReport(Array.from(agg.entries()).map(([name, v]) => ({ name, qty: v.qty, revenue: v.revenue })).sort((a, b) => b.revenue - a.revenue));
+    const todayReport = Array.from(agg.entries()).map(([name, v]) => ({ name, qty: v.qty, revenue: v.revenue })).sort((a, b) => b.revenue - a.revenue);
+    setReport(todayReport);
+
+    // Get yesterday's report
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    const yesterdayStr = yesterday.toISOString().split('T')[0];
+    
+    const { data: ordersYesterday } = await supabaseClient.from("orders").select("id").lte("created_at", yesterdayStr + "T23:59:59").gte("created_at", yesterdayStr + "T00:00:00");
+    const yesterdayOrderIds = new Set((ordersYesterday || []).map(o => o.id));
+    
+    const aggYesterday = new Map<string, { qty: number; revenue: number }>();
+    (items || []).forEach((it: any) => {
+      if (yesterdayOrderIds.has(it.order_id)) {
+        const name = nameById.get(it.product_id) || "Unknown";
+        const prev = aggYesterday.get(name) || { qty: 0, revenue: 0 };
+        prev.qty += it.qty; prev.revenue += it.qty * it.price_cents; aggYesterday.set(name, prev);
+      }
+    });
+    const yesterdayReport = Array.from(aggYesterday.entries()).map(([name, v]) => ({ name, qty: v.qty, revenue: v.revenue })).sort((a, b) => b.revenue - a.revenue);
+    setPreviousReport(yesterdayReport);
   }
 
   function exportPdf() {
@@ -313,15 +398,31 @@ export default function AdminPage() {
         )}
 
         {tab === 'users' && (
-          <UserList
-            users={users}
-            onAddUser={createUser}
-            onRemoveUser={removeUser}
-            onUpdatePass={updatePasswordFor}
-            onToggleStockManager={toggleStockManager}
-            onUpdateFullProfile={updateFullProfile}
-            onDownloadPayslip={handleDownloadPayslip}
-          />
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+              <div className="bg-white rounded-2xl border border-zinc-200 shadow-sm p-5">
+                <div className="text-sm font-medium text-zinc-500">Total Salary Structure</div>
+                <div className="mt-2 text-3xl font-bold text-zinc-900">₹ {(totalPayroll / 100).toLocaleString('en-IN', { maximumFractionDigits: 2 })}</div>
+                <div className="mt-2 text-xs text-zinc-500">Current base + allowance for all employees</div>
+              </div>
+
+              <div className="bg-white rounded-2xl border border-zinc-200 shadow-sm p-5">
+                <div className="text-sm font-medium text-zinc-500">Current Net Payroll</div>
+                <div className="mt-2 text-3xl font-bold text-emerald-600">₹ {(totalNetPayroll / 100).toLocaleString('en-IN', { maximumFractionDigits: 2 })}</div>
+                <div className="mt-2 text-xs text-zinc-500">Base + allowance + additions - deductions this month</div>
+              </div>
+            </div>
+
+            <UserList
+              users={users}
+              onAddUser={createUser}
+              onRemoveUser={removeUser}
+              onUpdatePass={updatePasswordFor}
+              onToggleStockManager={toggleStockManager}
+              onUpdateFullProfile={updateFullProfile}
+              onDownloadPayslip={handleDownloadPayslip}
+            />
+          </>
         )}
 
         {tab === 'products' && (
@@ -337,6 +438,7 @@ export default function AdminPage() {
         {tab === 'reports' && (
           <SalesReports
             report={report}
+            previousReport={previousReport}
             onGenerate={buildReport}
             onExport={exportPdf}
           />

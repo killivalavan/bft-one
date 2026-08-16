@@ -59,6 +59,20 @@ export function SalesManager() {
         return "Unknown";
     }
 
+    function renderTrendBadge(growth: number) {
+        if (growth === 0) {
+            return <span className="text-zinc-400 text-xs">-</span>;
+        }
+
+        const isPositive = growth > 0;
+        return (
+            <span className={`text-[10px] px-2 py-0.5 rounded-full inline-flex items-center font-bold ${isPositive ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
+                {isPositive ? <TrendingUp size={12} className="mr-1" /> : <TrendingDown size={12} className="mr-1" />}
+                {Math.abs(growth).toFixed(0)}%
+            </span>
+        );
+    }
+
     // --- Data Preparation ---
 
     // 1. Filtered Raw Data
@@ -174,29 +188,45 @@ export function SalesManager() {
         let head: any[] = [];
 
         if (view === 'daily') {
-            head = [["Date", "Cash (Rs)", "UPI (Rs)", "Total (Rs)", "Submitted By"]];
+            head = [["Date", "Cash (Rs)", "UPI (Rs)", "Total (Rs)", "Change"]];
             const sortedDaily = [...dailySales].sort((a, b) => new Date(b.sale_date).getTime() - new Date(a.sale_date).getTime());
-            body = sortedDaily.map(s => {
+            body = sortedDaily.map((s, index) => {
                 const c = (s.total_cash_cents || 0) / 100;
                 const u = (s.upi_amount_cents || 0) / 100;
-                return [s.sale_date, c.toFixed(2), u.toFixed(2), (c + u).toFixed(2), formatName(s.cash_submitter)];
+                const total = c + u;
+                const prevDayTotal = index > 0 ? ((sortedDaily[index - 1].total_cash_cents || 0) + (sortedDaily[index - 1].upi_amount_cents || 0)) / 100 : 0;
+                const growth = prevDayTotal > 0 ? ((total - prevDayTotal) / prevDayTotal) * 100 : 0;
+                return [s.sale_date, c.toFixed(2), u.toFixed(2), total.toFixed(2), growth === 0 ? "-" : `${growth > 0 ? "+" : ""}${growth.toFixed(0)}%`];
             });
         } else if (view === 'monthly') {
-            head = [["Month", "Cash (Rs)", "UPI (Rs)", "Total (Rs)"]];
-            body = monthlyAggregated.map(m => {
+            head = [["Month", "Cash (Rs)", "UPI (Rs)", "Total (Rs)", "Change"]];
+            body = monthlyAggregated.map((m, idx) => {
                 const c = m.total_cash_cents / 100;
                 const u = m.upi_amount_cents / 100;
-                return [m.monthName, c.toFixed(2), u.toFixed(2), (c + u).toFixed(2)];
+                const t = m.total_cents / 100;
+                let growth = 0;
+                if (idx > 0) {
+                    const prev = monthlyAggregated[idx - 1];
+                    const prevT = prev.total_cents / 100;
+                    if (prevT > 0) growth = ((t - prevT) / prevT) * 100;
+                }
+                return [m.monthName, c.toFixed(2), u.toFixed(2), (c + u).toFixed(2), growth === 0 ? "-" : `${growth > 0 ? "+" : ""}${growth.toFixed(0)}%`];
             });
         } else {
             // Yearly
-            head = [["Year", "Cash (Rs)", "UPI (Rs)", "Total (Rs)"]];
-            // Sort Descending for table
+            head = [["Year", "Cash (Rs)", "UPI (Rs)", "Total (Rs)", "Change"]];
             const sortedYears = [...yearlyAggregated].sort((a, b) => b.year - a.year);
-            body = sortedYears.map(y => {
+            body = sortedYears.map((y, idx) => {
                 const c = y.total_cash_cents / 100;
                 const u = y.upi_amount_cents / 100;
-                return [y.year, c.toFixed(2), u.toFixed(2), (c + u).toFixed(2)];
+                const t = y.total_cents / 100;
+                let growth = 0;
+                if (idx < sortedYears.length - 1) {
+                    const prevYearRec = sortedYears[idx + 1];
+                    const prevT = prevYearRec.total_cents / 100;
+                    if (prevT > 0) growth = ((t - prevT) / prevT) * 100;
+                }
+                return [y.year, c.toFixed(2), u.toFixed(2), (c + u).toFixed(2), growth === 0 ? "-" : `${growth > 0 ? "+" : ""}${growth.toFixed(0)}%`];
             });
         }
 
@@ -322,7 +352,7 @@ export function SalesManager() {
                                         <th className="px-6 py-4">Cash</th>
                                         <th className="px-6 py-4">UPI</th>
                                         <th className="px-6 py-4">Total</th>
-                                        <th className="px-6 py-4">Submitted By</th>
+                                        <th className="px-6 py-4">Change</th>
                                     </>
                                 ) : view === 'monthly' ? (
                                     <>
@@ -348,10 +378,13 @@ export function SalesManager() {
                                 // DAILY ROWS
                                 [...dailySales]
                                     .sort((a, b) => new Date(b.sale_date).getTime() - new Date(a.sale_date).getTime())
-                                    .map(s => {
+                                    .map((s, index, arr) => {
                                         const c = (s.total_cash_cents || 0) / 100;
                                         const u = (s.upi_amount_cents || 0) / 100;
                                         const t = c + u;
+                                        const prevTotal = index > 0 ? ((arr[index - 1].total_cash_cents || 0) + (arr[index - 1].upi_amount_cents || 0)) / 100 : 0;
+                                        const growth = prevTotal > 0 ? ((t - prevTotal) / prevTotal) * 100 : 0;
+
                                         return (
                                             <tr key={s.id} className="hover:bg-zinc-50/50 transition-colors">
                                                 <td className="px-6 py-4 font-medium text-zinc-900 whitespace-nowrap">
@@ -360,8 +393,8 @@ export function SalesManager() {
                                                 <td className="px-6 py-4 text-emerald-700 font-medium">₹ {c.toFixed(2)}</td>
                                                 <td className="px-6 py-4 text-purple-700 font-medium">₹ {u.toFixed(2)}</td>
                                                 <td className="px-6 py-4 font-bold text-zinc-900">₹ {t.toFixed(2)}</td>
-                                                <td className="px-6 py-4 text-zinc-500 text-xs">
-                                                    {s.cash_submitter ? formatName(s.cash_submitter) : "-"}
+                                                <td className="px-6 py-4">
+                                                    {renderTrendBadge(growth)}
                                                 </td>
                                             </tr>
                                         );
@@ -390,32 +423,21 @@ export function SalesManager() {
                                             <td className="px-6 py-4 text-purple-700 font-medium">₹ {u.toFixed(2)}</td>
                                             <td className="px-6 py-4 font-bold text-zinc-900">₹ {t.toFixed(2)}</td>
                                             <td className="px-6 py-4">
-                                                {growth !== 0 && (
-                                                    <span className={`text-[10px] px-2 py-0.5 rounded-full inline-flex items-center font-bold ${growth > 0 ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
-                                                        {growth > 0 ? <TrendingUp size={12} className="mr-1" /> : <TrendingDown size={12} className="mr-1" />}
-                                                        {Math.abs(growth).toFixed(0)}%
-                                                    </span>
-                                                )}
-                                                {growth === 0 && <span className="text-zinc-400 text-xs">-</span>}
+                                                {renderTrendBadge(growth)}
                                             </td>
                                         </tr>
                                     );
                                 })
                             ) : (
                                 // YEARLY ROWS
-                                yearlyAggregated.sort((a, b) => b.year - a.year).map((y, idx) => {
+                                yearlyAggregated.sort((a, b) => b.year - a.year).map((y, idx, arr) => {
                                     const c = y.total_cash_cents / 100;
                                     const u = y.upi_amount_cents / 100;
                                     const t = y.total_cents / 100;
 
-                                    // Growth from previous year in list? (Sorted Descending, so 'idx+1' is prev year)
-                                    // Actually we sorted Descending (2026, 2025). So idx+1 is 2025.
+                                    const prevYearRec = idx < arr.length - 1 ? arr[idx + 1] : null;
                                     let growth = 0;
-                                    // We need to compare with the 'older' year. if we are at 2026 (0), we compare with 2025 (1).
-                                    // But list might not be contiguous. It's fine.
-                                    const sortedDesc = yearlyAggregated.sort((a, b) => b.year - a.year);
-                                    if (idx < sortedDesc.length - 1) {
-                                        const prevYearRec = sortedDesc[idx + 1];
+                                    if (prevYearRec) {
                                         const prevT = prevYearRec.total_cents / 100;
                                         if (prevT > 0) growth = ((t - prevT) / prevT) * 100;
                                     }
@@ -429,13 +451,7 @@ export function SalesManager() {
                                             <td className="px-6 py-4 text-purple-700 font-medium">₹ {u.toFixed(2)}</td>
                                             <td className="px-6 py-4 font-bold text-zinc-900">₹ {t.toFixed(2)}</td>
                                             <td className="px-6 py-4">
-                                                {growth !== 0 && (
-                                                    <span className={`text-[10px] px-2 py-0.5 rounded-full inline-flex items-center font-bold ${growth > 0 ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
-                                                        {growth > 0 ? <TrendingUp size={12} className="mr-1" /> : <TrendingDown size={12} className="mr-1" />}
-                                                        {Math.abs(growth).toFixed(0)}%
-                                                    </span>
-                                                )}
-                                                {growth === 0 && <span className="text-zinc-400 text-xs">-</span>}
+                                                {renderTrendBadge(growth)}
                                             </td>
                                         </tr>
                                     );

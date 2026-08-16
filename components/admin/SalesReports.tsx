@@ -1,15 +1,30 @@
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent } from "@/components/ui/Card";
-import { FileDown, RefreshCw, TrendingUp } from "lucide-react";
+import { FileDown, RefreshCw, TrendingUp, TrendingDown, ArrowUp, ArrowDown } from "lucide-react";
 
 interface SalesReportsProps {
     report: { name: string; qty: number; revenue: number }[];
+    previousReport?: { name: string; qty: number; revenue: number }[];
     onGenerate: () => Promise<void>;
     onExport: () => void;
 }
 
-export function SalesReports({ report, onGenerate, onExport }: SalesReportsProps) {
+export function SalesReports({ report, previousReport = [], onGenerate, onExport }: SalesReportsProps) {
     const totalRev = report.reduce((acc, r) => acc + r.revenue, 0);
+    const previousTotalRev = previousReport.reduce((acc, r) => acc + r.revenue, 0);
+    const totalChange = totalRev - previousTotalRev;
+    const totalChangePercent = previousTotalRev > 0 ? ((totalChange / previousTotalRev) * 100).toFixed(1) : 0;
+
+    // Create a map of previous revenue by product name
+    const prevRevenueMap = new Map(previousReport.map(p => [p.name, p.revenue]));
+
+    // Calculate change for each product
+    const reportWithChange = report.map(r => {
+        const prevRev = prevRevenueMap.get(r.name) || 0;
+        const change = r.revenue - prevRev;
+        const changePercent = prevRev > 0 ? ((change / prevRev) * 100).toFixed(1) : (r.revenue > 0 ? 100 : 0);
+        return { ...r, change, changePercent };
+    });
 
     return (
         <div className="space-y-6 animate-in slide-in-from-bottom-2 fade-in duration-500">
@@ -21,7 +36,15 @@ export function SalesReports({ report, onGenerate, onExport }: SalesReportsProps
                     </div>
                     <div>
                         <div className="text-sm font-medium text-zinc-500">Total Revenue</div>
-                        <div className="text-xl font-bold text-zinc-900">₹ {(totalRev / 100).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
+                        <div className="flex items-center gap-2">
+                            <div className="text-xl font-bold text-zinc-900">₹ {(totalRev / 100).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
+                            {previousReport.length > 0 && (
+                                <div className={`flex items-center gap-1 px-2 py-1 rounded text-sm font-medium ${totalChange >= 0 ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
+                                    {totalChange >= 0 ? <ArrowUp size={14} /> : <ArrowDown size={14} />}
+                                    <span>{Math.abs(parseFloat(totalChangePercent as string)).toFixed(1)}%</span>
+                                </div>
+                            )}
+                        </div>
                     </div>
                 </div>
                 <div className="flex gap-2">
@@ -36,14 +59,15 @@ export function SalesReports({ report, onGenerate, onExport }: SalesReportsProps
 
             {/* Report List */}
             <div className="bg-white rounded-xl border border-zinc-200 overflow-hidden shadow-sm">
-                <div className="grid grid-cols-[auto_1fr_auto] gap-4 px-4 py-3 bg-zinc-50 border-b border-zinc-100 text-xs font-semibold text-zinc-500 uppercase">
+                <div className="grid grid-cols-[auto_1fr_auto_auto] gap-4 px-4 py-3 bg-zinc-50 border-b border-zinc-100 text-xs font-semibold text-zinc-500 uppercase">
                     <div className="w-6 text-center">#</div>
                     <div>Product</div>
                     <div className="text-right">Revenue</div>
+                    <div className="text-right">Change</div>
                 </div>
                 <div className="divide-y divide-zinc-100">
-                    {report.map((r, i) => (
-                        <div key={i} className="grid grid-cols-[auto_1fr_auto] gap-4 px-4 py-3 text-sm hover:bg-zinc-50/50 transition-colors">
+                    {reportWithChange.map((r, i) => (
+                        <div key={i} className="grid grid-cols-[auto_1fr_auto_auto] gap-4 px-4 py-3 text-sm hover:bg-zinc-50/50 transition-colors">
                             <div className="w-6 text-center text-zinc-400 font-medium">{i + 1}</div>
                             <div>
                                 <div className="font-medium text-zinc-900">{r.name}</div>
@@ -51,6 +75,16 @@ export function SalesReports({ report, onGenerate, onExport }: SalesReportsProps
                             </div>
                             <div className="text-right font-medium text-zinc-900">
                                 ₹ {(r.revenue / 100).toFixed(2)}
+                            </div>
+                            <div className="text-right">
+                                {previousReport.length > 0 ? (
+                                    <div className={`flex items-center justify-end gap-1 px-2 py-1 rounded text-xs font-semibold ${r.change >= 0 ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
+                                        {r.change >= 0 ? <ArrowUp size={12} /> : <ArrowDown size={12} />}
+                                        <span>{Math.abs(parseFloat(r.changePercent as string)).toFixed(1)}%</span>
+                                    </div>
+                                ) : (
+                                    <span className="text-zinc-400 text-xs">-</span>
+                                )}
                             </div>
                         </div>
                     ))}

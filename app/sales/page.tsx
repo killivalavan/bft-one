@@ -34,6 +34,8 @@ export default function SalesPage() {
     const [upiSaved, setUpiSaved] = useState(false);
     const [cashEditing, setCashEditing] = useState(false);
     const [upiEditing, setUpiEditing] = useState(false);
+    const [cashSubmittedBy, setCashSubmittedBy] = useState<string | null>(null);
+    const [showSaveSuccess, setShowSaveSuccess] = useState(false);
 
     useEffect(() => {
         checkUser();
@@ -70,6 +72,7 @@ export default function SalesPage() {
         setUpi("");
         setCashSaved(false);
         setUpiSaved(false);
+        setCashSubmittedBy(null);
 
         const { data } = await supabaseClient
             .from("daily_sales")
@@ -82,6 +85,15 @@ export default function SalesPage() {
                 setCash((data.total_cash_cents / 100).toString());
                 setCashSaved(true);
                 setCashEditing(false);
+                // Fetch the submitter's email and extract name
+                if (data.cash_submitted_by) {
+                    const { data: profile } = await supabaseClient.from("profiles").select("email").eq("id", data.cash_submitted_by).maybeSingle();
+                    if (profile?.email) {
+                        const name = profile.email.split("@")[0].replace(/[._-]/g, " ");
+                        const capitalizedName = name.split(" ").map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(" ");
+                        setCashSubmittedBy(capitalizedName);
+                    }
+                }
             }
             if (data.upi_amount_cents !== null) {
                 setUpi((data.upi_amount_cents / 100).toString());
@@ -144,6 +156,13 @@ export default function SalesPage() {
             toast({ title: "Cash Sales Saved", variant: "success" });
             setCashSaved(true);
             setCashEditing(false);
+            // Show success modal for non-admin users
+            if (!isAdmin) {
+                setShowSaveSuccess(true);
+                setTimeout(() => setShowSaveSuccess(false), 10000);
+            }
+            // Refetch to get updated submitter info
+            await fetchSales();
         }
     }
 
@@ -172,6 +191,7 @@ export default function SalesPage() {
         setCash("");
         setCashSaved(false);
         setCashEditing(false);
+        setCashSubmittedBy(null);
         await fetchSales();
     }
 
@@ -234,11 +254,13 @@ export default function SalesPage() {
                             <p className="text-zinc-500 text-sm">Log sales data</p>
                         </div>
 
-                        {/* Display the date user is entering for */}
-                        <div className="text-right">
-                            <p className="text-xs text-zinc-500 uppercase tracking-wider">Entering for</p>
-                            <p className="text-lg font-bold text-zinc-900">{format(date, "MMM dd, yyyy")}</p>
-                        </div>
+                        {/* Display the date user is entering for (non-admin only) */}
+                        {!isAdmin && (
+                            <div className="text-right">
+                                <p className="text-[10px] sm:text-xs text-zinc-500 uppercase tracking-wider">Entering for</p>
+                                <p className="text-base sm:text-lg font-bold text-zinc-900">{format(date, "MMM dd, yyyy")}</p>
+                            </div>
+                        )}
                         {isAdmin && (
                             <div className="flex items-center gap-1 bg-white border border-zinc-200 rounded-lg p-1 shadow-sm">
                                 <button onClick={() => { setDate(addDays(date, -1)); setManualOverride(true); }} className="p-2 hover:bg-zinc-50 rounded-md text-zinc-600">
@@ -294,6 +316,10 @@ export default function SalesPage() {
                                 onChange={(e) => setCash(e.target.value)}
                                 disabled={cashSaved && !cashEditing}
                             />
+                            {/* Show submitter info in grey */}
+                            {cashSaved && cashSubmittedBy && (
+                                <p className="text-xs text-zinc-400">Updated by: {cashSubmittedBy}</p>
+                            )}
                             <div className="flex gap-2">
                                 {!cashSaved && (
                                     <Button className="w-full gap-2" onClick={saveCash}>
@@ -360,6 +386,22 @@ export default function SalesPage() {
                         </div>
                     ) : null}
                 </div>
+
+                {/* Success Modal for Regular Users */}
+                {showSaveSuccess && !isAdmin && (
+                    <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50 animate-in fade-in duration-300 p-4">
+                        <div className="bg-white rounded-2xl shadow-2xl p-6 sm:p-8 max-w-sm w-full text-center animate-in scale-in duration-300">
+                            <div className="w-14 h-14 sm:w-16 sm:h-16 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                                <svg className="w-7 h-7 sm:w-8 sm:h-8 text-emerald-600 animate-bounce" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                </svg>
+                            </div>
+                            <h3 className="text-xl sm:text-2xl font-bold text-zinc-900 mb-2">Thank You!</h3>
+                            <p className="text-sm sm:text-base text-zinc-600 mb-4">Thanks for your calculation. Your entry has been recorded successfully.</p>
+                            <p className="text-xs sm:text-sm text-zinc-400">This message will close automatically...</p>
+                        </div>
+                    </div>
+                )}
             </div>
         </div>
     );
