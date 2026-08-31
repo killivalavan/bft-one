@@ -39,8 +39,8 @@ export default function FillTimesheetPage() {
             setLoading(true);
             try {
                 // Fetch Users (Filter Admins)
-                const { data: us } = await supabaseClient.from('profiles').select('id, email, base_salary_cents, per_day_salary_cents, is_admin').order('email');
-                const staff = (us || []).filter((u: any) => !u.is_admin);
+                const us = (await supabaseClient.from('profiles').select('id, email, base_salary_cents, per_day_salary_cents, is_admin').order('email')).data;
+                const staff = (us || []).filter(user => !user.is_admin && !user.email?.toLowerCase().includes('admin'));
 
                 // Restore Order
                 const savedOrder = localStorage.getItem('bft_attendance_order');
@@ -143,7 +143,7 @@ export default function FillTimesheetPage() {
 
                 // Late Deduction
                 if (newState.lateMinutes > 0) {
-                    const amount = newState.lateMinutes >= 60 ? 20000 : newState.lateMinutes >= 30 ? 10000 : 5000;
+                    const amount = newState.lateMinutes >= 120 ? 30000 : newState.lateMinutes >= 60 ? 20000 : newState.lateMinutes >= 30 ? 10000 : 5000;
                     const { error: salError } = await supabaseClient.from('salary_entries').insert({
                         user_id: userId, entry_date: dateKey, amount_cents: amount, reason: 'late', kind: 'deduction'
                     });
@@ -187,6 +187,25 @@ export default function FillTimesheetPage() {
             toast({ title: "Updated", variant: "success", duration: 1000 });
         } catch (e: any) {
             toast({ title: "Failed", description: e.message, variant: "error" });
+        }
+    }
+
+    // Add Custom Allowance / Addition
+    async function addCustomAllowance(userId: string, reason: string, amountRupees: number) {
+        try {
+            const amountCents = Math.round(amountRupees * 100);
+            const { error } = await supabaseClient.from('salary_entries').insert({
+                user_id: userId,
+                entry_date: dateKey,
+                amount_cents: amountCents,
+                reason: reason,
+                kind: 'addition'
+            });
+            if (error) throw error;
+            toast({ title: `Added ₹${amountRupees}`, description: `Allowance: ${reason}`, variant: "success" });
+        } catch (e: any) {
+            toast({ title: "Failed to add allowance", description: e.message, variant: "error" });
+            throw e;
         }
     }
 
@@ -305,6 +324,7 @@ export default function FillTimesheetPage() {
                                     user={user}
                                     current={dailyLogs[user.id] || { status: 'unmarked', lateMinutes: 0, extraHours: 0 }}
                                     onChange={updateAttendance}
+                                    onAddAllowance={addCustomAllowance}
                                 />
                             </div>
                         ))}

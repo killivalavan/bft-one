@@ -75,8 +75,8 @@ export default function TimesheetPage() {
     // Auto late deduction... (logic unchanged)
     try {
       if (minutes_late >= 15) {
-        // Determine tier: 60+ => 200rs, 30+ => 100rs, 15+ => 50rs
-        const desired = minutes_late >= 60 ? 20000 : minutes_late >= 30 ? 10000 : 5000;
+        // Determine tier: 120+ => 300rs, 60+ => 200rs, 30+ => 100rs, 15+ => 50rs
+        const desired = minutes_late >= 120 ? 30000 : minutes_late >= 60 ? 20000 : minutes_late >= 30 ? 10000 : 5000;
         const { data: existing } = await supabaseClient.from('salary_entries')
           .select('id,amount_cents').eq('user_id', user.id).eq('entry_date', dateKey).eq('reason', 'late').maybeSingle();
         if (!existing) {

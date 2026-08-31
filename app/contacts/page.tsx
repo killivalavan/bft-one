@@ -53,7 +53,7 @@ export default function ContactsPage() {
             if (empError) throw empError;
 
             // Filter out admins from the system employee list
-            const systemEmps = ((empData || []) as Employee[]).filter(e => !e.is_admin);
+            const systemEmps = ((empData || []) as Employee[]).filter(e => !e.is_admin && !e.email?.toLowerCase().includes('admin'));
 
             // 2. Fetch External Contacts
             const { data: extData, error: extError } = await supabaseClient

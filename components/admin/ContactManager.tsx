@@ -87,7 +87,7 @@ export function ContactManager({
     }
 
     // Filter lists
-    const employees = systemUsers.filter(u => !u.is_admin);
+    const employees = systemUsers.filter(u => !u.is_admin && !u.email?.toLowerCase().includes('admin'));
     const emergencyContacts = contacts.filter(c => c.role.toLowerCase() === 'emergency');
     const manualEntries = contacts.filter(c => c.role.toLowerCase() !== 'emergency');
 

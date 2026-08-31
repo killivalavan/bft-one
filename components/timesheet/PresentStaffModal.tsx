@@ -50,18 +50,26 @@ export function PresentStaffModal({ open, onClose, date }: PresentStaffModalProp
                 return;
             }
 
-            // 2. Get profiles
+            // 2. Get profiles (filter out admins)
             const userIds = sheets.map(s => s.user_id);
             const { data: profiles, error: profError } = await supabaseClient
                 .from("profiles")
-                .select("id, full_name, email")
+                .select("id, full_name, email, is_admin")
                 .in("id", userIds);
 
             if (profError) throw profError;
 
+            // Filter out admins
+            const nonAdminProfiles = (profiles || []).filter(p => !p.is_admin && !p.email?.toLowerCase().includes("admin"));
+            const adminUserIds = new Set(
+                (profiles || [])
+                    .filter(p => p.is_admin || p.email?.toLowerCase().includes("admin"))
+                    .map(p => p.id)
+            );
+
             // 3. Map
             const profMap = new Map();
-            profiles?.forEach(p => {
+            nonAdminProfiles.forEach(p => {
                 let displayName = p.full_name;
                 if (!displayName && p.email) {
                     // Format email to name: "john.doe@example.com" -> "John Doe"
@@ -71,11 +79,13 @@ export function PresentStaffModal({ open, onClose, date }: PresentStaffModalProp
                 profMap.set(p.id, displayName || "Unknown User");
             });
 
-            const merged = sheets.map(s => ({
-                user_id: s.user_id,
-                full_name: profMap.get(s.user_id) || "Unknown User",
-                check_in: s.check_in
-            }));
+            const merged = sheets
+                .filter(s => !adminUserIds.has(s.user_id))
+                .map(s => ({
+                    user_id: s.user_id,
+                    full_name: profMap.get(s.user_id) || "Unknown User",
+                    check_in: s.check_in
+                }));
 
             // Sort by check-in time
             merged.sort((a, b) => new Date(a.check_in).getTime() - new Date(b.check_in).getTime());

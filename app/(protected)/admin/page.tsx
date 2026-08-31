@@ -75,7 +75,7 @@ export default function AdminPage() {
     const salaryTotals = new Map<string, { base: number; allowance: number; additions: number; deductions: number }>();
 
     allUsers.forEach((user: any) => {
-      if (user.is_admin) return;
+      if (user.is_admin || user.email?.toLowerCase().includes('admin')) return;
       salaryTotals.set(user.id, {
         base: Number(user.base_salary_cents || 0),
         allowance: Number(user.fixed_allowance_cents || 0),

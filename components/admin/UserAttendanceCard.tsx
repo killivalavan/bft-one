@@ -13,13 +13,18 @@ interface UserAttendanceCardProps {
     user: { id: string; email: string };
     current: AttendanceState;
     onChange: (id: string, state: AttendanceState) => Promise<void>;
+    onAddAllowance?: (userId: string, reason: string, amount: number) => Promise<void>;
 }
 
-export function UserAttendanceCard({ user, current, onChange }: UserAttendanceCardProps) {
+export function UserAttendanceCard({ user, current, onChange, onAddAllowance }: UserAttendanceCardProps) {
     const [status, setStatus] = useState<'present' | 'leave' | 'half_day' | 'off' | 'unmarked'>(current.status);
     const [late, setLate] = useState<number>(current.lateMinutes);
     const [extraHours, setExtraHours] = useState<number>(current.extraHours || 0);
     const [loading, setLoading] = useState(false);
+
+    const [allowanceReason, setAllowanceReason] = useState("");
+    const [allowanceAmount, setAllowanceAmount] = useState("");
+    const [addingAllowance, setAddingAllowance] = useState(false);
 
     // Sync if parent updates (e.g. date change)
     useEffect(() => {
@@ -55,10 +60,25 @@ export function UserAttendanceCard({ user, current, onChange }: UserAttendanceCa
         }
     }
 
+    async function handleAddAllowanceSubmit() {
+        if (!allowanceReason.trim() || !allowanceAmount || Number(allowanceAmount) <= 0) return;
+        if (!onAddAllowance) return;
+        setAddingAllowance(true);
+        try {
+            await onAddAllowance(user.id, allowanceReason.trim(), Number(allowanceAmount));
+            setAllowanceReason("");
+            setAllowanceAmount("");
+        } catch (err) {
+            console.error(err);
+        } finally {
+            setAddingAllowance(false);
+        }
+    }
+
     const initials = user.email.slice(0, 2).toUpperCase();
 
     return (
-        <div className="flex-shrink-0 w-[280px] h-[360px] bg-white rounded-3xl border border-zinc-200 shadow-sm p-4 flex flex-col justify-between hover:shadow-md transition-shadow">
+        <div className="flex-shrink-0 w-[280px] min-h-[440px] h-auto bg-white rounded-3xl border border-zinc-200 shadow-sm p-4 flex flex-col justify-between hover:shadow-md transition-shadow">
             <div className="flex flex-col items-center">
                 <div className="w-12 h-12 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center text-lg font-bold mb-2 border-2 border-indigo-100">
                     {initials}
@@ -129,11 +149,10 @@ export function UserAttendanceCard({ user, current, onChange }: UserAttendanceCa
                         className="w-full h-9 px-2 rounded-lg border border-zinc-200 bg-zinc-50/50 text-xs font-medium focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none"
                     >
                         <option value={0}>On Time</option>
-                        <option value={15}>15 Mins Late (₹50)</option>
-                        <option value={30}>30 Mins Late (₹100)</option>
-                        <option value={60}>1 Hr Late (₹200)</option>
-                        <option value={120}>2 Hrs Late (₹200)</option>
-                        <option value={180}>3 Hrs Late</option>
+                        <option value={15}>15-30 Mins Late (₹50)</option>
+                        <option value={30}>30 Mins - 1 Hr Late (₹100)</option>
+                        <option value={60}>1-2 Hrs Late (₹200)</option>
+                        <option value={120}>2-3 Hrs Late (₹300)</option>
                     </select>
 
                     <p className="text-[9px] font-semibold text-zinc-400 uppercase mt-2 mb-1">Overtime (Extra Hours)</p>
@@ -152,6 +171,40 @@ export function UserAttendanceCard({ user, current, onChange }: UserAttendanceCa
                                 {h === 0 ? '-' : h}
                             </button>
                         ))}
+                    </div>
+                </div>
+
+                {/* Additional Salary Entry (Allowance / Bonus) */}
+                <div className="pt-2 border-t border-zinc-100 mt-2">
+                    <p className="text-[9px] font-semibold text-zinc-400 uppercase mb-1">Add Allowance / Bonus</p>
+                    <div className="space-y-1.5">
+                        <input
+                            type="text"
+                            placeholder="Reason (e.g. shift allowance)"
+                            value={allowanceReason}
+                            onChange={(e) => setAllowanceReason(e.target.value)}
+                            className="w-full h-8 px-2.5 rounded-lg border border-zinc-200 bg-zinc-50/50 text-xs font-medium focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none text-zinc-800 placeholder:text-zinc-400"
+                        />
+                        <div className="flex gap-1.5">
+                            <div className="relative flex-1">
+                                <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-zinc-400 font-medium">₹</span>
+                                <input
+                                    type="number"
+                                    placeholder="300"
+                                    value={allowanceAmount}
+                                    onChange={(e) => setAllowanceAmount(e.target.value)}
+                                    className="w-full h-8 pl-6 pr-2 rounded-lg border border-zinc-200 bg-zinc-50/50 text-xs font-medium focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none text-zinc-800 placeholder:text-zinc-400"
+                                />
+                            </div>
+                            <button
+                                type="button"
+                                onClick={handleAddAllowanceSubmit}
+                                disabled={addingAllowance || !allowanceReason.trim() || !allowanceAmount || Number(allowanceAmount) <= 0}
+                                className="h-8 px-3 bg-indigo-600 hover:bg-indigo-700 disabled:bg-zinc-200 disabled:text-zinc-400 text-white text-xs font-semibold rounded-lg transition-colors shrink-0 flex items-center justify-center min-w-[50px]"
+                            >
+                                {addingAllowance ? "..." : "Add"}
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
