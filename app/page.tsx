@@ -8,7 +8,7 @@ import { HomeHeader } from "@/components/home/HomeHeader";
 import { DashboardGrid } from "@/components/home/DashboardGrid";
 import {
   CalendarCheck2, Coffee, Shield,
-  CalendarDays, Wallet, Boxes, Bell, LayoutDashboard, Contact, Banknote, CalendarPlus, TrendingDown
+  CalendarDays, Wallet, Boxes, Bell, LayoutDashboard, Contact, Banknote, CalendarPlus, TrendingDown, Receipt
 } from "lucide-react";
 
 export default function Home() {
@@ -29,62 +29,6 @@ export default function Home() {
 
   // Define Items
   const baseItems = [
-    {
-      label: "Timesheet",
-      href: "/timesheet",
-      icon: CalendarCheck2,
-      colorClass: "text-sky-600",
-      bgClass: "bg-sky-50",
-      description: "Log attendance and daily work."
-    },
-    {
-      label: "Calendar",
-      href: "/calendar",
-      icon: CalendarDays,
-      colorClass: "text-indigo-600",
-      bgClass: "bg-indigo-50",
-      description: "View important dates and holidays."
-    },
-    ...(userEmail && (flags ? !flags.isAdmin : true) ? [{
-      label: "My Salary",
-      href: "/mysalary",
-      icon: Wallet,
-      colorClass: "text-emerald-600",
-      bgClass: "bg-emerald-50",
-      description: "Check your earnings and stats."
-    }] : []),
-    ...(userEmail ? [{
-      label: "Late Deductions",
-      href: "/deductions",
-      icon: TrendingDown,
-      colorClass: "text-red-600",
-      bgClass: "bg-red-50",
-      description: "View team late deduction details."
-    }] : []),
-    {
-      label: "Billing",
-      href: "/billing",
-      icon: Coffee,
-      colorClass: "text-amber-600",
-      bgClass: "bg-amber-50",
-      description: "Manage billing and invoices."
-    },
-    {
-      label: "Pending Orders",
-      href: "/pending",
-      icon: LayoutDashboard,
-      colorClass: "text-rose-600",
-      bgClass: "bg-rose-50",
-      description: "View and manage active orders."
-    },
-    {
-      label: "All Contacts",
-      href: "/contacts",
-      icon: Contact,
-      colorClass: "text-teal-600",
-      bgClass: "bg-teal-50",
-      description: "Employee & Emergency directory."
-    },
     ...(flags?.isAdmin ? [{
       label: "Admin Panel",
       href: "/admin",
@@ -101,6 +45,62 @@ export default function Home() {
       bgClass: "bg-fuchsia-50",
       description: "Bulk update attendance."
     }] : []),
+    ...(userEmail && (flags ? !flags.isAdmin : true) ? [{
+      label: "My Salary",
+      href: "/mysalary",
+      icon: Wallet,
+      colorClass: "text-emerald-600",
+      bgClass: "bg-emerald-50",
+      description: "Check your earnings and stats."
+    }] : []),
+    {
+      label: "Daily Sales",
+      href: "/sales",
+      icon: Banknote,
+      colorClass: "text-emerald-600",
+      bgClass: "bg-emerald-50",
+      description: "Add daily sales."
+    },
+    {
+      label: "Daily Expense",
+      href: "/expenses",
+      icon: Receipt,
+      colorClass: "text-cyan-600",
+      bgClass: "bg-cyan-50",
+      description: "Log daily purchases and spends."
+    },
+    ...(userEmail ? [{
+      label: "Late Deductions",
+      href: "/deductions",
+      icon: TrendingDown,
+      colorClass: "text-red-600",
+      bgClass: "bg-red-50",
+      description: "View team late deduction details."
+    }] : []),
+    {
+      label: "Calendar",
+      href: "/calendar",
+      icon: CalendarDays,
+      colorClass: "text-indigo-600",
+      bgClass: "bg-indigo-50",
+      description: "View important dates and holidays."
+    },
+    {
+      label: "Timesheet",
+      href: "/timesheet",
+      icon: CalendarCheck2,
+      colorClass: "text-sky-600",
+      bgClass: "bg-sky-50",
+      description: "Log attendance and daily work."
+    },
+    {
+      label: "All Contacts",
+      href: "/contacts",
+      icon: Contact,
+      colorClass: "text-teal-600",
+      bgClass: "bg-teal-50",
+      description: "Employee & Emergency directory."
+    },
     ...(flags?.isStockManager ? [{
       label: "Stock Manager",
       href: "/stock",
@@ -110,12 +110,20 @@ export default function Home() {
       description: "Control inventory and supplies."
     }] : []),
     {
-      label: "Daily Sales",
-      href: "/sales",
-      icon: Banknote,
-      colorClass: "text-emerald-600",
-      bgClass: "bg-emerald-50",
-      description: "Add daily sales."
+      label: "Billing",
+      href: "/billing",
+      icon: Coffee,
+      colorClass: "text-amber-600",
+      bgClass: "bg-amber-50",
+      description: "Manage billing and invoices."
+    },
+    {
+      label: "Pending Orders",
+      href: "/pending",
+      icon: LayoutDashboard,
+      colorClass: "text-rose-600",
+      bgClass: "bg-rose-50",
+      description: "View and manage active orders."
     },
     {
       label: "Notifications",

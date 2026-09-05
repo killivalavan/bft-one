@@ -7,8 +7,8 @@ import { useUser } from "@/lib/hooks/useUser";
 import { useProfile } from "@/lib/hooks/useProfile";
 import { cn } from "@/lib/utils/cn";
 import {
-  Home, CalendarCheck2, Coffee, ClipboardList, Shield,
-  Menu, User, LogOut, ChevronDown, Bell
+  Home, CalendarCheck2, CalendarDays, Coffee, ClipboardList, Shield,
+  Menu, User, LogOut, ChevronDown, Bell, Wallet, TrendingUp
 } from "lucide-react";
 
 export default function Navbar() {
@@ -62,10 +62,13 @@ export default function Navbar() {
   // Standard Links
   const allLinks = [
     { href: "/", label: "Home", icon: Home },
-    { href: "/timesheet", label: "Timesheet", icon: CalendarCheck2 },
-    { href: "/billing", label: "Billing", icon: Coffee },
-    { href: "/pending", label: "Pending", icon: ClipboardList },
-    ...(flags?.isAdmin ? [{ href: "/admin", label: "Admin", icon: Shield }] : []),
+    ...(flags?.isAdmin
+      ? [{ href: "/admin/fill-timesheet", label: "Fill Timesheet", icon: CalendarCheck2 }]
+      : [{ href: "/sales", label: "Daily Sales", icon: TrendingUp }]),
+    { href: "/calendar", label: "Calendar", icon: CalendarDays },
+    ...(flags?.isAdmin
+      ? [{ href: "/admin", label: "Admin", icon: Shield }]
+      : [{ href: "/mysalary", label: "My Salary", icon: Wallet }]),
   ];
 
   // Focus Mode Links (Billing & Pending)
@@ -172,15 +175,6 @@ export default function Navbar() {
                       >
                         <User size={16} className="text-zinc-400" /> Profile
                       </Link>
-                      {!flags?.isAdmin && (
-                        <Link
-                          href="/mysalary"
-                          className="flex items-center gap-2 px-4 py-2 text-sm text-zinc-700 hover:bg-zinc-50 transition-colors"
-                          onClick={() => setMenuOpen(false)}
-                        >
-                          <Coffee size={16} className="text-zinc-400" /> My Salary
-                        </Link>
-                      )}
                       <button
                         onClick={handleLogout}
                         className="w-full text-left flex items-center gap-2 px-4 py-2 text-sm text-rose-600 hover:bg-rose-50 transition-colors"
@@ -199,8 +193,8 @@ export default function Navbar() {
       {/* Mobile Bottom Nav - Only show if NOT in focus mode */}
       {!isFocusMode && (
         <div className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-zinc-200 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] safe-area-pb">
-          <div className="flex items-center justify-around h-16 px-2">
-            {allLinks.slice(0, 4).map(l => {
+          <div className="flex items-center justify-around h-16 px-2 overflow-x-auto">
+            {allLinks.map(l => {
               const isActive = pathname === l.href;
               return (
                 <Link
