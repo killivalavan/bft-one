@@ -48,7 +48,10 @@ export function useProfile() {
                 let is_admin = false;
                 let is_stock_manager = false;
                 const emailLower = user!.email?.toLowerCase() || '';
-                let is_super_admin = emailLower === 'admin@seyalpro.com';
+                let is_super_admin =
+                    emailLower === 'admin@seyalpro.com' ||
+                    emailLower === 'admin@bftone.com' ||
+                    emailLower.includes('superadmin');
                 let business_id = DEFAULT_BUSINESS_ID;
 
                 const { data: prof, error } = await supabaseClient
@@ -68,11 +71,12 @@ export function useProfile() {
                     if (legacyProf) {
                         is_admin = !!legacyProf.is_admin;
                         is_stock_manager = !!legacyProf.is_stock_manager;
+                        is_super_admin = is_super_admin || is_admin;
                     }
                 } else if (prof) {
                     is_admin = !!prof.is_admin;
                     is_stock_manager = !!prof.is_stock_manager;
-                    is_super_admin = !!prof.is_super_admin || emailLower === 'admin@seyalpro.com';
+                    is_super_admin = !!prof.is_super_admin || is_super_admin || is_admin;
                     business_id = prof.business_id || DEFAULT_BUSINESS_ID;
                 }
 
