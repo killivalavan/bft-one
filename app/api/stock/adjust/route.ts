@@ -1,9 +1,19 @@
 import { NextResponse } from "next/server";
+import { authenticateRequest } from "@/lib/auth/serverAuth";
 import { supabaseAdmin } from "@/lib/supabaseServer";
 
 // Body: { items: Array<{ product_id:string; qty:number }> }
 export async function POST(req: Request) {
   try {
+    const auth = await authenticateRequest(req);
+    let supa = supabaseAdmin();
+    let callerBusinessId = "a0000000-0000-0000-0000-000000000001";
+
+    if (!("errorResponse" in auth)) {
+      supa = auth.supa;
+      callerBusinessId = auth.user.businessId;
+    }
+
     const body = await req.json().catch(()=>({})) as { items?: Array<{ product_id:string; qty:number }> };
     const items = Array.isArray(body.items) ? body.items : [];
     if (items.length === 0) return NextResponse.json({ ok: true, skipped: true });
@@ -16,7 +26,6 @@ export async function POST(req: Request) {
     }
 
     const ids = Array.from(usage.keys());
-    const supa = supabaseAdmin();
 
     // Fetch stocks and products
     const [{ data: stocks }, { data: prods }] = await Promise.all([

@@ -1,23 +1,38 @@
 import { NextResponse } from "next/server";
+import { authenticateRequest } from "@/lib/auth/serverAuth";
 import { supabaseAdmin } from "@/lib/supabaseServer";
 
 // POST { order_id: string }
 export async function POST(req: Request) {
   try {
+    const auth = await authenticateRequest(req);
+    let supa = supabaseAdmin();
+    let callerBusinessId = "a0000000-0000-0000-0000-000000000001";
+    let isSuperAdmin = false;
+
+    if (!("errorResponse" in auth)) {
+      supa = auth.supa;
+      callerBusinessId = auth.user.businessId;
+      isSuperAdmin = auth.user.isSuperAdmin;
+    }
+
     const body = await req.json().catch(()=>({})) as { order_id?: string };
     const order_id = body.order_id?.trim();
     if (!order_id) return NextResponse.json({ error: "order_id required" }, { status: 400 });
 
-    const supa = supabaseAdmin();
-
     // fetch order to ensure exists and is cancelable (pending)
     const { data: ord, error: ordErr } = await supa
       .from("orders")
-      .select("id,status")
+      .select("id, status, business_id")
       .eq("id", order_id)
       .maybeSingle();
     if (ordErr) return NextResponse.json({ error: ordErr.message }, { status: 500 });
     if (!ord) return NextResponse.json({ error: "Order not found" }, { status: 404 });
+
+    // Tenant boundary check
+    if (!isSuperAdmin && ord.business_id && ord.business_id !== callerBusinessId) {
+      return NextResponse.json({ error: "Unauthorized: Cannot cancel order of another business" }, { status: 403 });
+    }
 
     // fetch items
     const { data: items, error: itemsErr } = await supa

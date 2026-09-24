@@ -12,6 +12,7 @@ import { ContactManager } from "@/components/admin/ContactManager";
 import { SalesManager } from "@/components/admin/SalesManager";
 import { Loader2, ShieldAlert } from "lucide-react";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { useTenant } from "@/lib/context/TenantContext";
 
 type Profile = { id: string; email: string; is_admin: boolean; is_stock_manager?: boolean | null; in_time?: string | null; base_salary_cents?: number | null; per_day_salary_cents?: number | null; age?: number | null; dob?: string | null; contact_number?: string | null; emergency_contact_number?: string | null };
 type Category = { id: string; name: string; icon_url?: string | null };
@@ -22,6 +23,7 @@ enum AdminView { Loading, NotAdmin, Ready }
 
 export default function AdminPage() {
   const { toast } = useToast();
+  const { business } = useTenant();
   const [gate, setGate] = useState<AdminView>(AdminView.Loading);
   const [tab, setTab] = useState<"users" | "products" | "reports" | "contacts" | "sales">("sales");
 
@@ -37,13 +39,29 @@ export default function AdminPage() {
   const [confirmState, setConfirmState] = useState<{ open: boolean; title: string; desc: string; action?: () => Promise<void> }>({ open: false, title: "", desc: "" });
 
   async function load() {
-    // Try fetching with new 'dob' column
-    let { data: us, error } = await supabaseClient.from("profiles").select("id,email,is_admin,is_stock_manager,in_time,base_salary_cents,fixed_allowance_cents,per_day_salary_cents,age,dob,contact_number,emergency_contact_number").order("email");
+    const bizId = business?.id;
+
+    // Fetch profiles scoped to business
+    let profileQuery = supabaseClient
+      .from("profiles")
+      .select("id,email,is_admin,is_stock_manager,in_time,base_salary_cents,fixed_allowance_cents,per_day_salary_cents,age,dob,contact_number,emergency_contact_number")
+      .order("email");
+    if (bizId) {
+      profileQuery = profileQuery.eq("business_id", bizId);
+    }
+    let { data: us, error } = await profileQuery;
 
     if (error) {
       console.warn("Full fetch failed, trying fallback...", error);
       // Fallback: Fetch without 'dob' in case column is missing
-      const { data: usFallback, error: errFallback } = await supabaseClient.from("profiles").select("id,email,is_admin,is_stock_manager,in_time,base_salary_cents,per_day_salary_cents,age,contact_number,emergency_contact_number").order("email");
+      let fbQuery = supabaseClient
+        .from("profiles")
+        .select("id,email,is_admin,is_stock_manager,in_time,base_salary_cents,per_day_salary_cents,age,contact_number,emergency_contact_number")
+        .order("email");
+      if (bizId) {
+        fbQuery = fbQuery.eq("business_id", bizId);
+      }
+      const { data: usFallback, error: errFallback } = await fbQuery;
 
       if (errFallback) {
         console.error("Fallback fetch failed", errFallback);
@@ -66,11 +84,15 @@ export default function AdminPage() {
     const startStr = monthStart.toISOString().slice(0, 10);
     const endStr = monthEnd.toISOString().slice(0, 10);
 
-    const { data: salaryEntries } = await supabaseClient
+    let salaryQuery = supabaseClient
       .from("salary_entries")
       .select("user_id, amount_cents, kind")
       .gte("entry_date", startStr)
       .lte("entry_date", endStr);
+    if (bizId) {
+      salaryQuery = salaryQuery.eq("business_id", bizId);
+    }
+    const { data: salaryEntries } = await salaryQuery;
 
     const salaryTotals = new Map<string, { base: number; allowance: number; additions: number; deductions: number }>();
 
@@ -111,11 +133,19 @@ export default function AdminPage() {
     setTotalPayroll(payrollTotal);
     setTotalNetPayroll(netPayrollTotal);
 
-    const { data: cats } = await supabaseClient.from("categories").select("*").order("name");
+    let catQuery = supabaseClient.from("categories").select("*").order("name");
+    if (bizId) catQuery = catQuery.eq("business_id", bizId);
+    const { data: cats } = await catQuery;
     setCategories(cats || []);
-    const { data: prods } = await supabaseClient.from("products").select("*").order("name");
+
+    let prodQuery = supabaseClient.from("products").select("*").order("name");
+    if (bizId) prodQuery = prodQuery.eq("business_id", bizId);
+    const { data: prods } = await prodQuery;
     setProducts(prods || []);
-    const { data: conts } = await supabaseClient.from("external_contacts").select("*").order("role", { ascending: true });
+
+    let contQuery = supabaseClient.from("external_contacts").select("*").order("role", { ascending: true });
+    if (bizId) contQuery = contQuery.eq("business_id", bizId);
+    const { data: conts } = await contQuery;
     setContacts(conts || []);
   }
 
@@ -128,21 +158,55 @@ export default function AdminPage() {
       setGate(AdminView.Ready);
       await load();
     })();
-  }, []);
+  }, [business?.id]);
 
   // User Actions
-  async function createUser(email: string, password: string) {
-    const res = await fetch("/api/seed-admin", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, password, isAdmin: false }) });
-    if (!res.ok) { toast({ title: "Failed to create user", variant: "error" }); return; }
-    await load();
-    toast({ title: "User created", variant: "success" });
+  async function createUser(email: string, password?: string, isAdmin: boolean = false, sendInvite: boolean = false) {
+    try {
+      const { data: { session } } = await supabaseClient.auth.getSession();
+      const token = session?.access_token;
+      const res = await fetch("/api/seed-admin", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify({ email, password, isAdmin, sendInvite, businessId: business?.id })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast({ title: "Failed to create user", description: data?.error || "Unknown error", variant: "error" });
+        return;
+      }
+      await load();
+      toast({ title: sendInvite ? "Invitation sent" : "User created", variant: "success" });
+    } catch (e: any) {
+      toast({ title: "Failed to create user", description: e?.message, variant: "error" });
+    }
   }
 
   async function updatePasswordFor(email: string, newPassword: string) {
     if (!newPassword) { toast({ title: "Enter a password", variant: "error" }); return; }
-    const res = await fetch("/api/seed-admin", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, password: newPassword, isAdmin: false }) });
-    if (!res.ok) { toast({ title: "Failed to update password", variant: "error" }); return; }
-    toast({ title: "Password updated", variant: "success" });
+    try {
+      const { data: { session } } = await supabaseClient.auth.getSession();
+      const token = session?.access_token;
+      const res = await fetch("/api/seed-admin", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify({ email, password: newPassword, isAdmin: false, businessId: business?.id })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast({ title: "Failed to update password", description: data?.error || "Unknown error", variant: "error" });
+        return;
+      }
+      toast({ title: "Password updated", variant: "success" });
+    } catch (e: any) {
+      toast({ title: "Failed to update password", description: e?.message, variant: "error" });
+    }
   }
 
   async function removeUser(userId: string) {
@@ -152,8 +216,17 @@ export default function AdminPage() {
       desc: "This will permanently remove the user from the system. This action cannot be undone.",
       action: async () => {
         try {
-          const res = await fetch("/api/admin-users", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId }) });
-          const data = await res.json();
+          const { data: { session } } = await supabaseClient.auth.getSession();
+          const token = session?.access_token;
+          const res = await fetch("/api/admin-users", {
+            method: "DELETE",
+            headers: {
+              "Content-Type": "application/json",
+              ...(token ? { Authorization: `Bearer ${token}` } : {})
+            },
+            body: JSON.stringify({ userId })
+          });
+          const data = await res.json().catch(() => ({}));
           if (!res.ok) { 
             toast({ title: "Failed to remove user", description: data?.error || "Unknown error", variant: "error" });
             return; 
@@ -259,7 +332,18 @@ export default function AdminPage() {
       const baseSalary = prof.base_salary_cents || 0;
       const netPay = baseSalary + totalAdditions - totalDeductions;
 
-      await generatePayslipPdf({ userEmail: prof.email, monthLabel, baseSalary, totalDeductions, totalAdditions, netPay, entries: finalEntries as any, leaveDays: leaveCount || 0 });
+      await generatePayslipPdf({
+        userEmail: prof.email,
+        monthLabel,
+        baseSalary,
+        totalDeductions,
+        totalAdditions,
+        netPay,
+        entries: finalEntries as any,
+        leaveDays: leaveCount || 0,
+        businessName: business?.name || "BFT Navalur",
+        logoUrl: business?.logo_url || "/logo_payslip.jpg",
+      });
       toast({ title: `Payslip downloaded for ${prof.email}`, variant: "success" });
     } catch (e: any) {
       console.error(e);
@@ -272,7 +356,11 @@ export default function AdminPage() {
   // Product Actions
   async function addCategory(name: string) {
     if (!name.trim()) return null;
-    const { data, error } = await supabaseClient.from("categories").insert({ name }).select("id").single();
+    const { data, error } = await supabaseClient
+      .from("categories")
+      .insert({ name, business_id: business?.id })
+      .select("id")
+      .single();
     if (error) { toast({ title: "Category failed", description: error.message, variant: "error" }); return null; }
     await load();
     toast({ title: "Category created", variant: "success" });
@@ -289,7 +377,7 @@ export default function AdminPage() {
       const { data: pub } = supabaseClient.storage.from('product-images').getPublicUrl(path);
       image_url = pub.publicUrl;
     }
-    const payload: any = { name, price_cents: Math.round(price * 100), category_id, image_url, active: true };
+    const payload: any = { name, price_cents: Math.round(price * 100), category_id, image_url, active: true, business_id: business?.id };
     const { error } = await supabaseClient.from("products").insert(payload);
     if (error) { toast({ title: "Product failed", description: error.message, variant: "error" }); }
     else { await load(); toast({ title: "Product added", variant: "success" }); }
@@ -352,7 +440,7 @@ export default function AdminPage() {
 
   // Contact Actions
   async function addContact(contact: Omit<ExternalContact, "id">) {
-    const { error } = await supabaseClient.from("external_contacts").insert([contact]);
+    const { error } = await supabaseClient.from("external_contacts").insert([{ ...contact, business_id: business?.id }]);
     if (error) { toast({ title: "Failed to add contact", description: error.message, variant: "error" }); return; }
     await load();
     toast({ title: "Contact added", variant: "success" });

@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/Button";
 import { useToast } from "@/components/ui/Toast";
 import { cn } from "@/lib/utils/cn";
 import { Check } from "lucide-react";
+import { useTenant } from "@/lib/context/TenantContext";
 
 type Category = { id: string; name: string; icon_url?: string | null };
 type Product = { id: string; name: string; price_cents: number; image_url: string | null; category_id: string; mrp_cents?: number | null; unit_label?: string | null; subtitle?: string | null; options_json?: any };
@@ -14,6 +15,7 @@ type Stock = { product_id: string; max_qty: number; available_qty: number; notif
 
 export default function BillingPage() {
   const { toast } = useToast();
+  const { business } = useTenant();
   const [categories, setCategories] = useState<Category[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [stocks, setStocks] = useState<Record<string, Stock>>({});
@@ -27,34 +29,19 @@ export default function BillingPage() {
   useEffect(() => {
     (async () => {
       try {
-        // 1) Warm start from session cache
-        try {
-          const cc = sessionStorage.getItem('billing_categories');
-          const cp = sessionStorage.getItem('billing_products');
-          const cs = sessionStorage.getItem('billing_stocks');
-          if (cc) {
-            const cats = JSON.parse(cc || 'null');
-            if (Array.isArray(cats)) { setCategories(cats); setActiveCat((cats && cats[0]?.id) || undefined); }
-          }
-          if (cp) {
-            const prods = JSON.parse(cp || 'null');
-            if (Array.isArray(prods)) setProducts(prods);
-          }
-          if (cs) {
-            const stocksArr = JSON.parse(cs || 'null');
-            if (Array.isArray(stocksArr)) {
-              const map: Record<string, Stock> = {};
-              stocksArr.forEach((s: any) => { if (s?.product_id) map[s.product_id] = s; });
-              setStocks(map);
-            }
-          }
-        } catch { }
+        let catsQuery = supabaseClient.from("categories").select("*").order("name");
+        if (business?.id) catsQuery = catsQuery.eq("business_id", business.id);
 
-        // 2) Fetch fresh data in parallel and cache
+        let prodsQuery = supabaseClient.from("products").select("*").eq("active", true).order("name");
+        if (business?.id) prodsQuery = prodsQuery.eq("business_id", business.id);
+
+        let stkQuery = supabaseClient.from('product_stocks').select('product_id,max_qty,available_qty,notify_at_count');
+        if (business?.id) stkQuery = stkQuery.eq("business_id", business.id);
+
         const [catsRes, prodsRes, stkRes] = await Promise.all([
-          supabaseClient.from("categories").select("*").order("name"),
-          supabaseClient.from("products").select("*").eq("active", true).order("name"),
-          supabaseClient.from('product_stocks').select('product_id,max_qty,available_qty,notify_at_count')
+          catsQuery,
+          prodsQuery,
+          stkQuery
         ]);
         if (catsRes.error) throw catsRes.error;
         if (prodsRes.error) throw prodsRes.error;
@@ -64,17 +51,12 @@ export default function BillingPage() {
         const map: Record<string, Stock> = {};
         (stkRes.data || []).forEach((s: any) => { map[s.product_id] = s; });
         setStocks(map);
-        try {
-          sessionStorage.setItem('billing_categories', JSON.stringify(catsRes.data || []));
-          sessionStorage.setItem('billing_products', JSON.stringify(prodsRes.data || []));
-          sessionStorage.setItem('billing_stocks', JSON.stringify(stkRes.data || []));
-        } catch { }
       } catch (e: any) {
         setCategories([]); setProducts([]);
         try { toast({ title: "Billing data failed", description: e?.message || String(e), variant: "error" }); } catch { }
       }
     })();
-  }, []);
+  }, [business?.id]);
 
   // Focus a product if pid is provided in the URL
   useEffect(() => {

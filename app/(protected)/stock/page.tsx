@@ -5,12 +5,14 @@ import { StockHeader } from "@/components/stock/StockHeader";
 import { CategoryTabs } from "@/components/stock/CategoryTabs";
 import { StockCard } from "@/components/stock/StockCard";
 import { Loader2 } from "lucide-react";
+import { useTenant } from "@/lib/context/TenantContext";
 
 type Category = { id: string; name: string };
 type Product = { id: string; name: string; image_url: string | null; category_id: string };
 type Stock = { product_id: string; max_qty: number; available_qty: number; notify_at_count?: number | null };
 
 export default function StockManagerPage() {
+  const { business } = useTenant();
   const [allowed, setAllowed] = useState<null | boolean>(null);
   const [categories, setCategories] = useState<Category[]>([]);
   const [activeCat, setActiveCat] = useState<string | undefined>(undefined);
@@ -18,10 +20,19 @@ export default function StockManagerPage() {
   const [stocks, setStocks] = useState<Record<string, Stock>>({});
 
   async function loadData() {
+    let catQuery = supabaseClient.from('categories').select('id,name').order('name');
+    if (business?.id) catQuery = catQuery.eq('business_id', business.id);
+
+    let prodQuery = supabaseClient.from('products').select('id,name,image_url,category_id').order('name');
+    if (business?.id) prodQuery = prodQuery.eq('business_id', business.id);
+
+    let stockQuery = supabaseClient.from('product_stocks').select('product_id,max_qty,available_qty,notify_at_count');
+    if (business?.id) stockQuery = stockQuery.eq('business_id', business.id);
+
     const [{ data: cats }, { data: prods }, { data: stockRows }] = await Promise.all([
-      supabaseClient.from('categories').select('id,name').order('name'),
-      supabaseClient.from('products').select('id,name,image_url,category_id').order('name'),
-      supabaseClient.from('product_stocks').select('product_id,max_qty,available_qty,notify_at_count')
+      catQuery,
+      prodQuery,
+      stockQuery
     ]);
     setCategories(cats || []);
     if ((cats && cats[0]?.id) && !activeCat) setActiveCat(cats[0]!.id);
@@ -35,13 +46,13 @@ export default function StockManagerPage() {
     (async () => {
       const { data: { user } } = await supabaseClient.auth.getUser();
       if (!user) { setAllowed(false); return; }
-      const { data: prof } = await supabaseClient.from('profiles').select('is_admin,is_stock_manager').eq('id', user.id).maybeSingle();
-      if (!prof?.is_admin && !prof?.is_stock_manager) { setAllowed(false); return; }
+      const { data: profile } = await supabaseClient.from('profiles').select('is_admin,is_stock_manager').eq('id', user.id).maybeSingle();
+      if (!profile?.is_admin && !profile?.is_stock_manager) { setAllowed(false); return; }
       setAllowed(true);
       await loadData();
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [business?.id]);
 
   // Realtime subscription
   useEffect(() => {

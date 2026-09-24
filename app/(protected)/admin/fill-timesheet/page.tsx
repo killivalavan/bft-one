@@ -7,6 +7,7 @@ import { supabaseClient } from "@/lib/supabaseClient";
 import { UserAttendanceCard } from "@/components/admin/UserAttendanceCard";
 import { useToast } from "@/components/ui/Toast";
 import { cn } from "@/lib/utils/cn";
+import { useTenant } from "@/lib/context/TenantContext";
 
 // Helper Types
 type UserProfile = { id: string; email: string; base_salary_cents: number; per_day_salary_cents: number; is_admin: boolean };
@@ -16,6 +17,7 @@ type MonthlyLogs = Record<string, Record<string, DayLog>>; // dateKey -> userId 
 
 export default function FillTimesheetPage() {
     const { toast } = useToast();
+    const { business } = useTenant();
     const [date, setDate] = useState(new Date());
     const [users, setUsers] = useState<UserProfile[]>([]);
     const [monthlyLogs, setMonthlyLogs] = useState<MonthlyLogs>({});
@@ -38,8 +40,15 @@ export default function FillTimesheetPage() {
         async function load() {
             setLoading(true);
             try {
-                // Fetch Users (Filter Admins)
-                const us = (await supabaseClient.from('profiles').select('id, email, base_salary_cents, per_day_salary_cents, is_admin').order('email')).data;
+                // Fetch Users for current tenant (Filter Admins)
+                let uQuery = supabaseClient
+                    .from('profiles')
+                    .select('id, email, base_salary_cents, per_day_salary_cents, is_admin')
+                    .order('email');
+                if (business?.id) {
+                    uQuery = uQuery.eq('business_id', business.id);
+                }
+                const us = (await uQuery).data;
                 const staff = (us || []).filter(user => !user.is_admin && !user.email?.toLowerCase().includes('admin'));
 
                 // Restore Order
@@ -62,10 +71,25 @@ export default function FillTimesheetPage() {
                 const startStr = format(monthStart, 'yyyy-MM-dd');
                 const endStr = format(monthEnd, 'yyyy-MM-dd');
 
-                const [{ data: ts }, { data: lv }] = await Promise.all([
-                    supabaseClient.from('timesheets').select('user_id, minutes_late, work_date, extra_hours').gte('work_date', startStr).lte('work_date', endStr),
-                    supabaseClient.from('leaves').select('user_id, reason, leave_date').gte('leave_date', startStr).lte('leave_date', endStr)
-                ]);
+                let tsQuery = supabaseClient
+                    .from('timesheets')
+                    .select('user_id, minutes_late, work_date, extra_hours')
+                    .gte('work_date', startStr)
+                    .lte('work_date', endStr);
+                if (business?.id) {
+                    tsQuery = tsQuery.eq('business_id', business.id);
+                }
+
+                let lvQuery = supabaseClient
+                    .from('leaves')
+                    .select('user_id, reason, leave_date')
+                    .gte('leave_date', startStr)
+                    .lte('leave_date', endStr);
+                if (business?.id) {
+                    lvQuery = lvQuery.eq('business_id', business.id);
+                }
+
+                const [{ data: ts }, { data: lv }] = await Promise.all([tsQuery, lvQuery]);
 
                 // Map to State
                 const newLogs: MonthlyLogs = {};
@@ -96,7 +120,7 @@ export default function FillTimesheetPage() {
             }
         }
         load();
-    }, [monthKey]); // Reload when month changes
+    }, [monthKey, business?.id]); // Reload when month or tenant changes
 
     // Handle Update (Single Users, Single Day)
     async function updateAttendance(userId: string, newState: DayLog) {
@@ -137,7 +161,8 @@ export default function FillTimesheetPage() {
                     work_date: dateKey,
                     check_in: checkInDate.toISOString(),
                     minutes_late: newState.lateMinutes,
-                    extra_hours: newState.extraHours || 0
+                    extra_hours: newState.extraHours || 0,
+                    business_id: business?.id
                 });
                 if (error) throw error;
 
@@ -145,7 +170,7 @@ export default function FillTimesheetPage() {
                 if (newState.lateMinutes > 0) {
                     const amount = newState.lateMinutes >= 120 ? 30000 : newState.lateMinutes >= 60 ? 20000 : newState.lateMinutes >= 30 ? 10000 : 5000;
                     const { error: salError } = await supabaseClient.from('salary_entries').insert({
-                        user_id: userId, entry_date: dateKey, amount_cents: amount, reason: 'late', kind: 'deduction'
+                        user_id: userId, entry_date: dateKey, amount_cents: amount, reason: 'late', kind: 'deduction', business_id: business?.id
                     });
                     if (salError) throw salError;
                 }
@@ -154,33 +179,33 @@ export default function FillTimesheetPage() {
                 if (newState.extraHours > 0) {
                     const amount = newState.extraHours * 50 * 100; // 50 INR per hour -> cents
                     const { error: otError } = await supabaseClient.from('salary_entries').insert({
-                        user_id: userId, entry_date: dateKey, amount_cents: amount, reason: `Overtime (${newState.extraHours} hrs)`, kind: 'addition'
+                        user_id: userId, entry_date: dateKey, amount_cents: amount, reason: `Overtime (${newState.extraHours} hrs)`, kind: 'addition', business_id: business?.id
                     });
                     if (otError) throw otError;
                 }
 
             } else if (newState.status === 'leave') {
-                const { error } = await supabaseClient.from('leaves').insert({ user_id: userId, leave_date: dateKey, reason: 'Admin Marked' });
+                const { error } = await supabaseClient.from('leaves').insert({ user_id: userId, leave_date: dateKey, reason: 'Admin Marked', business_id: business?.id });
                 if (error) throw error;
 
                 if (user.per_day_salary_cents > 0) {
                     const { error: salError } = await supabaseClient.from('salary_entries').insert({
-                        user_id: userId, entry_date: dateKey, amount_cents: user.per_day_salary_cents, reason: 'leave', kind: 'deduction'
+                        user_id: userId, entry_date: dateKey, amount_cents: user.per_day_salary_cents, reason: 'leave', kind: 'deduction', business_id: business?.id
                     });
                     if (salError) throw salError;
                 }
             } else if (newState.status === 'half_day') {
-                const { error } = await supabaseClient.from('leaves').insert({ user_id: userId, leave_date: dateKey, reason: 'Half Day' });
+                const { error } = await supabaseClient.from('leaves').insert({ user_id: userId, leave_date: dateKey, reason: 'Half Day', business_id: business?.id });
                 if (error) throw error;
 
                 if (user.per_day_salary_cents > 0) {
                     const { error: salError } = await supabaseClient.from('salary_entries').insert({
-                        user_id: userId, entry_date: dateKey, amount_cents: Math.round(user.per_day_salary_cents / 2), reason: 'Half Day', kind: 'deduction'
+                        user_id: userId, entry_date: dateKey, amount_cents: Math.round(user.per_day_salary_cents / 2), reason: 'Half Day', kind: 'deduction', business_id: business?.id
                     });
                     if (salError) throw salError;
                 }
             } else if (newState.status === 'off') {
-                const { error } = await supabaseClient.from('leaves').insert({ user_id: userId, leave_date: dateKey, reason: 'Weekly Off' });
+                const { error } = await supabaseClient.from('leaves').insert({ user_id: userId, leave_date: dateKey, reason: 'Weekly Off', business_id: business?.id });
                 if (error) throw error;
             }
 

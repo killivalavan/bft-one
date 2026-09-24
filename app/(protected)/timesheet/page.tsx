@@ -11,9 +11,11 @@ import { LogForm } from "@/components/timesheet/LogForm";
 import { PresentStaffModal } from "@/components/timesheet/PresentStaffModal";
 import { Button } from "@/components/ui/Button";
 import { Users } from "lucide-react";
+import { useTenant } from "@/lib/context/TenantContext";
 
 export default function TimesheetPage() {
   const { toast } = useToast();
+  const { business } = useTenant();
   const [tab, setTab] = useState<"timesheet" | "leave">("timesheet");
   const [filledDates, setFilledDates] = useState<Set<string>>(new Set());
   const [leaveDates, setLeaveDates] = useState<Set<string>>(new Set());
@@ -38,9 +40,19 @@ export default function TimesheetPage() {
 
       const start = format(new Date(today.getFullYear(), today.getMonth(), 1), "yyyy-MM-01");
       const end = format(new Date(today.getFullYear(), today.getMonth() + 1, 0), "yyyy-MM-dd");
-      const { data: ts } = await supabaseClient.from("timesheets").select("work_date").gte("work_date", start).lte("work_date", end);
+      const { data: ts } = await supabaseClient
+        .from("timesheets")
+        .select("work_date")
+        .eq("user_id", user.id)
+        .gte("work_date", start)
+        .lte("work_date", end);
       setFilledDates(new Set((ts || []).map((t: any) => t.work_date)));
-      const { data: lv } = await supabaseClient.from("leaves").select("leave_date").gte("leave_date", start).lte("leave_date", end);
+      const { data: lv } = await supabaseClient
+        .from("leaves")
+        .select("leave_date")
+        .eq("user_id", user.id)
+        .gte("leave_date", start)
+        .lte("leave_date", end);
       setLeaveDates(new Set((lv || []).map((l: any) => l.leave_date)));
     })();
   }, [today]);
@@ -69,7 +81,7 @@ export default function TimesheetPage() {
     }
     const dateKey = format(targetDate, "yyyy-MM-dd");
     const { error } = await supabaseClient.from("timesheets").insert({
-      user_id: user.id, work_date: dateKey, check_in: check_in.toISOString(), minutes_late
+      user_id: user.id, work_date: dateKey, check_in: check_in.toISOString(), minutes_late, business_id: business?.id
     });
     if (error) { toast({ title: "Submit failed", description: error.message, variant: "error" }); return; }
     // Auto late deduction... (logic unchanged)
@@ -81,7 +93,7 @@ export default function TimesheetPage() {
           .select('id,amount_cents').eq('user_id', user.id).eq('entry_date', dateKey).eq('reason', 'late').maybeSingle();
         if (!existing) {
           const { error: insErr } = await supabaseClient.from('salary_entries').insert({
-            user_id: user.id, entry_date: dateKey, amount_cents: desired, reason: 'late', kind: 'deduction'
+            user_id: user.id, entry_date: dateKey, amount_cents: desired, reason: 'late', kind: 'deduction', business_id: business?.id
           });
           if (!insErr) toast({ title: `Late deduction applied (₹ ${(desired / 100).toFixed(2)})`, variant: 'success' });
         } else if ((existing as any).amount_cents < desired) {
@@ -102,7 +114,7 @@ export default function TimesheetPage() {
     const { data: { user } } = await supabaseClient.auth.getUser(); if (!user) return;
     const leaveKey = format(d, "yyyy-MM-dd");
     const { error } = await supabaseClient.from("leaves").insert({
-      user_id: user.id, leave_date: leaveKey, reason
+      user_id: user.id, leave_date: leaveKey, reason, business_id: business?.id
     });
     if (error) { toast({ title: "Leave failed", description: error.message, variant: "error" }); return; }
     // Auto leave deduction logic...
@@ -111,7 +123,7 @@ export default function TimesheetPage() {
       const perDay = prof?.per_day_salary_cents || 0;
       if (perDay > 0) {
         await supabaseClient.from('salary_entries').insert({
-          user_id: user.id, entry_date: leaveKey, amount_cents: perDay, reason: 'Leave deduction', kind: 'deduction'
+          user_id: user.id, entry_date: leaveKey, amount_cents: perDay, reason: 'Leave deduction', kind: 'deduction', business_id: business?.id
         });
       }
     } catch { }

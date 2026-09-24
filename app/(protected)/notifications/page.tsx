@@ -6,22 +6,31 @@ import { ChevronLeft, Bell } from "lucide-react";
 import { NotificationList } from "@/components/notifications/NotificationList";
 import { Notification } from "@/components/notifications/NotificationItem";
 
+import { useTenant } from "@/lib/context/TenantContext";
+
 export default function NotificationsPage() {
+  const { business } = useTenant();
   const [items, setItems] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     (async () => {
       setLoading(true);
-      const { data } = await supabaseClient.from('notifications').select('id,message,kind,created_at,product_id').order('created_at', { ascending: false });
+      const query = supabaseClient.from('notifications').select('id,message,kind,created_at,product_id').order('created_at', { ascending: false });
+      if (business?.id) {
+        query.eq('business_id', business.id);
+      }
+      const { data } = await query;
       setItems((data as Notification[]) || []);
       setLoading(false);
     })();
     const ch = supabaseClient.channel('notif-live').on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications' }, (payload: any) => {
-      setItems(prev => [payload.new as Notification, ...prev]);
+      if (!business?.id || payload.new?.business_id === business.id) {
+        setItems(prev => [payload.new as Notification, ...prev]);
+      }
     }).subscribe();
     return () => { try { supabaseClient.removeChannel(ch); } catch { } };
-  }, []);
+  }, [business?.id]);
 
   return (
     <div className="min-h-screen pb-20">

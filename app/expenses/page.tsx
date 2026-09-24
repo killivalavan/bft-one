@@ -25,6 +25,7 @@ import { Tag } from "lucide-react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import html2canvas from "html2canvas-pro";
+import { useTenant } from "@/lib/context/TenantContext";
 
 interface ExpenseRow {
     id: string;
@@ -38,6 +39,7 @@ interface ExpenseRow {
 
 export default function ExpensesPage() {
     const { toast } = useToast();
+    const { business } = useTenant();
     const [loading, setLoading] = useState(true);
     const [isAdmin, setIsAdmin] = useState(false);
     const [userId, setUserId] = useState<string | null>(null);
@@ -98,17 +100,17 @@ export default function ExpensesPage() {
 
     useEffect(() => {
         fetchPriceList();
-    }, []);
+    }, [business?.id]);
 
     useEffect(() => {
         if (userId) fetchExpenses();
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [date, userId]);
+    }, [date, userId, business?.id]);
 
     useEffect(() => {
         if (userId && isAdmin) fetchAllExpenses();
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [userId, isAdmin]);
+    }, [userId, isAdmin, business?.id]);
 
     async function checkUser() {
         try {
@@ -149,11 +151,12 @@ export default function ExpensesPage() {
     async function fetchExpenses() {
         setListLoading(true);
         const dateStr = format(date, "yyyy-MM-dd");
-        const { data, error } = await supabaseClient
+        let query = supabaseClient
             .from("daily_expenses")
             .select("*")
-            .eq("expense_date", dateStr)
-            .order("created_at", { ascending: true });
+            .eq("expense_date", dateStr);
+        if (business?.id) query = query.eq("business_id", business.id);
+        const { data, error } = await query.order("created_at", { ascending: true });
 
         if (error) {
             toast({ title: "Failed to load expenses", description: error.message, variant: "error" });
@@ -168,10 +171,11 @@ export default function ExpensesPage() {
 
     async function fetchAllExpenses() {
         if (!isAdmin) return; // overview/price-watch data is admin-only
-        const { data, error } = await supabaseClient
+        let query = supabaseClient
             .from("daily_expenses")
-            .select("*")
-            .order("expense_date", { ascending: true });
+            .select("*");
+        if (business?.id) query = query.eq("business_id", business.id);
+        const { data, error } = await query.order("expense_date", { ascending: true });
 
         if (!error) {
             const rows = (data || []) as ExpenseRow[];
@@ -181,10 +185,11 @@ export default function ExpensesPage() {
     }
 
     async function fetchPriceList() {
-        const { data, error } = await supabaseClient
+        let query = supabaseClient
             .from("expense_price_list")
-            .select("*")
-            .order("item_name", { ascending: true });
+            .select("*");
+        if (business?.id) query = query.eq("business_id", business.id);
+        const { data, error } = await query.order("item_name", { ascending: true });
 
         if (!error) setPriceList((data || []) as FixedPriceItem[]);
     }
@@ -194,6 +199,7 @@ export default function ExpensesPage() {
             item_name: name,
             price_cents: Math.round(priceRupees * 100),
             updated_by: userId,
+            business_id: business?.id,
         });
         if (error) {
             toast({ title: "Failed to add item", description: error.message, variant: "error" });
@@ -289,6 +295,7 @@ export default function ExpensesPage() {
             quantity: qtyNum,
             price_cents: finalPriceCents,
             submitted_by: userId,
+            business_id: business?.id,
         });
         setSaving(false);
 

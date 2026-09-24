@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { supabaseClient } from "@/lib/supabaseClient";
 import { ProfileHeader } from "@/components/profile/ProfileHeader";
 import { ProfileStats } from "@/components/profile/ProfileStats";
+import { ChangePasswordCard } from "@/components/profile/ChangePasswordCard";
 import { ChevronLeft } from "lucide-react";
 import Link from "next/link";
 import { Loader2 } from "lucide-react";
@@ -45,6 +46,7 @@ export default function ProfilePage() {
 
           <ProfileHeader email={email} />
           <ProfileStats inTime={inTime} phone={phone} emergency={emergency} />
+          <ChangePasswordCard />
         </div>
       </div>
     </div>

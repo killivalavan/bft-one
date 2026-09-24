@@ -34,7 +34,12 @@ export function useUser() {
             if (!mounted.current) return;
 
             if (session?.user) {
-                setUser(session.user);
+                setUser((prev) => {
+                    if (prev?.id === session.user.id && prev?.email === session.user.email) {
+                        return prev;
+                    }
+                    return session.user;
+                });
             } else if (event === 'SIGNED_OUT') {
                 // Verify strictly if it's a real sign out by trying to get user again
                 // Sometimes on focus/tab switch, state might seemingly clear transiently
@@ -42,7 +47,12 @@ export function useUser() {
                 if (!currentSession) {
                     setUser(null);
                 } else {
-                    setUser(currentSession.user);
+                    setUser((prev) => {
+                        if (prev?.id === currentSession.user.id && prev?.email === currentSession.user.email) {
+                            return prev;
+                        }
+                        return currentSession.user;
+                    });
                 }
             }
             setLoading(false);
@@ -52,7 +62,12 @@ export function useUser() {
         function onFocus() {
             supabaseClient.auth.getSession().then(({ data: { session } }) => {
                 if (mounted.current && session?.user) {
-                    setUser(session.user);
+                    setUser((prev) => {
+                        if (prev?.id === session.user.id && prev?.email === session.user.email) {
+                            return prev;
+                        }
+                        return session.user;
+                    });
                 }
             });
         }
