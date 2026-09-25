@@ -19,7 +19,8 @@ export default function LoginPage() {
 
     useEffect(() => {
         if (typeof window !== "undefined") {
-            setHasTenantParam(new URLSearchParams(window.location.search).has("tenant"));
+            const hasParam = new URLSearchParams(window.location.search).has("tenant");
+            setHasTenantParam(hasParam);
         }
     }, []);
 
@@ -43,9 +44,9 @@ export default function LoginPage() {
         try { localStorage.setItem('bftone_display_email', normalizedEmail); } catch { }
         try { localStorage.removeItem('bftone_tenant_cache'); } catch { }
 
-        // Check if user is Super Admin
+        // Check if user is Super Admin -> Require 2FA on Super Admin Portal
         if (normalizedEmail === 'admin@seyalpro.com') {
-            window.location.href = "/super-admin";
+            window.location.href = "/super-admin/login";
             return;
         }
 
@@ -57,7 +58,7 @@ export default function LoginPage() {
                 .maybeSingle();
 
             if (prof?.is_super_admin) {
-                window.location.href = "/super-admin";
+                window.location.href = "/super-admin/login";
                 return;
             }
 
@@ -145,9 +146,15 @@ export default function LoginPage() {
                     </CardContent>
                 </Card>
 
-                <p className="text-center text-xs text-zinc-400">
-                    &copy; {new Date().getFullYear()} {business?.name || "SeyalPro"}. All rights reserved.
-                </p>
+                <div className="text-center space-y-2 text-xs text-zinc-400">
+                    <p>&copy; {new Date().getFullYear()} {business?.name || "SeyalPro"}. All rights reserved.</p>
+                    <a
+                        href="/super-admin/login"
+                        className="inline-flex items-center gap-1 text-[11px] text-zinc-400 hover:text-indigo-600 transition-colors"
+                    >
+                        <span>Platform Root Portal (2FA)</span>
+                    </a>
+                </div>
             </div>
         </div>
     );

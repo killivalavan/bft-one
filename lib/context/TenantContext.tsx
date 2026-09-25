@@ -91,7 +91,7 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
     const hostname = window.location.hostname.toLowerCase();
 
     // Known root domains (must match middleware.ts ROOT_DOMAINS)
-    const roots = ["bft-one.vercel.app", "bftone.com", "localhost"];
+    const roots = ["seyalpro.in", "seyalpro.com", "bft-one.vercel.app", "bftone.com", "localhost"];
 
     for (const root of roots) {
       if (hostname.endsWith("." + root)) {

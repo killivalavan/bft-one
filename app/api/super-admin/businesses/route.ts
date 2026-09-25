@@ -233,7 +233,7 @@ export async function POST(request: Request) {
   }
 }
 
-// PATCH: Toggle business active status or edit modules/plan
+// PATCH: Update business profile, settings, geofencing, or module feature gates
 export async function PATCH(request: Request) {
   try {
     const auth = await authenticateRequest(request, { requireSuperAdmin: true });
@@ -241,16 +241,38 @@ export async function PATCH(request: Request) {
       return auth.errorResponse;
     }
 
-    const { supa } = auth;
+    const { supa, user: caller } = auth;
     const body = await request.json().catch(() => ({}));
-    const { id, is_active, plan_type, max_users, enabled_modules } = body;
+    const {
+      id,
+      name,
+      slug,
+      is_active,
+      plan_type,
+      max_users,
+      currency_symbol,
+      timezone,
+      geofence_lat,
+      geofence_lng,
+      geofence_radius_meters,
+      geofence_enabled,
+      enabled_modules,
+    } = body;
 
     if (!id) return NextResponse.json({ error: "Business ID required" }, { status: 400 });
 
     const updates: any = { updated_at: new Date().toISOString() };
+    if (name?.trim()) updates.name = name.trim();
+    if (slug?.trim()) updates.slug = slug.toLowerCase().trim().replace(/[^a-z0-9-]/g, "-");
     if (typeof is_active === "boolean") updates.is_active = is_active;
     if (plan_type) updates.plan_type = plan_type;
     if (max_users) updates.max_users = Number(max_users);
+    if (currency_symbol) updates.currency_symbol = currency_symbol;
+    if (timezone) updates.timezone = timezone;
+    if (geofence_lat !== undefined) updates.geofence_lat = geofence_lat !== null ? Number(geofence_lat) : null;
+    if (geofence_lng !== undefined) updates.geofence_lng = geofence_lng !== null ? Number(geofence_lng) : null;
+    if (geofence_radius_meters !== undefined) updates.geofence_radius_meters = Number(geofence_radius_meters) || 150;
+    if (typeof geofence_enabled === "boolean") updates.geofence_enabled = geofence_enabled;
     if (enabled_modules) updates.enabled_modules = enabled_modules;
 
     const { data, error } = await supa
@@ -262,7 +284,135 @@ export async function PATCH(request: Request) {
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
+    // Log Audit Event
+    const { logAuditEvent, extractClientMetadata } = await import("@/lib/services/auditLogger");
+    const clientMeta = extractClientMetadata(request);
+    await logAuditEvent({
+      businessId: id,
+      actorId: caller.id,
+      actorEmail: caller.email,
+      action: "BUSINESS_UPDATED",
+      targetType: "business",
+      targetId: id,
+      details: { updates },
+      ...clientMeta,
+    });
+
     return NextResponse.json({ ok: true, business: data });
+  } catch (e: any) {
+    return NextResponse.json({ error: e?.message || "Internal server error" }, { status: 500 });
+  }
+}
+
+// DELETE: Offboard and completely delete a client business & clean up all associated data
+export async function DELETE(request: Request) {
+  try {
+    const auth = await authenticateRequest(request, { requireSuperAdmin: true });
+    if ("errorResponse" in auth) {
+      return auth.errorResponse;
+    }
+
+    const { supa, user: caller } = auth;
+    const body = await request.json().catch(() => ({}));
+    const { businessId } = body;
+
+    if (!businessId) {
+      return NextResponse.json({ error: "businessId is required" }, { status: 400 });
+    }
+
+    // Safety guard: Protect default template business from accidental deletion
+    const protectedIds = [
+      "a0000000-0000-0000-0000-000000000001",
+    ];
+    if (protectedIds.includes(businessId)) {
+      return NextResponse.json(
+        { error: "This is the primary root business and cannot be deleted." },
+        { status: 403 }
+      );
+    }
+
+    // 1. Fetch business details for audit logging
+    const { data: targetBiz, error: findErr } = await supa
+      .from("businesses")
+      .select("id, name, slug")
+      .eq("id", businessId)
+      .maybeSingle();
+
+    if (findErr || !targetBiz) {
+      return NextResponse.json({ error: "Business not found." }, { status: 404 });
+    }
+
+    // 2. Fetch all user profile IDs belonging to this business
+    const { data: profiles } = await supa
+      .from("profiles")
+      .select("id, email, is_super_admin")
+      .eq("business_id", businessId);
+
+    const userIds = (profiles || [])
+      .filter((p) => !p.is_super_admin && p.id !== caller.id)
+      .map((p) => p.id);
+
+    // 3. Cascade wipe tenant operational records
+    await Promise.allSettled([
+      supa.from("salary_entries").delete().eq("business_id", businessId),
+      supa.from("salary_settlements").delete().eq("business_id", businessId),
+      supa.from("leaves").delete().eq("business_id", businessId),
+      supa.from("timesheets").delete().eq("business_id", businessId),
+      supa.from("daily_sales").delete().eq("business_id", businessId),
+      supa.from("daily_expenses").delete().eq("business_id", businessId),
+      supa.from("expense_price_list").delete().eq("business_id", businessId),
+      supa.from("orders").delete().eq("business_id", businessId),
+      supa.from("products").delete().eq("business_id", businessId),
+      supa.from("product_stocks").delete().eq("business_id", businessId),
+      supa.from("categories").delete().eq("business_id", businessId),
+      supa.from("external_contacts").delete().eq("business_id", businessId),
+      supa.from("shifts").delete().eq("business_id", businessId),
+      supa.from("notifications").delete().eq("business_id", businessId),
+    ]);
+
+    // 4. Delete user profiles and auth accounts
+    if (userIds.length > 0) {
+      await supa.from("profiles").delete().in("id", userIds);
+      for (const uid of userIds) {
+        try {
+          await supa.auth.admin.deleteUser(uid);
+        } catch (_) {}
+      }
+    }
+
+    // 5. Delete the business record itself
+    const { error: delBizErr } = await supa
+      .from("businesses")
+      .delete()
+      .eq("id", businessId);
+
+    if (delBizErr) {
+      return NextResponse.json({ error: `Failed to remove business: ${delBizErr.message}` }, { status: 500 });
+    }
+
+    // 6. Log Audit Event
+    const { logAuditEvent, extractClientMetadata } = await import("@/lib/services/auditLogger");
+    const clientMeta = extractClientMetadata(request);
+    await logAuditEvent({
+      businessId,
+      actorId: caller.id,
+      actorEmail: caller.email,
+      action: "BUSINESS_DELETED",
+      targetType: "business",
+      targetId: businessId,
+      details: {
+        businessName: targetBiz.name,
+        slug: targetBiz.slug,
+        deletedUserCount: userIds.length,
+        deletedBy: caller.email,
+      },
+      ...clientMeta,
+    });
+
+    return NextResponse.json({
+      ok: true,
+      message: `Successfully deleted ${targetBiz.name} and purged all associated store records.`,
+    });
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || "Internal server error" }, { status: 500 });
   }

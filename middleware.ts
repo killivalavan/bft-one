@@ -4,9 +4,11 @@ import type { NextRequest } from "next/server";
 // Root domains where subdomains should be extracted.
 // Add your custom domain here after setting it up in Vercel.
 const ROOT_DOMAINS = [
-  "bft-one.vercel.app",
+  "seyalpro.in",
+  "www.seyalpro.in",
   "seyalpro.com",
   "www.seyalpro.com",
+  "bft-one.vercel.app",
   "bftone.com",
   "www.bftone.com",
   "localhost",
@@ -20,7 +22,7 @@ function extractSubdomain(hostname: string): string | null {
   for (const root of ROOT_DOMAINS) {
     const rootClean = root.split(":")[0].toLowerCase();
 
-    // E.g. hostname = "navalur.bftone.com", root = "bftone.com"
+    // E.g. hostname = "navalur.seyalpro.in", root = "seyalpro.in"
     if (cleanHost.endsWith("." + rootClean)) {
       const sub = cleanHost.slice(0, -(rootClean.length + 1)); // "navalur"
       if (sub && sub !== "www" && sub !== "app") {
@@ -39,12 +41,14 @@ export function middleware(request: NextRequest) {
     || request.headers.get("host")
     || "";
 
+  const subdomain = extractSubdomain(hostname);
+  const queryTenant = url.searchParams.get("tenant");
+
   // 1. Resolve Tenant Slug (priority: query > cookie > subdomain > default)
   let tenantSlug = "bft-navalur"; // default tenant
   let source: "query" | "cookie" | "subdomain" | "default" = "default";
 
   // Priority 1: URL query param override (?tenant=mongo-s)
-  const queryTenant = url.searchParams.get("tenant");
   if (queryTenant) {
     tenantSlug = queryTenant.toLowerCase().trim();
     source = "query";

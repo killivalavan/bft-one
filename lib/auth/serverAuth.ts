@@ -130,11 +130,8 @@ export async function authenticateRequest(
   const isAdmin = !!profile.is_admin;
   const emailLower = userEmail.toLowerCase();
   const isSuperAdmin =
-    !!profile.is_super_admin ||
     emailLower === "admin@seyalpro.com" ||
-    emailLower === "admin@bftone.com" ||
-    emailLower.includes("superadmin") ||
-    isAdmin;
+    (!!profile.is_super_admin && !profile.business_id);
   const isStockManager = !!profile.is_stock_manager;
 
   // 4. Role Authorization Checks

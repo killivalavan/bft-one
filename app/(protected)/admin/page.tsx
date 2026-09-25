@@ -10,9 +10,10 @@ import { SalesReports } from "@/components/admin/SalesReports";
 import { generatePayslipPdf } from "@/lib/utils/payslip";
 import { ContactManager } from "@/components/admin/ContactManager";
 import { SalesManager } from "@/components/admin/SalesManager";
-import { Loader2, ShieldAlert } from "lucide-react";
+import { Loader2, ShieldAlert, LifeBuoy } from "lucide-react";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { useTenant } from "@/lib/context/TenantContext";
+import RaiseIssueModal from "@/components/support/RaiseIssueModal";
 
 type Profile = { id: string; email: string; is_admin: boolean; is_stock_manager?: boolean | null; in_time?: string | null; base_salary_cents?: number | null; per_day_salary_cents?: number | null; age?: number | null; dob?: string | null; contact_number?: string | null; emergency_contact_number?: string | null };
 type Category = { id: string; name: string; icon_url?: string | null };
@@ -35,6 +36,7 @@ export default function AdminPage() {
   const [previousReport, setPreviousReport] = useState<{ name: string; qty: number; revenue: number }[]>([]);
   const [totalPayroll, setTotalPayroll] = useState(0);
   const [totalNetPayroll, setTotalNetPayroll] = useState(0);
+  const [issueModalOpen, setIssueModalOpen] = useState(false);
 
   const [confirmState, setConfirmState] = useState<{ open: boolean; title: string; desc: string; action?: () => Promise<void> }>({ open: false, title: "", desc: "" });
 
@@ -475,8 +477,19 @@ export default function AdminPage() {
   return (
     <div className="min-h-screen pb-20">
       <div className="max-w-6xl mx-auto p-4 md:p-6">
-        <div className="flex items-center justify-between mb-6">
-          <h1 className="text-3xl font-bold text-zinc-900 tracking-tight">Admin Dashboard</h1>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+          <div>
+            <h1 className="text-3xl font-bold text-zinc-900 tracking-tight">Admin Dashboard</h1>
+            <p className="text-xs text-zinc-500 mt-0.5">{business?.name || "Store Operations"}</p>
+          </div>
+
+          <button
+            onClick={() => setIssueModalOpen(true)}
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 text-xs font-bold transition-all shadow-xs self-start sm:self-auto"
+          >
+            <LifeBuoy size={16} className="text-amber-600" />
+            <span>Support & Issues Hub</span>
+          </button>
         </div>
 
         <AdminTabs activeTab={tab} onChange={setTab} />
@@ -557,6 +570,9 @@ export default function AdminPage() {
           onCancel={() => setConfirmState({ open: false, title: "", desc: "", action: undefined })}
           confirmLabel="Delete User"
         />
+
+        {/* Raise Issue / Support Ticket Modal */}
+        <RaiseIssueModal isOpen={issueModalOpen} onClose={() => setIssueModalOpen(false)} />
       </div>
     </div>
   );

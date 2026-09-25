@@ -9,8 +9,9 @@ import { useTenant } from "@/lib/context/TenantContext";
 import { cn } from "@/lib/utils/cn";
 import {
   Home, CalendarCheck2, CalendarDays, Coffee, ClipboardList, Shield,
-  User, LogOut, ChevronDown, Bell, Wallet, TrendingUp, Globe, Sparkles, Store
+  User, LogOut, ChevronDown, Bell, Wallet, TrendingUp, Globe, Sparkles, Store, LifeBuoy, Bug
 } from "lucide-react";
+import RaiseIssueModal from "@/components/support/RaiseIssueModal";
 
 export default function Navbar() {
   const pathname = usePathname();
@@ -21,6 +22,7 @@ export default function Navbar() {
 
   const [userEmail, setUserEmail] = useState<string | undefined>(undefined);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [issueModalOpen, setIssueModalOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
   // Persistence & Auth Logic
@@ -31,6 +33,28 @@ export default function Navbar() {
     } catch { }
   }, []);
 
+  function getSubdomainSlug(): string | null {
+    if (typeof window === "undefined") return null;
+    const hostname = window.location.hostname.toLowerCase();
+    const roots = ["seyalpro.in", "seyalpro.com", "bft-one.vercel.app", "bftone.com", "localhost"];
+
+    for (const root of roots) {
+      if (hostname.endsWith("." + root)) {
+        const sub = hostname.slice(0, -(root.length + 1));
+        if (sub && sub !== "www" && sub !== "app") {
+          return sub;
+        }
+      }
+    }
+    return null;
+  }
+
+  function getTargetLoginUrl(): string {
+    if (typeof window === "undefined") return "/login";
+    if (pathname.startsWith("/super-admin")) return "/super-admin/login";
+    return "/login";
+  }
+
   useEffect(() => {
     if (user) {
       setUserEmail(user.email);
@@ -38,8 +62,9 @@ export default function Navbar() {
     } else if (!loading) {
       setUserEmail(undefined);
       try { localStorage.removeItem('bftone_display_email'); } catch { }
-      if (pathname !== "/login") {
-        try { router.replace("/login"); } catch { }
+      const isPublicAuthPage = pathname === "/login" || pathname.startsWith("/super-admin/login");
+      if (!isPublicAuthPage) {
+        try { router.replace(getTargetLoginUrl()); } catch { }
       }
     }
   }, [user, loading, pathname, router]);
@@ -55,8 +80,8 @@ export default function Navbar() {
     return () => document.removeEventListener('mousedown', onDocClick);
   }, []);
 
-  // Hide on login page
-  if (pathname === "/login") return null;
+  // Hide on login pages
+  if (pathname === "/login" || pathname === "/super-admin/login") return null;
 
   const displayName = userEmail ? userEmail.split("@")[0] : null;
   const initial = displayName ? displayName[0].toUpperCase() : "?";
@@ -104,7 +129,7 @@ export default function Navbar() {
       if (typeof document !== 'undefined') {
         document.cookie = "tenant_slug=; path=/; max-age=0; SameSite=Lax";
       }
-      window.location.href = '/login';
+      window.location.href = getTargetLoginUrl();
     }
   }
 
@@ -124,7 +149,7 @@ export default function Navbar() {
             {!isFocusMode && (
               <div className="flex-shrink-0 flex items-center gap-3">
                 <Link
-                  href={flags?.isSuperAdmin ? "/super-admin" : "/"}
+                  href={isSuperAdminView ? "/super-admin" : "/"}
                   className="flex items-center gap-2.5 group"
                 >
                   {/* Brand Gem Icon */}
@@ -211,6 +236,18 @@ export default function Navbar() {
                   </span>
                 </Link>
 
+                {/* Support & Issues Hub strictly for Client Store Admins */}
+                {flags?.isAdmin && !flags?.isSuperAdmin && (
+                  <button
+                    onClick={() => setIssueModalOpen(true)}
+                    className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200/90 text-xs font-bold transition-all shadow-2xs active:scale-95"
+                    title="View raised issues or report a new bug to SeyalPro"
+                  >
+                    <LifeBuoy size={14} className="text-amber-600" />
+                    <span className="hidden md:inline">Support & Issues</span>
+                  </button>
+                )}
+
                 {/* User Menu Trigger */}
                 <div className="relative" ref={menuRef}>
                   <button
@@ -258,6 +295,19 @@ export default function Navbar() {
                           <span>My Profile</span>
                         </Link>
 
+                        {flags?.isAdmin && !flags?.isSuperAdmin && (
+                          <button
+                            onClick={() => {
+                              setMenuOpen(false);
+                              setIssueModalOpen(true);
+                            }}
+                            className="w-full text-left flex items-center gap-2.5 px-3 py-2 text-sm text-amber-800 font-semibold rounded-xl hover:bg-amber-50 transition-colors"
+                          >
+                            <LifeBuoy size={16} className="text-amber-600" />
+                            <span>Support & Issues</span>
+                          </button>
+                        )}
+
                         {flags?.isSuperAdmin && (
                           <Link
                             href="/super-admin"
@@ -287,6 +337,9 @@ export default function Navbar() {
           </div>
         </div>
       </nav>
+
+      {/* Raise Issue / Support Ticket Modal */}
+      <RaiseIssueModal isOpen={issueModalOpen} onClose={() => setIssueModalOpen(false)} />
 
       {/* Modern Mobile Bottom Navigation Bar */}
       {!isFocusMode && (

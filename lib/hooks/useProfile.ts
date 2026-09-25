@@ -27,6 +27,9 @@ export function useProfile() {
         }
 
         // Try user-scoped cache first
+        const emailLower = user.email?.toLowerCase() || '';
+        const isRootOwnerEmail = emailLower === 'admin@seyalpro.com';
+
         try {
             const raw = typeof window !== 'undefined' ? localStorage.getItem(`bftone_flags_${user.id}`) : null;
             if (raw) {
@@ -35,7 +38,7 @@ export function useProfile() {
                     setFlags({
                         isAdmin: !!cached.is_admin,
                         isStockManager: !!cached.is_stock_manager,
-                        isSuperAdmin: !!cached.is_super_admin,
+                        isSuperAdmin: isRootOwnerEmail || (!!cached.is_super_admin && !cached.business_id),
                         businessId: cached.business_id || DEFAULT_BUSINESS_ID,
                     });
                 }
@@ -44,14 +47,10 @@ export function useProfile() {
 
         async function fetchProfile() {
             try {
-                // Try selecting full SaaS fields
+                // Super Admin is strictly for the platform owner (admin@seyalpro.com or is_super_admin: true with no store bound)
                 let is_admin = false;
                 let is_stock_manager = false;
-                const emailLower = user!.email?.toLowerCase() || '';
-                let is_super_admin =
-                    emailLower === 'admin@seyalpro.com' ||
-                    emailLower === 'admin@bftone.com' ||
-                    emailLower.includes('superadmin');
+                let is_super_admin = isRootOwnerEmail;
                 let business_id = DEFAULT_BUSINESS_ID;
 
                 const { data: prof, error } = await supabaseClient
@@ -71,12 +70,12 @@ export function useProfile() {
                     if (legacyProf) {
                         is_admin = !!legacyProf.is_admin;
                         is_stock_manager = !!legacyProf.is_stock_manager;
-                        is_super_admin = is_super_admin || is_admin;
+                        is_super_admin = isRootOwnerEmail;
                     }
                 } else if (prof) {
                     is_admin = !!prof.is_admin;
                     is_stock_manager = !!prof.is_stock_manager;
-                    is_super_admin = !!prof.is_super_admin || is_super_admin || is_admin;
+                    is_super_admin = isRootOwnerEmail || (!!prof.is_super_admin && !prof.business_id);
                     business_id = prof.business_id || DEFAULT_BUSINESS_ID;
                 }
 

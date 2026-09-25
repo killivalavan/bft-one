@@ -10,6 +10,7 @@ export type AuditAction =
   | "ROLE_UPDATED"
   | "BUSINESS_CREATED"
   | "BUSINESS_UPDATED"
+  | "BUSINESS_DELETED"
   | "TENANT_SWITCHED";
 
 export interface AuditEventParams {
