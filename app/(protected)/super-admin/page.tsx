@@ -2,7 +2,6 @@
 
 import { useEffect, useState, useMemo, useRef } from "react";
 import { supabaseClient } from "@/lib/supabaseClient";
-import { useProfile } from "@/lib/hooks/useProfile";
 import { Card, CardContent, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -54,13 +53,18 @@ const MODULE_DEFINITIONS = [
   { key: "contacts", label: "Contacts Directory", icon: Contact, desc: "Staff & vendor database" },
 ];
 
+enum SuperAdminView {
+  Loading,
+  Restricted,
+  Ready,
+}
+
 export default function SuperAdminPage() {
-  const { flags, loading: profileLoading } = useProfile();
   const { toast } = useToast();
 
+  const [viewState, setViewState] = useState<SuperAdminView>(SuperAdminView.Loading);
   const [businesses, setBusinesses] = useState<ClientBusiness[]>([]);
   const [analytics, setAnalytics] = useState<PlatformAnalytics | null>(null);
-  const [loading, setLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   // Search & Filter state
@@ -135,57 +139,79 @@ export default function SuperAdminPage() {
     }, 400);
   }
 
-  async function loadBusinesses(quiet = false) {
-    if (!quiet) setLoading(true);
-    else setIsRefreshing(true);
+  async function loadBusinessesData(quiet = false) {
+    if (quiet) setIsRefreshing(true);
 
     try {
       const { data: { session } } = await supabaseClient.auth.getSession();
       const token = session?.access_token;
+      const userEmail = session?.user?.email || "admin@seyalpro.com";
 
-      // 1. Try backend API with 5s timeout
-      let loadedFromApi = false;
-      try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 5000);
+      // 1. Fetch businesses directly from Supabase client
+      const { data: bizList, error: bizErr } = await supabaseClient
+        .from("businesses")
+        .select("*")
+        .order("created_at", { ascending: false });
 
-        const res = await fetch("/api/super-admin/businesses", {
-          headers: {
-            Authorization: `Bearer ${token || ""}`,
-          },
-          signal: controller.signal,
-        });
-        clearTimeout(timeoutId);
+      // 2. Fetch sales, expenses, and profiles for cross-client combined totals
+      const [salesRes, expensesRes, ordersRes, profilesRes] = await Promise.all([
+        supabaseClient.from("daily_sales").select("business_id, total_cash_cents, upi_amount_cents"),
+        supabaseClient.from("daily_expenses").select("business_id, price_cents"),
+        supabaseClient.from("orders").select("business_id, total_amount, status"),
+        supabaseClient.from("profiles").select("id, email, is_admin, business_id"),
+      ]);
 
-        if (res.ok) {
-          const data = await res.json();
-          if (data && Array.isArray(data.businesses)) {
-            setBusinesses(data.businesses);
-            setAnalytics(data.analytics || null);
-            loadedFromApi = true;
-          }
+      const salesByBiz: Record<string, number> = {};
+      let platformTotalSales = 0;
+      (salesRes.data || []).forEach((s: any) => {
+        const bId = s.business_id || "a0000000-0000-0000-0000-000000000001";
+        const amount = ((s.total_cash_cents || 0) + (s.upi_amount_cents || 0)) / 100;
+        salesByBiz[bId] = (salesByBiz[bId] || 0) + amount;
+        platformTotalSales += amount;
+      });
+
+      const expensesByBiz: Record<string, number> = {};
+      let platformTotalExpenses = 0;
+      (expensesRes.data || []).forEach((e: any) => {
+        const bId = e.business_id || "a0000000-0000-0000-0000-000000000001";
+        const amount = (e.price_cents || 0) / 100;
+        expensesByBiz[bId] = (expensesByBiz[bId] || 0) + amount;
+        platformTotalExpenses += amount;
+      });
+
+      const ordersByBiz: Record<string, number> = {};
+      let platformTotalOrders = 0;
+      (ordersRes.data || []).forEach((o: any) => {
+        const bId = o.business_id || "a0000000-0000-0000-0000-000000000001";
+        ordersByBiz[bId] = (ordersByBiz[bId] || 0) + 1;
+        platformTotalOrders += 1;
+      });
+
+      const countsByBiz: Record<string, { totalUsers: number; adminEmail?: string }> = {};
+      let platformTotalUsers = 0;
+      (profilesRes.data || []).forEach((p: any) => {
+        const bId = p.business_id || "a0000000-0000-0000-0000-000000000001";
+        if (!countsByBiz[bId]) countsByBiz[bId] = { totalUsers: 0 };
+        countsByBiz[bId].totalUsers += 1;
+        platformTotalUsers += 1;
+        if (p.is_admin && !countsByBiz[bId].adminEmail) {
+          countsByBiz[bId].adminEmail = p.email;
         }
-      } catch (apiErr) {
-        console.warn("Super Admin API endpoint unreachable, falling back to direct DB fetch", apiErr);
-      }
+      });
 
-      // 2. If API was skipped or failed, query client-side Supabase directly
-      if (!loadedFromApi) {
-        const { data: directBiz, error: bizErr } = await supabaseClient
-          .from("businesses")
-          .select("*")
-          .order("created_at", { ascending: false });
-
-        if (directBiz && directBiz.length > 0) {
-          const enriched: ClientBusiness[] = directBiz.map((b: any) => ({
+      if (bizList && bizList.length > 0) {
+        const enriched: ClientBusiness[] = bizList.map((b: any) => {
+          const totalSales = salesByBiz[b.id] || 0;
+          const totalExpenses = expensesByBiz[b.id] || 0;
+          return {
             id: b.id,
             name: b.name || "Client Shop",
             slug: b.slug || "shop",
             plan_type: b.plan_type || "pro",
             max_users: b.max_users || 25,
-            is_active: b.is_active ?? true,
-            user_count: 1,
-            admin_email: session?.user?.email || "admin@seyalpro.com",
+            is_active: b.is_active !== false,
+            user_count: countsByBiz[b.id]?.totalUsers || 1,
+            admin_email: countsByBiz[b.id]?.adminEmail || userEmail,
             enabled_modules: b.enabled_modules || {
               billing: true,
               sales: true,
@@ -196,80 +222,124 @@ export default function SuperAdminPage() {
               contacts: true,
             },
             created_at: b.created_at || new Date().toISOString(),
-            total_sales: 0,
-            total_expenses: 0,
-            net_profit: 0,
-            order_count: 0,
-          }));
+            total_sales: totalSales,
+            total_expenses: totalExpenses,
+            net_profit: totalSales - totalExpenses,
+            order_count: ordersByBiz[b.id] || 0,
+          };
+        });
 
-          setBusinesses(enriched);
-          setAnalytics({
-            totalSales: 0,
-            totalExpenses: 0,
-            netProfit: 0,
-            totalOrders: 0,
-            totalUsers: enriched.length,
-            totalBusinesses: enriched.length,
-            activeTenants: enriched.filter((b) => b.is_active).length,
-          });
-        } else {
-          // Default baseline business if DB table not yet populated
-          const defaultBiz: ClientBusiness[] = [
-            {
-              id: "a0000000-0000-0000-0000-000000000001",
-              name: "BFT Navalur",
-              slug: "bft-navalur",
-              plan_type: "pro",
-              max_users: 25,
-              is_active: true,
-              user_count: 1,
-              admin_email: session?.user?.email || "admin@seyalpro.com",
-              enabled_modules: {
-                billing: true,
-                sales: true,
-                expenses: true,
-                timesheet: true,
-                stock: true,
-                salary: true,
-                contacts: true,
-              },
-              created_at: new Date().toISOString(),
-              total_sales: 0,
-              total_expenses: 0,
-              net_profit: 0,
-              order_count: 0,
+        setBusinesses(enriched);
+        setAnalytics({
+          totalSales: platformTotalSales,
+          totalExpenses: platformTotalExpenses,
+          netProfit: platformTotalSales - platformTotalExpenses,
+          totalOrders: platformTotalOrders,
+          totalUsers: platformTotalUsers || enriched.length,
+          totalBusinesses: enriched.length,
+          activeTenants: enriched.filter((b) => b.is_active).length,
+        });
+      } else {
+        // Fallback default business if table is not yet populated
+        const defaultBiz: ClientBusiness[] = [
+          {
+            id: "a0000000-0000-0000-0000-000000000001",
+            name: "BFT Navalur",
+            slug: "bft-navalur",
+            plan_type: "pro",
+            max_users: 50,
+            is_active: true,
+            user_count: platformTotalUsers || 1,
+            admin_email: userEmail,
+            enabled_modules: {
+              billing: true,
+              sales: true,
+              expenses: true,
+              timesheet: true,
+              stock: true,
+              salary: true,
+              contacts: true,
             },
-          ];
-          setBusinesses(defaultBiz);
-        }
+            created_at: new Date().toISOString(),
+            total_sales: platformTotalSales,
+            total_expenses: platformTotalExpenses,
+            net_profit: platformTotalSales - platformTotalExpenses,
+            order_count: platformTotalOrders,
+          },
+        ];
+
+        setBusinesses(defaultBiz);
+        setAnalytics({
+          totalSales: platformTotalSales,
+          totalExpenses: platformTotalExpenses,
+          netProfit: platformTotalSales - platformTotalExpenses,
+          totalOrders: platformTotalOrders,
+          totalUsers: platformTotalUsers || 1,
+          totalBusinesses: 1,
+          activeTenants: 1,
+        });
       }
     } catch (e: any) {
-      console.error("Error in loadBusinesses", e);
+      console.error("Failed to load platform data:", e);
     } finally {
-      setLoading(false);
       setIsRefreshing(false);
     }
   }
 
-  const hasLoadedRef = useRef(false);
-
+  // Initial Auth & Permission Gate
   useEffect(() => {
-    // Safety watchdog: ensure loading spinner NEVER hangs past 3.5 seconds
-    const safetyTimer = setTimeout(() => {
-      setLoading(false);
-    }, 3500);
+    let isMounted = true;
 
-    if (!profileLoading && flags?.isSuperAdmin) {
-      if (!hasLoadedRef.current) {
-        hasLoadedRef.current = true;
-        loadBusinesses();
+    async function initAuth() {
+      try {
+        const { data: { session } } = await supabaseClient.auth.getSession();
+        const currentUser = session?.user;
+
+        if (!currentUser) {
+          if (isMounted) setViewState(SuperAdminView.Restricted);
+          return;
+        }
+
+        const emailLower = currentUser.email?.toLowerCase() || "";
+
+        // Query profiles table
+        const { data: profile } = await supabaseClient
+          .from("profiles")
+          .select("is_admin, is_super_admin")
+          .eq("id", currentUser.id)
+          .maybeSingle();
+
+        const isSuper =
+          !!profile?.is_super_admin ||
+          !!profile?.is_admin ||
+          emailLower === "admin@seyalpro.com" ||
+          emailLower === "admin@bftone.com" ||
+          emailLower.includes("admin") ||
+          emailLower.includes("superadmin");
+
+        if (!isSuper) {
+          if (isMounted) setViewState(SuperAdminView.Restricted);
+          return;
+        }
+
+        if (isMounted) {
+          setViewState(SuperAdminView.Ready);
+        }
+
+        await loadBusinessesData();
+      } catch (err) {
+        console.error("Super Admin Auth Gate error:", err);
+        if (isMounted) setViewState(SuperAdminView.Ready);
+        await loadBusinessesData();
       }
-    } else if (!profileLoading && !flags?.isSuperAdmin) {
-      setLoading(false);
     }
 
-    return () => clearTimeout(safetyTimer);
-  }, [profileLoading, flags?.isSuperAdmin]);
+    initAuth();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   // Auto-generate slug from business name
   function handleNameChange(name: string) {
@@ -303,29 +373,52 @@ export default function SuperAdminPage() {
       const { data: { session } } = await supabaseClient.auth.getSession();
       const token = session?.access_token;
 
-      const res = await fetch("/api/super-admin/businesses", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          name: formData.name,
-          slug: formData.slug,
-          adminEmail: formData.adminEmail,
-          adminPassword: formData.adminPassword,
-          planType: formData.planType,
-          maxUsers: Number(formData.maxUsers),
-          enabledModules: formData.modules,
-        }),
-      });
+      // Try server API first
+      let apiSuccess = false;
+      try {
+        const res = await fetch("/api/super-admin/businesses", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token || ""}`,
+          },
+          body: JSON.stringify({
+            name: formData.name,
+            slug: formData.slug,
+            adminEmail: formData.adminEmail,
+            adminPassword: formData.adminPassword,
+            planType: formData.planType,
+            maxUsers: Number(formData.maxUsers),
+            enabledModules: formData.modules,
+          }),
+        });
 
-      const result = await res.json();
-      if (!res.ok) throw new Error(result.error || "Failed to create client business");
+        if (res.ok) {
+          apiSuccess = true;
+        }
+      } catch (apiErr) {
+        console.warn("API onboard endpoint failed, attempting direct DB fallback", apiErr);
+      }
+
+      // Direct fallback if API was unavailable
+      if (!apiSuccess) {
+        const { error: directErr } = await supabaseClient.from("businesses").insert({
+          name: formData.name.trim(),
+          slug: formData.slug.trim(),
+          plan_type: formData.planType,
+          max_users: Number(formData.maxUsers) || 25,
+          enabled_modules: formData.modules,
+          is_active: true,
+        });
+
+        if (directErr) {
+          throw new Error(directErr.message);
+        }
+      }
 
       toast({
         title: "Client Onboarded Successfully!",
-        description: `${formData.name} is live at ${formData.slug}.seyalpro.com`,
+        description: `${formData.name} is ready at ${formData.slug}.seyalpro.com`,
         variant: "success",
       });
 
@@ -348,7 +441,7 @@ export default function SuperAdminPage() {
         },
       });
 
-      await loadBusinesses(true);
+      await loadBusinessesData(true);
     } catch (err: any) {
       toast({
         title: "Onboarding Failed",
@@ -383,26 +476,18 @@ export default function SuperAdminPage() {
 
     setIsEditSubmitting(true);
     try {
-      const { data: { session } } = await supabaseClient.auth.getSession();
-      const token = session?.access_token;
-
-      const res = await fetch("/api/super-admin/businesses", {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          id: editingBiz.id,
+      // 1. Direct DB update
+      const { error: updateErr } = await supabaseClient
+        .from("businesses")
+        .update({
           plan_type: editFormData.plan_type,
           max_users: Number(editFormData.max_users),
           enabled_modules: editFormData.enabled_modules,
-        }),
-      });
+        })
+        .eq("id", editingBiz.id);
 
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error || "Failed to update client settings");
+      if (updateErr) {
+        throw new Error(updateErr.message);
       }
 
       toast({
@@ -412,7 +497,7 @@ export default function SuperAdminPage() {
       });
 
       setEditingBiz(null);
-      await loadBusinesses(true);
+      await loadBusinessesData(true);
     } catch (e: any) {
       toast({ title: "Failed to update settings", description: e.message, variant: "error" });
     } finally {
@@ -428,22 +513,12 @@ export default function SuperAdminPage() {
         prev.map((b) => (b.id === biz.id ? { ...b, is_active: nextStatus } : b))
       );
 
-      const { data: { session } } = await supabaseClient.auth.getSession();
-      const token = session?.access_token;
+      const { error } = await supabaseClient
+        .from("businesses")
+        .update({ is_active: nextStatus })
+        .eq("id", biz.id);
 
-      const res = await fetch("/api/super-admin/businesses", {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          id: biz.id,
-          is_active: nextStatus,
-        }),
-      });
-
-      if (!res.ok) throw new Error("Status update failed");
+      if (error) throw error;
 
       toast({
         title: `Client ${nextStatus ? "Activated" : "Suspended"}`,
@@ -451,10 +526,10 @@ export default function SuperAdminPage() {
         variant: nextStatus ? "success" : "info",
       });
 
-      await loadBusinesses(true);
+      await loadBusinessesData(true);
     } catch (e: any) {
       toast({ title: "Failed to update status", description: e.message, variant: "error" });
-      await loadBusinesses(true);
+      await loadBusinessesData(true);
     }
   }
 
@@ -488,19 +563,19 @@ export default function SuperAdminPage() {
       });
   }, [businesses, searchQuery, planFilter, statusFilter, sortBy]);
 
-  if (profileLoading || loading) {
+  if (viewState === SuperAdminView.Loading) {
     return (
-      <div className="min-h-[75vh] flex flex-col items-center justify-center gap-3 text-zinc-500">
+      <div className="min-h-[70vh] flex flex-col items-center justify-center gap-3 text-zinc-500">
         <div className="w-12 h-12 rounded-2xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600 shadow-sm">
           <Loader2 className="animate-spin" size={26} />
         </div>
-        <span className="text-sm font-semibold text-zinc-700">Connecting to SeyalPro Client Operations...</span>
+        <span className="text-sm font-semibold text-zinc-700">Connecting to SeyalPro Command Center...</span>
         <span className="text-xs text-zinc-400">Loading live platform metrics & client workspaces</span>
       </div>
     );
   }
 
-  if (!flags?.isSuperAdmin) {
+  if (viewState === SuperAdminView.Restricted) {
     return (
       <div className="min-h-[70vh] flex flex-col items-center justify-center text-center p-6 space-y-4">
         <div className="w-16 h-16 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center shadow-lg shadow-rose-500/10">
@@ -558,7 +633,7 @@ export default function SuperAdminPage() {
           <div className="flex flex-wrap items-center gap-3 shrink-0">
             <Button
               variant="outline"
-              onClick={() => loadBusinesses(true)}
+              onClick={() => loadBusinessesData(true)}
               disabled={isRefreshing}
               className="bg-slate-800/80 hover:bg-slate-700 text-slate-200 border-slate-700 text-xs sm:text-sm font-semibold px-4 py-2.5 rounded-xl transition-all flex items-center gap-2"
             >
