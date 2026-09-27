@@ -224,7 +224,8 @@ export default function FillTimesheetPage() {
                 entry_date: dateKey,
                 amount_cents: amountCents,
                 reason: reason,
-                kind: 'addition'
+                kind: 'addition',
+                business_id: business?.id
             });
             if (error) throw error;
             toast({ title: `Added ₹${amountRupees}`, description: `Allowance: ${reason}`, variant: "success" });

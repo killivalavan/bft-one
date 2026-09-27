@@ -135,6 +135,35 @@ export default function AdminPage() {
     setTotalPayroll(payrollTotal);
     setTotalNetPayroll(netPayrollTotal);
 
+    // Keep fixed monthly expenses Staff Salary overhead auto-synced with Total Salary Structure
+    if (payrollTotal > 0 && bizId) {
+      try {
+        let monthlyQuery = supabaseClient
+          .from("monthly_expenses")
+          .select("id, amount_cents")
+          .eq("business_id", bizId)
+          .or("category.eq.Salary,item_name.ilike.%salary%");
+
+        const { data: salaryRows } = await monthlyQuery;
+        if (salaryRows && salaryRows.length > 0) {
+          const sRow = salaryRows[0];
+          if (sRow.amount_cents !== payrollTotal) {
+            await supabaseClient
+              .from("monthly_expenses")
+              .update({
+                amount_cents: payrollTotal,
+                previous_amount_cents: sRow.amount_cents,
+                notes: `Auto-updated from employee salary structure in Users & Roles`,
+                updated_at: new Date().toISOString(),
+              })
+              .eq("id", sRow.id);
+          }
+        }
+      } catch (err) {
+        console.warn("Failed to sync monthly expense salary overhead:", err);
+      }
+    }
+
     let catQuery = supabaseClient.from("categories").select("*").order("name");
     if (bizId) catQuery = catQuery.eq("business_id", bizId);
     const { data: cats } = await catQuery;

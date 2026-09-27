@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { supabaseClient } from "@/lib/supabaseClient";
+import { useTenant } from "@/lib/context/TenantContext";
 import { Button } from "@/components/ui/Button";
 import { Loader2, Download, TrendingUp, TrendingDown, ChevronLeft, ChevronRight } from "lucide-react";
 import jsPDF from "jspdf";
@@ -19,6 +20,7 @@ interface SalesData {
 }
 
 export function SalesManager() {
+    const { business } = useTenant();
     const [view, setView] = useState<"daily" | "monthly" | "yearly">("daily");
     const [allSales, setAllSales] = useState<SalesData[]>([]);
     const [loading, setLoading] = useState(true);
@@ -31,18 +33,23 @@ export function SalesManager() {
 
     useEffect(() => {
         loadData();
-    }, []);
+    }, [business?.id]);
 
     async function loadData() {
         setLoading(true);
-        const { data, error } = await supabaseClient
+        let query = supabaseClient
             .from("daily_sales")
             .select(`
                 *,
                 cash_submitter:cash_submitted_by(full_name, email),
                 upi_submitter:upi_submitted_by(full_name, email)
-            `)
-            .order("sale_date", { ascending: false });
+            `);
+
+        if (business?.id) {
+            query = query.eq("business_id", business.id);
+        }
+
+        const { data, error } = await query.order("sale_date", { ascending: false });
 
         if (error) {
             console.error("Failed to load sales", error);

@@ -143,35 +143,47 @@ export default function Navbar() {
           : "bg-white/90 border-b border-zinc-200/80 text-zinc-900 shadow-sm"
       )}>
         <div className="max-w-[1600px] mx-auto px-3 sm:px-6 lg:px-8 xl:px-12">
-          <div className={cn("flex items-center h-16 sm:h-18", isFocusMode ? "justify-center" : "justify-between")}>
+          <div className={cn("flex items-center h-[68px] sm:h-20", isFocusMode ? "justify-center" : "justify-between")}>
             
             {/* Left: Brand Identity & Connected Store Pill */}
             {!isFocusMode && (
-              <div className="flex-shrink-0 flex items-center gap-3">
+              <div className="flex-shrink-0 flex items-center gap-2.5 sm:gap-3.5 min-w-0">
                 <Link
                   href={isSuperAdminView ? "/super-admin" : "/"}
-                  className="flex items-center gap-2.5 group"
+                  className="flex items-center gap-2.5 sm:gap-3 group shrink-0"
                 >
                   {/* Brand Gem Icon */}
-                  <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-tr from-sky-600 via-indigo-600 to-sky-500 flex items-center justify-center text-white shadow-md shadow-sky-600/20 group-hover:scale-105 group-hover:shadow-sky-600/30 transition-all">
+                  <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-tr from-sky-600 via-indigo-600 to-sky-500 flex items-center justify-center text-white shadow-md shadow-sky-600/20 group-hover:scale-105 group-hover:shadow-sky-600/30 transition-all shrink-0">
                     <Sparkles size={18} className="text-white" />
                   </div>
-                  <div className="flex flex-col">
+                  
+                  <div className="flex flex-col justify-center min-w-0">
                     <span className={cn(
-                      "font-extrabold text-lg sm:text-xl tracking-tight leading-tight transition-colors",
+                      "font-extrabold text-lg sm:text-xl tracking-tight leading-none transition-colors",
                       isSuperAdminView
                         ? "text-white group-hover:text-sky-300"
                         : "text-zinc-900 group-hover:text-sky-600"
                     )}>
                       SeyalPro
                     </span>
-                    <span className="text-[10px] font-semibold text-zinc-400 tracking-wider uppercase hidden sm:block">
-                      Business OS
-                    </span>
+
+                    {/* Mobile: Connected Store Green Pill Badge underneath SeyalPro */}
+                    {isSuperAdminView ? (
+                      <div className="sm:hidden mt-1 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-indigo-500/15 text-indigo-300 border border-indigo-500/30 shadow-2xs max-w-[190px] truncate">
+                        <Globe size={11} className="text-indigo-400 animate-spin-slow shrink-0" />
+                        <span className="truncate">Super Admin Hub</span>
+                      </div>
+                    ) : business?.name ? (
+                      <div className="sm:hidden mt-1 inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200/90 shadow-2xs max-w-[190px] xs:max-w-[240px]">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+                        <Store size={11} className="text-emerald-600 shrink-0" />
+                        <span className="truncate">{business.name}</span>
+                      </div>
+                    ) : null}
                   </div>
                 </Link>
 
-                {/* Live Branch / Super Admin Badge */}
+                {/* Desktop: Connected Store Green Pill Badge (Next to Brand) */}
                 {isSuperAdminView ? (
                   <span className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-indigo-500/15 text-indigo-300 border border-indigo-500/30 shadow-sm">
                     <Globe size={13} className="text-indigo-400 animate-spin-slow" />
@@ -179,12 +191,12 @@ export default function Navbar() {
                   </span>
                 ) : business?.name ? (
                   <span
-                    className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200/80 shadow-sm max-w-[240px] truncate"
+                    className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200/90 shadow-sm max-w-[260px] truncate"
                     title={business.name}
                   >
                     <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
                     <Store size={13} className="text-emerald-600 shrink-0" />
-                    <span className="truncate">{business.name}</span>
+                    <span className="truncate font-semibold">{business.name}</span>
                   </span>
                 ) : null}
               </div>
@@ -278,7 +290,16 @@ export default function Navbar() {
                       <div className="px-3.5 py-3 border-b border-zinc-100">
                         <p className="text-sm font-bold text-zinc-900 capitalize">{displayName}</p>
                         <p className="text-xs text-zinc-500 truncate">{userEmail}</p>
-                        <div className="mt-1.5">
+                        
+                        {business?.name && !flags?.isSuperAdmin && (
+                          <div className="mt-2 flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-200/80 text-xs font-semibold">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+                            <Store size={12} className="text-emerald-600 shrink-0" />
+                            <span className="truncate">{business.name}</span>
+                          </div>
+                        )}
+
+                        <div className="mt-2">
                           <span className="inline-block px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider bg-zinc-100 text-zinc-700">
                             {flags?.isSuperAdmin ? "👑 Platform Super Admin" : flags?.isAdmin ? "🛡️ Store Admin" : "👤 Staff Member"}
                           </span>

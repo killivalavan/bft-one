@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { supabaseClient } from "@/lib/supabaseClient";
+import { useTenant } from "@/lib/context/TenantContext";
 import { useToast } from "@/components/ui/Toast";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -11,9 +12,11 @@ import { format, addDays, isSameDay } from "date-fns";
 
 export default function SalesPage() {
     const { toast } = useToast();
+    const { business } = useTenant();
     const [loading, setLoading] = useState(true);
     const [isAdmin, setIsAdmin] = useState(false);
     const [userId, setUserId] = useState<string | null>(null);
+    const [profileBusinessId, setProfileBusinessId] = useState<string | null>(null);
 
     // Date State
     const getInitialDate = () => {
@@ -37,6 +40,8 @@ export default function SalesPage() {
     const [cashSubmittedBy, setCashSubmittedBy] = useState<string | null>(null);
     const [showSaveSuccess, setShowSaveSuccess] = useState(false);
 
+    const currentBusinessId = business?.id || profileBusinessId;
+
     useEffect(() => {
         checkUser();
     }, []);
@@ -44,7 +49,7 @@ export default function SalesPage() {
     // Fetch data whenever date changes (if user is loaded)
     useEffect(() => {
         if (userId) fetchSales();
-    }, [date, userId]);
+    }, [date, userId, currentBusinessId]);
 
     async function checkUser() {
         try {
@@ -54,11 +59,14 @@ export default function SalesPage() {
 
             const { data: profile } = await supabaseClient
                 .from("profiles")
-                .select("is_admin")
+                .select("is_admin, business_id")
                 .eq("id", user.id)
                 .single();
 
             setIsAdmin(!!profile?.is_admin);
+            if (profile?.business_id) {
+                setProfileBusinessId(profile.business_id);
+            }
         } catch (error) {
             console.error(error);
         } finally {
@@ -74,11 +82,16 @@ export default function SalesPage() {
         setUpiSaved(false);
         setCashSubmittedBy(null);
 
-        const { data } = await supabaseClient
+        let query = supabaseClient
             .from("daily_sales")
             .select("*")
-            .eq("sale_date", dateStr)
-            .maybeSingle();
+            .eq("sale_date", dateStr);
+
+        if (currentBusinessId) {
+            query = query.eq("business_id", currentBusinessId);
+        }
+
+        const { data } = await query.maybeSingle();
 
         if (data) {
             if (data.total_cash_cents !== null) {
@@ -118,6 +131,18 @@ export default function SalesPage() {
         return () => clearInterval(id);
     }, [date]);
 
+    async function getEffectiveBusinessId(): Promise<string | null> {
+        if (currentBusinessId) return currentBusinessId;
+        if (userId) {
+            const { data: prof } = await supabaseClient.from("profiles").select("business_id").eq("id", userId).maybeSingle();
+            if (prof?.business_id) {
+                setProfileBusinessId(prof.business_id);
+                return prof.business_id;
+            }
+        }
+        return null;
+    }
+
     async function saveCash() {
         if (!cash || isNaN(Number(cash))) {
             toast({ title: "Invalid Amount", description: "Please enter a valid cash amount", variant: "error" });
@@ -132,7 +157,13 @@ export default function SalesPage() {
             targetDate = addDays(date, -1);
         }
         const saveDateStr = format(targetDate, "yyyy-MM-dd");
-        const { data: existing } = await supabaseClient.from("daily_sales").select("id").eq("sale_date", saveDateStr).maybeSingle();
+        const bId = await getEffectiveBusinessId();
+
+        let query = supabaseClient.from("daily_sales").select("id").eq("sale_date", saveDateStr);
+        if (bId) {
+            query = query.eq("business_id", bId);
+        }
+        const { data: existing } = await query.maybeSingle();
 
         let error;
         if (existing) {
@@ -146,7 +177,8 @@ export default function SalesPage() {
             const { error: err } = await supabaseClient.from("daily_sales").insert({
                 sale_date: saveDateStr,
                 total_cash_cents: cents,
-                cash_submitted_by: userId
+                cash_submitted_by: userId,
+                ...(bId ? { business_id: bId } : {})
             });
             error = err;
         }
@@ -174,8 +206,13 @@ export default function SalesPage() {
             targetDate = addDays(date, -1);
         }
         const saveDateStr = format(targetDate, "yyyy-MM-dd");
+        const bId = await getEffectiveBusinessId();
 
-        const { data: existing } = await supabaseClient.from("daily_sales").select("id").eq("sale_date", saveDateStr).maybeSingle();
+        let query = supabaseClient.from("daily_sales").select("id").eq("sale_date", saveDateStr);
+        if (bId) {
+            query = query.eq("business_id", bId);
+        }
+        const { data: existing } = await query.maybeSingle();
         if (!existing) {
             toast({ title: "Nothing to clear", variant: "info" });
             return;
@@ -209,7 +246,13 @@ export default function SalesPage() {
             targetDate = addDays(date, -1);
         }
         const saveDateStr = format(targetDate, "yyyy-MM-dd");
-        const { data: existing } = await supabaseClient.from("daily_sales").select("id").eq("sale_date", saveDateStr).maybeSingle();
+        const bId = await getEffectiveBusinessId();
+
+        let query = supabaseClient.from("daily_sales").select("id").eq("sale_date", saveDateStr);
+        if (bId) {
+            query = query.eq("business_id", bId);
+        }
+        const { data: existing } = await query.maybeSingle();
 
         let error;
         if (existing) {
@@ -223,7 +266,8 @@ export default function SalesPage() {
             const { error: err } = await supabaseClient.from("daily_sales").insert({
                 sale_date: saveDateStr,
                 upi_amount_cents: cents,
-                upi_submitted_by: userId
+                upi_submitted_by: userId,
+                ...(bId ? { business_id: bId } : {})
             });
             error = err;
         }

@@ -107,10 +107,10 @@ export default function BillingPage() {
     if (list.length === 0) return;
     const total = totalCents(items);
     const { data: order, error } = await supabaseClient.from("orders")
-      .insert({ user_id: user.id, total_cents: total, status: "pending" })
+      .insert({ user_id: user.id, total_cents: total, status: "pending", business_id: business?.id })
       .select("*").single();
     if (error) { toast({ title: "Failed to submit order", description: error.message, variant: "error" }); return; }
-    const rows = list.map(i => ({ order_id: order.id, product_id: i.product_id, qty: i.qty, price_cents: i.price_cents }));
+    const rows = list.map(i => ({ order_id: order.id, product_id: i.product_id, qty: i.qty, price_cents: i.price_cents, business_id: business?.id }));
     const { error: e2 } = await supabaseClient.from("order_items").insert(rows);
     if (e2) { toast({ title: "Failed to add items", description: e2.message, variant: "error" }); return; }
     try {

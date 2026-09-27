@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
 import { supabaseClient } from "@/lib/supabaseClient";
+import { useTenant } from "@/lib/context/TenantContext";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Download, CheckCircle, Circle } from "lucide-react";
@@ -13,6 +14,7 @@ interface SalaryManagerProps {
 }
 
 export default function SalaryManager({ userId, perDaySalary, onDownloadPayslip }: SalaryManagerProps) {
+  const { business } = useTenant();
   const [month, setMonth] = useState<Date>(() => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1); });
   const [rows, setRows] = useState<any[]>([]);
   const [form, setForm] = useState<{ date: string; reason: string; amount: string; kind: string }>({
@@ -70,7 +72,7 @@ export default function SalaryManager({ userId, perDaySalary, onDownloadPayslip 
     // If reason is leave and amount is 0, try to check perDaySalary again?
     // The useEffect handles the form state.
     const cents = Math.round((parseFloat(form.amount || '0') || 0) * 100);
-    const { error } = await supabaseClient.from('salary_entries').insert({ user_id: userId, entry_date: form.date, amount_cents: cents, reason: form.reason || 'Manual entry', kind: form.kind || 'deduction' });
+    const { error } = await supabaseClient.from('salary_entries').insert({ user_id: userId, entry_date: form.date, amount_cents: cents, reason: form.reason || 'Manual entry', kind: form.kind || 'deduction', business_id: business?.id });
     if (!error) { setForm({ ...form, reason: '', amount: '0' }); await load(); }
   }
   async function del(id: string) { await supabaseClient.from('salary_entries').delete().eq('id', id); await load(); }
@@ -81,7 +83,7 @@ export default function SalaryManager({ userId, perDaySalary, onDownloadPayslip 
 
     let error;
     if (newVal) {
-      const { error: err } = await supabaseClient.from('salary_settlements').upsert({ user_id: userId, month_key: range.monthKey, is_settled: true });
+      const { error: err } = await supabaseClient.from('salary_settlements').upsert({ user_id: userId, month_key: range.monthKey, is_settled: true, business_id: business?.id });
       error = err;
     } else {
       const { error: err } = await supabaseClient.from('salary_settlements').delete().eq('user_id', userId).eq('month_key', range.monthKey);

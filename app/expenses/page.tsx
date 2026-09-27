@@ -9,7 +9,9 @@ import {
     ChevronLeft, ChevronRight, Loader2, Plus, Receipt, Trash2, Pencil,
     Lock, Calendar, X, Check, PackageSearch, ClipboardList, BarChart3, Search, ArrowUpDown, Download,
     Flame, TrendingUp, TrendingDown, ArrowRight, ChevronDown,
-    LineChart as LineChartIcon, AreaChart as AreaChartIcon, PieChart as PieChartIcon
+    LineChart as LineChartIcon, AreaChart as AreaChartIcon, PieChart as PieChartIcon,
+    Wallet, Building2, CheckCircle2, Power, Zap, AlertCircle, ArrowUpRight, ArrowDownRight,
+    History, Info, Filter, SlidersHorizontal, RefreshCw, ShieldCheck, Users
 } from "lucide-react";
 import Link from "next/link";
 import {
@@ -21,7 +23,9 @@ import {
     XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend
 } from "recharts";
 import { FixedPriceManager, FixedPriceItem } from "@/components/expenses/FixedPriceManager";
-import { Tag } from "lucide-react";
+import { ExpenseAIAgent } from "@/components/expenses/ExpenseAIAgent";
+import { calculateDailyRecurringProjections, DailyRecurringProjectedItem } from "@/lib/ai/expense-agent";
+import { Tag, Sparkles, Bot, Layers } from "lucide-react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import html2canvas from "html2canvas-pro";
@@ -35,6 +39,124 @@ interface ExpenseRow {
     price_cents: number;
     submitted_by: string | null;
     created_at: string;
+}
+
+interface MonthlyExpenseRow {
+    id: string;
+    expense_month?: string | null;
+    category: string;
+    item_name: string;
+    amount_cents: number;
+    previous_amount_cents?: number | null;
+    is_active?: boolean;
+    notes: string | null;
+    submitted_by: string | null;
+    created_at: string;
+    updated_at?: string | null;
+}
+
+const MONTHLY_CATEGORIES = [
+    "Rent", "Salary", "Electricity", "Water", "Internet",
+    "Insurance", "Maintenance", "Transport", "Marketing", "Other"
+];
+
+const CATEGORY_COLORS: Record<string, { bg: string; text: string; border: string }> = {
+    Rent: { bg: "bg-purple-50", text: "text-purple-700", border: "border-purple-200" },
+    Salary: { bg: "bg-blue-50", text: "text-blue-700", border: "border-blue-200" },
+    Electricity: { bg: "bg-amber-50", text: "text-amber-700", border: "border-amber-200" },
+    Water: { bg: "bg-sky-50", text: "text-sky-700", border: "border-sky-200" },
+    Internet: { bg: "bg-teal-50", text: "text-teal-700", border: "border-teal-200" },
+    Insurance: { bg: "bg-emerald-50", text: "text-emerald-700", border: "border-emerald-200" },
+    Maintenance: { bg: "bg-orange-50", text: "text-orange-700", border: "border-orange-200" },
+    Transport: { bg: "bg-indigo-50", text: "text-indigo-700", border: "border-indigo-200" },
+    Marketing: { bg: "bg-pink-50", text: "text-pink-700", border: "border-pink-200" },
+    Other: { bg: "bg-zinc-100", text: "text-zinc-700", border: "border-zinc-200" },
+};
+
+const CATEGORY_PRESETS: Record<string, string[]> = {
+    Rent: ["Shop Rent", "Warehouse Rent", "Office Rent", "Equipment Lease"],
+    Salary: ["Staff Salary", "Manager Salary", "Chef / Cook Salary", "Helper / Cleaner Salary", "Security Salary"],
+    Electricity: ["EB Bill - Shop Meter", "EB Bill - Commercial Meter", "Generator Diesel / Fuel"],
+    Water: ["Water Can Delivery", "Municipal Water Tax", "Tanker Water Supply"],
+    Internet: ["Broadband / Fiber", "POS SIM Recharge", "Cloud / Software Subscriptions"],
+    Insurance: ["Shop Insurance Policy", "Staff Health Cover", "Fire & Burglary Insurance"],
+    Maintenance: ["AC Servicing & Gas", "Plumbing & Electrical Repair", "Pest Control Treatment", "Equipment AMC"],
+    Transport: ["Goods Delivery / Auto Freight", "Staff Travel Allowance", "Vehicle Fuel"],
+    Marketing: ["Flyers & Pamphlet Printing", "Local Social Media Ads", "Flex / Store Signboard"],
+    Other: ["Trade License & Taxes", "Waste Disposal & Cleaning", "Chartered Accountant Fee"],
+};
+
+function numberToWords(amount: number | string): string {
+    const num = typeof amount === "string" ? parseFloat(amount) : amount;
+    if (isNaN(num) || num <= 0) return "";
+
+    const ones = [
+        "", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine",
+        "Ten", "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen",
+        "Seventeen", "Eighteen", "Nineteen"
+    ];
+    const tens = [
+        "", "", "Twenty", "Thirty", "Forty", "Fifty", "Sixty", "Seventy", "Eighty", "Ninety"
+    ];
+
+    function convertTwoDigits(n: number): string {
+        if (n < 20) return ones[n];
+        const t = tens[Math.floor(n / 10)];
+        const o = ones[n % 10];
+        return o ? `${t}-${o}` : t;
+    }
+
+    function convertThreeDigits(n: number): string {
+        const h = Math.floor(n / 100);
+        const rem = n % 100;
+        let str = "";
+        if (h > 0) str += `${ones[h]} Hundred`;
+        if (rem > 0) {
+            str += str ? ` and ${convertTwoDigits(rem)}` : convertTwoDigits(rem);
+        }
+        return str;
+    }
+
+    const integerPart = Math.floor(num);
+    const decimalPart = Math.round((num - integerPart) * 100);
+
+    if (integerPart === 0 && decimalPart === 0) return "";
+
+    let words = "";
+    const crore = Math.floor(integerPart / 10000000);
+    const lakh = Math.floor((integerPart % 10000000) / 100000);
+    const thousand = Math.floor((integerPart % 100000) / 1000);
+    const remainder = integerPart % 1000;
+
+    if (crore > 0) {
+        words += `${crore > 99 ? convertThreeDigits(crore) : convertTwoDigits(crore)} Crore `;
+    }
+    if (lakh > 0) {
+        words += `${lakh > 99 ? convertThreeDigits(lakh) : convertTwoDigits(lakh)} Lakh `;
+    }
+    if (thousand > 0) {
+        words += `${convertTwoDigits(thousand)} Thousand `;
+    }
+    if (remainder > 0) {
+        words += `${convertThreeDigits(remainder)} `;
+    }
+
+    words = words.trim();
+    if (!words && integerPart > 0) words = "Zero";
+
+    const rupeeStr = integerPart === 1 ? "Rupee" : "Rupees";
+    let finalStr = words ? `${words} ${rupeeStr}` : "";
+
+    if (decimalPart > 0) {
+        const paiseWords = convertTwoDigits(decimalPart);
+        if (finalStr) {
+            finalStr += ` and ${paiseWords} Paise`;
+        } else {
+            finalStr = `${paiseWords} Paise`;
+        }
+    }
+
+    return finalStr ? `${finalStr} only` : "";
 }
 
 export default function ExpensesPage() {
@@ -53,8 +175,8 @@ export default function ExpensesPage() {
     const [namesById, setNamesById] = useState<Record<string, string>>({});
     const [listLoading, setListLoading] = useState(true);
 
-    // Tabs: adding new entries vs. browsing spending history
-    const [activeTab, setActiveTab] = useState<"add" | "overview">("add");
+    // Tabs: daily expense, monthly expense, overview, AI Advisor
+    const [activeTab, setActiveTab] = useState<"add" | "monthly" | "overview" | "ai-advisor">("add");
 
     // Overview filter: period scope + anchor date used for week/month/year navigation
     const [overviewScope, setOverviewScope] = useState<"today" | "week" | "month" | "year" | "all" | "custom">("month");
@@ -87,14 +209,32 @@ export default function ExpensesPage() {
     const [editPrice, setEditPrice] = useState("");
     const [editQuantity, setEditQuantity] = useState("1");
 
+    // Fixed Monthly Expenses (recurring master list, updated only when prices change)
+    const [monthlyExpenses, setMonthlyExpenses] = useState<MonthlyExpenseRow[]>([]);
+    const [totalSalaryStructureCents, setTotalSalaryStructureCents] = useState<number>(0);
+    const [monthlyCategory, setMonthlyCategory] = useState(MONTHLY_CATEGORIES[0]);
+    const [monthlyItemName, setMonthlyItemName] = useState("");
+    const [monthlyAmount, setMonthlyAmount] = useState("");
+    const [monthlyNotes, setMonthlyNotes] = useState("");
+    const [monthlySaving, setMonthlySaving] = useState(false);
+    const [monthlySearchQuery, setMonthlySearchQuery] = useState("");
+    const [monthlyCategoryFilter, setMonthlyCategoryFilter] = useState<string>("all");
+    const [monthlyEditingId, setMonthlyEditingId] = useState<string | null>(null);
+    const [monthlyEditCategory, setMonthlyEditCategory] = useState("");
+    const [monthlyEditItemName, setMonthlyEditItemName] = useState("");
+    const [monthlyEditAmount, setMonthlyEditAmount] = useState("");
+    const [monthlyEditNotes, setMonthlyEditNotes] = useState("");
+    const [aiRecurrenceFilter, setAiRecurrenceFilter] = useState<"all" | "daily" | "frequent">("all");
+
     useEffect(() => {
         checkUser();
     }, []);
 
-    // Support deep-linking straight into the Spending Overview tab (e.g. from the admin panel).
+    // Support deep-linking straight into Spending Overview or AI Advisor tab
     useEffect(() => {
-        if (new URLSearchParams(window.location.search).get("tab") === "overview") {
-            setActiveTab("overview");
+        const tabParam = new URLSearchParams(window.location.search).get("tab");
+        if (tabParam === "overview" || tabParam === "ai-advisor" || tabParam === "monthly") {
+            setActiveTab(tabParam as "overview" | "ai-advisor" | "monthly");
         }
     }, []);
 
@@ -111,6 +251,11 @@ export default function ExpensesPage() {
         if (userId && isAdmin) fetchAllExpenses();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [userId, isAdmin, business?.id]);
+
+    useEffect(() => {
+        if (userId) fetchMonthlyExpenses();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [userId, business?.id]);
 
     async function checkUser() {
         try {
@@ -182,6 +327,270 @@ export default function ExpensesPage() {
             setAllExpenses(rows);
             if (isAdmin) loadNames(rows);
         }
+    }
+
+    // Fixed Monthly Expenses (recurring master list, applies across all months)
+    async function fetchMonthlyExpenses() {
+        // 1. Fetch current staff salary structure from Users & Roles
+        let profQuery = supabaseClient
+            .from("profiles")
+            .select("id, email, is_admin, base_salary_cents, fixed_allowance_cents");
+        if (business?.id) profQuery = profQuery.eq("business_id", business.id);
+        const { data: profs } = await profQuery;
+
+        let totalSalaryStruct = 0;
+        let staffCount = 0;
+        (profs || []).forEach((p: any) => {
+            if (p.is_admin || p.email?.toLowerCase().includes("admin")) return;
+            const base = Number(p.base_salary_cents || 0);
+            const allowance = Number(p.fixed_allowance_cents || 0);
+            totalSalaryStruct += (base + allowance);
+            staffCount++;
+        });
+        setTotalSalaryStructureCents(totalSalaryStruct);
+
+        // 2. Fetch fixed monthly expenses
+        let query = supabaseClient
+            .from("monthly_expenses")
+            .select("*");
+        if (business?.id) query = query.eq("business_id", business.id);
+        const { data, error } = await query.order("created_at", { ascending: true });
+        if (!error) {
+            let rows = (data || []) as MonthlyExpenseRow[];
+
+            // 3. Find existing Salary overhead entry
+            const salaryEntry = rows.find(
+                r => r.category === "Salary" || r.item_name.toLowerCase().includes("salary")
+            );
+
+            if (!salaryEntry && totalSalaryStruct > 0 && userId) {
+                // Auto-create initial Staff Salary fixed overhead
+                const { data: inserted, error: insertErr } = await supabaseClient
+                    .from("monthly_expenses")
+                    .insert({
+                        category: "Salary",
+                        item_name: "Staff Salary",
+                        amount_cents: totalSalaryStruct,
+                        is_active: true,
+                        notes: `Auto-initialized from ${staffCount} employee salary structure in Users & Roles`,
+                        submitted_by: userId,
+                        business_id: business?.id,
+                    })
+                    .select()
+                    .single();
+
+                if (!insertErr && inserted) {
+                    rows = [...rows, inserted as MonthlyExpenseRow];
+                }
+            } else if (salaryEntry && totalSalaryStruct > 0 && salaryEntry.amount_cents !== totalSalaryStruct) {
+                // Auto-update to latest structure (when new employees are added, removed, or base salaries updated)
+                const prevAmt = salaryEntry.amount_cents;
+                await supabaseClient
+                    .from("monthly_expenses")
+                    .update({
+                        amount_cents: totalSalaryStruct,
+                        previous_amount_cents: prevAmt,
+                        notes: `Auto-updated from ${staffCount} employee salary structure in Users & Roles`,
+                        updated_at: new Date().toISOString(),
+                    })
+                    .eq("id", salaryEntry.id);
+
+                rows = rows.map(r => r.id === salaryEntry.id ? {
+                    ...r,
+                    amount_cents: totalSalaryStruct,
+                    previous_amount_cents: prevAmt,
+                    notes: `Auto-updated from ${staffCount} employee salary structure in Users & Roles`,
+                    updated_at: new Date().toISOString(),
+                } : r);
+            }
+
+            setMonthlyExpenses(rows);
+        }
+    }
+
+    async function addMonthlyExpense() {
+        const trimmedName = monthlyItemName.trim();
+        if (!trimmedName) { toast({ title: "Enter item name", variant: "error" }); return; }
+        const amtNum = Number(monthlyAmount);
+        if (!monthlyAmount || isNaN(amtNum) || amtNum <= 0) {
+            toast({ title: "Invalid amount", variant: "error" }); return;
+        }
+
+        // Auto-assign category from item name
+        const lower = trimmedName.toLowerCase();
+        let cat = "Other";
+        if (lower.includes("rent") || lower.includes("lease") || lower.includes("building")) cat = "Rent";
+        else if (lower.includes("salary") || lower.includes("wages") || lower.includes("staff") || lower.includes("payroll")) cat = "Salary";
+        else if (lower.includes("eb") || lower.includes("electric") || lower.includes("power") || lower.includes("current")) cat = "Electricity";
+        else if (lower.includes("internet") || lower.includes("wifi") || lower.includes("broadband") || lower.includes("phone")) cat = "Internet";
+        else if (lower.includes("water") || lower.includes("can")) cat = "Water";
+        else if (lower.includes("maint") || lower.includes("repair") || lower.includes("cleaning") || lower.includes("service")) cat = "Maintenance";
+        else if (lower.includes("software") || lower.includes("pos") || lower.includes("subs") || lower.includes("app")) cat = "Software";
+        else if (lower.includes("gas") || lower.includes("cylinder") || lower.includes("fuel") || lower.includes("transport")) cat = "Transport";
+
+        setMonthlySaving(true);
+        const { error } = await supabaseClient.from("monthly_expenses").insert({
+            category: cat,
+            item_name: trimmedName,
+            amount_cents: Math.round(amtNum * 100),
+            is_active: true,
+            notes: monthlyNotes.trim() || null,
+            submitted_by: userId,
+            business_id: business?.id,
+        });
+        setMonthlySaving(false);
+
+        if (error) {
+            toast({ title: "Failed to add", description: error.message, variant: "error" }); return;
+        }
+        toast({ title: "Fixed monthly expense added", description: "Will be included across all monthly overviews", variant: "success" });
+        setMonthlyItemName(""); setMonthlyAmount(""); setMonthlyNotes("");
+        fetchMonthlyExpenses();
+    }
+
+    function startMonthlyEdit(row: MonthlyExpenseRow) {
+        setMonthlyEditingId(row.id);
+        setMonthlyEditCategory(row.category);
+        setMonthlyEditItemName(row.item_name);
+        setMonthlyEditAmount((row.amount_cents / 100).toString());
+        setMonthlyEditNotes(row.notes || "");
+    }
+
+    function cancelMonthlyEdit() { setMonthlyEditingId(null); }
+
+    async function saveMonthlyEdit(row: MonthlyExpenseRow) {
+        const trimmedName = monthlyEditItemName.trim();
+        const amtNum = Number(monthlyEditAmount);
+        if (!trimmedName || isNaN(amtNum) || amtNum <= 0) {
+            toast({ title: "Invalid entry", variant: "error" }); return;
+        }
+
+        const newAmountCents = Math.round(amtNum * 100);
+        const priceChanged = newAmountCents !== row.amount_cents;
+
+        const { error } = await supabaseClient.from("monthly_expenses").update({
+            category: monthlyEditCategory,
+            item_name: trimmedName,
+            amount_cents: newAmountCents,
+            previous_amount_cents: priceChanged ? row.amount_cents : row.previous_amount_cents,
+            notes: monthlyEditNotes.trim() || null,
+            updated_at: new Date().toISOString(),
+        }).eq("id", row.id);
+
+        if (error) {
+            toast({ title: "Failed to update", description: error.message, variant: "error" }); return;
+        }
+        toast({
+            title: priceChanged ? "Fixed expense price updated" : "Updated",
+            description: priceChanged ? `Updated to ₹${amtNum.toFixed(2)}/mo` : undefined,
+            variant: "success"
+        });
+        setMonthlyEditingId(null);
+        fetchMonthlyExpenses();
+    }
+
+    async function toggleMonthlyActive(row: MonthlyExpenseRow) {
+        const nextActive = row.is_active === false ? true : false;
+        const { error } = await supabaseClient.from("monthly_expenses").update({
+            is_active: nextActive,
+            updated_at: new Date().toISOString(),
+        }).eq("id", row.id);
+
+        if (error) {
+            toast({ title: "Failed to update status", description: error.message, variant: "error" }); return;
+        }
+        toast({ title: nextActive ? "Overhead enabled" : "Overhead paused", variant: "success" });
+        fetchMonthlyExpenses();
+    }
+
+    async function deleteMonthlyExpense(row: MonthlyExpenseRow) {
+        if (!confirm(`Delete fixed monthly overhead "${row.item_name}"?`)) return;
+        const { error } = await supabaseClient.from("monthly_expenses").delete().eq("id", row.id);
+        if (error) {
+            toast({ title: "Failed to delete", description: error.message, variant: "error" }); return;
+        }
+        toast({ title: "Deleted", variant: "success" });
+        fetchMonthlyExpenses();
+    }
+
+    async function addAiItemToMonthlyOverheads(item: DailyRecurringProjectedItem) {
+        const existing = monthlyExpenses.find(
+            m => m.item_name.trim().toLowerCase() === item.itemName.trim().toLowerCase()
+        );
+
+        if (existing) {
+            const priceChanged = existing.amount_cents !== item.projectedMonthlySpendCents;
+            const { error } = await supabaseClient.from("monthly_expenses").update({
+                amount_cents: item.projectedMonthlySpendCents,
+                previous_amount_cents: priceChanged ? existing.amount_cents : existing.previous_amount_cents,
+                notes: `Updated from daily demand of ${item.avgDailyQuantity.toFixed(1)} units/day (@ ₹${(item.avgUnitCostCents / 100).toFixed(2)}/unit)`,
+                updated_at: new Date().toISOString(),
+            }).eq("id", existing.id);
+
+            if (error) {
+                toast({ title: "Failed to update overhead", description: error.message, variant: "error" });
+                return;
+            }
+
+            toast({
+                title: `Updated "${item.itemName}" Fixed Budget`,
+                description: `Synced to current run-rate of ₹${(item.projectedMonthlySpendCents / 100).toLocaleString("en-IN")}/mo`,
+                variant: "success",
+            });
+            fetchMonthlyExpenses();
+            return;
+        }
+
+        let cat = item.categorySuggestion;
+        if (!MONTHLY_CATEGORIES.includes(cat)) {
+            if (cat === "Water") cat = "Water";
+            else if (cat.includes("Maintenance")) cat = "Maintenance";
+            else if (cat.includes("Transport") || cat.includes("Fuel")) cat = "Transport";
+            else cat = "Other";
+        }
+
+        const { error } = await supabaseClient.from("monthly_expenses").insert({
+            category: cat,
+            item_name: item.itemName,
+            amount_cents: item.projectedMonthlySpendCents,
+            is_active: true,
+            notes: `Derived from daily demand of ${item.avgDailyQuantity.toFixed(1)} units/day (@ ₹${(item.avgUnitCostCents / 100).toFixed(2)}/unit)`,
+            submitted_by: userId,
+            business_id: business?.id,
+        });
+
+        if (error) {
+            toast({ title: "Failed to add overhead", description: error.message, variant: "error" });
+            return;
+        }
+
+        toast({
+            title: `Added "${item.itemName}" to Fixed Overheads`,
+            description: `Budgeted at ₹${(item.projectedMonthlySpendCents / 100).toLocaleString("en-IN")}/mo`,
+            variant: "success",
+        });
+        fetchMonthlyExpenses();
+    }
+
+    async function removeAiItemFromMonthlyOverheads(item: DailyRecurringProjectedItem) {
+        const existing = monthlyExpenses.find(
+            m => m.item_name.trim().toLowerCase() === item.itemName.trim().toLowerCase()
+        );
+        if (!existing) return;
+        if (!confirm(`Remove "${existing.item_name}" from Fixed Monthly Overheads?`)) return;
+
+        const { error } = await supabaseClient.from("monthly_expenses").delete().eq("id", existing.id);
+        if (error) {
+            toast({ title: "Failed to remove overhead", description: error.message, variant: "error" });
+            return;
+        }
+
+        toast({
+            title: `Removed "${item.itemName}" from Fixed Overheads`,
+            description: "Will no longer be tracked as a fixed master overhead",
+            variant: "success",
+        });
+        fetchMonthlyExpenses();
     }
 
     async function fetchPriceList() {
@@ -394,24 +803,71 @@ export default function ExpensesPage() {
         })
         : allExpenses;
 
+    // Active fixed recurring monthly expenses
+    const activeMonthlyExpenses = monthlyExpenses.filter(m => m.is_active !== false);
+
+    // Multiplier for recurring monthly overhead based on selected overview time frame
+    const periodMonthlyMultiplier = (() => {
+        switch (overviewScope) {
+            case "today":
+                return 1 / 30; // 1 day's share of monthly fixed overhead
+            case "week":
+                return 7 / 30; // 1 week's share of monthly fixed overhead
+            case "month":
+                return 1;      // 1 full month
+            case "year":
+                return 12;     // 1 full year
+            case "all": {
+                // Number of distinct calendar months with recorded daily expenses
+                const monthsSet = new Set(allExpenses.map(e => e.expense_date.substring(0, 7)));
+                return Math.max(1, monthsSet.size);
+            }
+            case "custom": {
+                if (!overviewRange) return 1;
+                const days = Math.max(1, Math.round((overviewRange.end.getTime() - overviewRange.start.getTime()) / (1000 * 60 * 60 * 24)));
+                return days / 30.4;
+            }
+            default:
+                return 1;
+        }
+    })();
+
     const searchTerm = searchQuery.trim().toLowerCase();
     const overviewRows = searchTerm
         ? rangedRows.filter(r => r.item_name.toLowerCase().includes(searchTerm))
         : rangedRows;
 
-    const overviewTotalCents = overviewRows.reduce((sum, r) => sum + r.price_cents, 0);
+    const filteredMonthlyRows = searchTerm
+        ? activeMonthlyExpenses.filter(r => r.item_name.toLowerCase().includes(searchTerm) || r.category.toLowerCase().includes(searchTerm))
+        : activeMonthlyExpenses;
+
+    const overviewDailyTotalCents = overviewRows.reduce((sum, r) => sum + r.price_cents, 0);
+    const fixedMonthlyBaseTotalCents = filteredMonthlyRows.reduce((sum, r) => sum + r.amount_cents, 0);
+    const overviewMonthlyTotalCents = Math.round(fixedMonthlyBaseTotalCents * periodMonthlyMultiplier);
+    const overviewTotalCents = overviewDailyTotalCents + overviewMonthlyTotalCents;
+
     const overviewItemSummary = Object.values(
         overviewRows.reduce((acc, r) => {
             const key = r.item_name.trim().toLowerCase();
-            if (!acc[key]) acc[key] = { name: r.item_name, quantity: 0, cents: 0 };
+            if (!acc[key]) acc[key] = { name: r.item_name, quantity: 0, cents: 0, type: "daily" as const };
             acc[key].quantity += Number(r.quantity) || 0;
             acc[key].cents += r.price_cents;
             return acc;
-        }, {} as Record<string, { name: string; quantity: number; cents: number }>)
+        }, {} as Record<string, { name: string; quantity: number; cents: number; type: "daily" | "monthly" }>)
     ).sort((a, b) => b.cents - a.cents);
 
+    // Monthly expense item summary for overview (scaled by time multiplier)
+    const monthlyItemSummary = filteredMonthlyRows.map(r => ({
+        name: r.item_name,
+        category: r.category,
+        quantity: 1,
+        monthlyBaseCents: r.amount_cents,
+        cents: Math.round(r.amount_cents * periodMonthlyMultiplier),
+    })).sort((a, b) => b.cents - a.cents);
+
     const distinctItemCount = overviewItemSummary.length;
-    const avgPerEntryCents = overviewRows.length > 0 ? overviewTotalCents / overviewRows.length : 0;
+    const totalOverviewEntries = overviewRows.length + filteredMonthlyRows.length;
+    const avgPerEntryCents = totalOverviewEntries > 0 ? overviewTotalCents / totalOverviewEntries : 0;
 
     // Chart grouping: by day for short ranges, by month across a year, by year for all-time
     const chartGroupBy: "day" | "month" | "year" =
@@ -421,6 +877,12 @@ export default function ExpensesPage() {
         const d = new Date(`${r.expense_date}T00:00:00`);
         const key = chartGroupBy === "day" ? format(d, "MMM d") : chartGroupBy === "month" ? format(d, "MMM") : format(d, "yyyy");
         chartMap.set(key, (chartMap.get(key) || 0) + r.price_cents);
+    }
+    // If viewing year or multi-month, distribute fixed monthly overheads across months in trend chart
+    if (chartGroupBy === "month") {
+        for (const [key, cents] of chartMap.entries()) {
+            chartMap.set(key, cents + fixedMonthlyBaseTotalCents);
+        }
     }
     const chartData = Array.from(chartMap.entries()).map(([name, cents]) => ({ name, Amount: cents / 100 }));
 
@@ -502,11 +964,36 @@ export default function ExpensesPage() {
         });
     })();
 
-    const sortedTransactions = [...overviewRows].sort((a, b) => {
+    const unifiedTransactions = [
+        ...overviewRows.map(r => ({
+            id: r.id,
+            type: "daily" as const,
+            date: r.expense_date,
+            rawDate: new Date(r.created_at || `${r.expense_date}T00:00:00`),
+            item_name: r.item_name,
+            subtext: r.quantity > 1 ? `Qty: ${r.quantity}` : "Daily supply",
+            amount_cents: r.price_cents,
+            submitted_by: r.submitted_by,
+            category: "Daily",
+        })),
+        ...filteredMonthlyRows.map(m => ({
+            id: m.id,
+            type: "monthly" as const,
+            date: overviewRange ? format(overviewRange.start, "yyyy-MM-dd") : format(new Date(), "yyyy-MM-dd"),
+            rawDate: new Date(m.created_at),
+            item_name: m.item_name,
+            subtext: m.notes ? `${m.category} · Fixed Overhead · ${m.notes}` : `${m.category} · Fixed Overhead`,
+            amount_cents: Math.round(m.amount_cents * periodMonthlyMultiplier),
+            submitted_by: m.submitted_by,
+            category: m.category,
+        })),
+    ];
+
+    const sortedTransactions = [...unifiedTransactions].sort((a, b) => {
         const diff = sortKey === "date"
-            ? new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-            : a.price_cents - b.price_cents;
-        return sortDir === "asc" ? diff : -diff;
+            ? b.rawDate.getTime() - a.rawDate.getTime()
+            : a.amount_cents - b.amount_cents;
+        return sortDir === "asc" ? -diff : diff;
     });
 
     function toggleSort(key: "date" | "amount") {
@@ -551,6 +1038,28 @@ export default function ExpensesPage() {
     ];
 
     const viewedDateTotalCents = expenses.reduce((sum, r) => sum + r.price_cents, 0);
+    const totalActiveMonthlyFixedCents = activeMonthlyExpenses.reduce((sum, r) => sum + r.amount_cents, 0);
+    const activeMonthlyOverheadsCount = activeMonthlyExpenses.length;
+    const pausedMonthlyOverheadsCount = monthlyExpenses.filter(r => r.is_active === false).length;
+
+    // AI-calculated daily recurring demand projected across 30 days
+    const aiDailyProjections = calculateDailyRecurringProjections(allExpenses);
+    const grandTotalMonthlyOperationalCents = totalActiveMonthlyFixedCents + aiDailyProjections.totalProjectedMonthlyCents;
+    const grandTotalDailyBurnCents = Math.round(totalActiveMonthlyFixedCents / 30.4) + aiDailyProjections.totalDailyBurnCents;
+    const totalAiPotentialSavingsCents = aiDailyProjections.items.reduce((sum, i) => sum + i.suggestedSavingsCents, 0);
+
+    const displayedAiItems = aiDailyProjections.items.filter(item => {
+        if (aiRecurrenceFilter === "all") return true;
+        return item.recurrenceLevel === aiRecurrenceFilter;
+    });
+
+    // Filtered monthly overheads list for the Monthly Hub tab
+    const displayedMonthlyExpenses = monthlyExpenses.filter(row => {
+        const matchesCat = monthlyCategoryFilter === "all" || row.category === monthlyCategoryFilter;
+        const q = monthlySearchQuery.trim().toLowerCase();
+        const matchesSearch = !q || row.item_name.toLowerCase().includes(q) || (row.notes && row.notes.toLowerCase().includes(q)) || row.category.toLowerCase().includes(q);
+        return matchesCat && matchesSearch;
+    });
 
     // Captures a chart section as an image so the PDF mirrors what's on screen, not just raw numbers
     async function addChartImage(doc: jsPDF, el: HTMLDivElement | null, title: string, y: number): Promise<number> {
@@ -639,18 +1148,35 @@ export default function ExpensesPage() {
                 headStyles: { fillColor: [8, 145, 178] },
             });
 
+            if (monthlyItemSummary.length > 0) {
+                const currentY = (doc as any).lastAutoTable.finalY + 10;
+                let myY = currentY;
+                if (myY > 250) { doc.addPage(); myY = 20; }
+                doc.setFontSize(13);
+                doc.text("Monthly Fixed Overheads Breakdown", 14, myY);
+                autoTable(doc, {
+                    startY: myY + 4,
+                    head: [["Category", "Item", "Total (Rs)"]],
+                    body: monthlyItemSummary.map(i => [i.category, i.name, (i.cents / 100).toFixed(2)]),
+                    headStyles: { fillColor: [124, 58, 237] },
+                });
+            }
+
             const afterItemsY = (doc as any).lastAutoTable.finalY + 10;
+            let transY = afterItemsY;
+            if (transY > 250) { doc.addPage(); transY = 20; }
             doc.setFontSize(13);
-            doc.text("All Transactions", 14, afterItemsY);
+            doc.text("All Transactions (Daily & Monthly)", 14, transY);
 
             autoTable(doc, {
-                startY: afterItemsY + 4,
-                head: [["Date", "Item", "Qty", "Amount (Rs)", ...(isAdmin ? ["Added By"] : [])]],
+                startY: transY + 4,
+                head: [["Date", "Type / Category", "Item", "Details", "Amount (Rs)", ...(isAdmin ? ["Added By"] : [])]],
                 body: sortedTransactions.map(r => [
-                    format(new Date(`${r.expense_date}T00:00:00`), "dd MMM yyyy"),
+                    format(new Date(`${r.date}T00:00:00`), "dd MMM yyyy"),
+                    r.category,
                     r.item_name,
-                    r.quantity,
-                    (r.price_cents / 100).toFixed(2),
+                    r.subtext,
+                    (r.amount_cents / 100).toFixed(2),
                     ...(isAdmin ? [r.submitted_by && namesById[r.submitted_by] ? namesById[r.submitted_by] : "-"] : []),
                 ]),
                 headStyles: { fillColor: [39, 39, 42] },
@@ -665,7 +1191,7 @@ export default function ExpensesPage() {
 
     return (
         <div className="min-h-screen bg-neutral-50/50 pb-20 md:pb-10">
-            <div className={`mx-auto p-4 md:p-6 space-y-6 ${activeTab === "overview" && isAdmin ? "max-w-6xl" : "max-w-md"}`}>
+            <div className={`mx-auto p-4 md:p-6 space-y-6 ${isAdmin ? "max-w-6xl" : "max-w-md"}`}>
                 {/* Header */}
                 <div className="space-y-4">
                     <Link href="/" className="inline-flex items-center gap-2 text-zinc-500 hover:text-zinc-800 transition-colors text-sm font-medium">
@@ -677,12 +1203,12 @@ export default function ExpensesPage() {
                         <div>
                             <h1 className="text-2xl font-bold text-zinc-900 tracking-tight flex items-center gap-2">
                                 <Receipt size={22} className="text-cyan-600" />
-                                Daily Expenses
+                                Expenses
                             </h1>
-                            <p className="text-zinc-500 text-sm">Track daily purchases and spends</p>
+                            <p className="text-zinc-500 text-sm">Track daily &amp; monthly expenses, analyze trends &amp; optimize costs</p>
                         </div>
 
-                        {isAdmin && (
+                        {isAdmin && activeTab === "add" && (
                             <div className="flex items-center gap-1 bg-white border border-zinc-200 rounded-lg p-1 shadow-sm">
                                 <button onClick={() => setDate(d => addDays(d, -1))} className="p-2 hover:bg-zinc-50 rounded-md text-zinc-600">
                                     <ChevronLeft size={18} />
@@ -701,7 +1227,7 @@ export default function ExpensesPage() {
                         )}
                     </div>
 
-                    {!isToday && (
+                    {!isToday && activeTab === "add" && (
                         <div className="bg-amber-50 text-amber-800 text-xs px-3 py-2 rounded-lg border border-amber-200 flex items-center gap-2">
                             <Calendar size={12} />
                             Viewing past entries: <strong>{format(date, "MMMM do, yyyy")}</strong>
@@ -709,22 +1235,39 @@ export default function ExpensesPage() {
                     )}
                 </div>
 
-                {/* Tabs — Spending Overview is admin-only */}
+                {/* Tabs — Overview and AI Advisor are admin-only */}
                 {isAdmin && (
-                    <div className={`flex p-1 bg-zinc-100 rounded-xl ${activeTab === "overview" ? "max-w-md" : ""}`}>
+                    <div className="flex p-1 bg-zinc-100 rounded-xl">
                         <button
                             onClick={() => setActiveTab("add")}
-                            className={`flex-1 flex items-center justify-center gap-2 py-2.5 text-sm font-medium rounded-lg transition-all ${activeTab === "add" ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-500 hover:text-zinc-700"}`}
+                            className={`flex-1 flex items-center justify-center gap-2 py-2.5 text-xs sm:text-sm font-medium rounded-lg transition-all ${activeTab === "add" ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-500 hover:text-zinc-700"}`}
                         >
                             <ClipboardList size={16} className={activeTab === "add" ? "text-cyan-600" : "text-zinc-400"} />
-                            Add Expense
+                            Daily Expense
+                        </button>
+                        <button
+                            onClick={() => setActiveTab("monthly")}
+                            className={`flex-1 flex items-center justify-center gap-2 py-2.5 text-xs sm:text-sm font-medium rounded-lg transition-all ${activeTab === "monthly" ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-500 hover:text-zinc-700"}`}
+                        >
+                            <Building2 size={16} className={activeTab === "monthly" ? "text-violet-600" : "text-zinc-400"} />
+                            Monthly Expense
                         </button>
                         <button
                             onClick={() => setActiveTab("overview")}
-                            className={`flex-1 flex items-center justify-center gap-2 py-2.5 text-sm font-medium rounded-lg transition-all ${activeTab === "overview" ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-500 hover:text-zinc-700"}`}
+                            className={`flex-1 flex items-center justify-center gap-2 py-2.5 text-xs sm:text-sm font-medium rounded-lg transition-all ${activeTab === "overview" ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-500 hover:text-zinc-700"}`}
                         >
                             <BarChart3 size={16} className={activeTab === "overview" ? "text-cyan-600" : "text-zinc-400"} />
-                            Spending Overview
+                            Overview
+                        </button>
+                        <button
+                            onClick={() => setActiveTab("ai-advisor")}
+                            className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs sm:text-sm font-medium rounded-lg transition-all relative ${activeTab === "ai-advisor" ? "bg-gradient-to-r from-cyan-600 to-teal-600 text-white shadow-sm" : "text-zinc-600 hover:text-zinc-900 hover:bg-zinc-200/50"}`}
+                        >
+                            <Sparkles size={15} className={activeTab === "ai-advisor" ? "text-cyan-200 animate-pulse" : "text-cyan-600"} />
+                            <span>AI Advisor</span>
+                            <span className={`text-[9px] uppercase font-bold px-1.5 py-0.2 rounded-full ${activeTab === "ai-advisor" ? "bg-white/20 text-white" : "bg-cyan-100 text-cyan-800"}`}>
+                                Agent
+                            </span>
                         </button>
                     </div>
                 )}
@@ -884,6 +1427,664 @@ export default function ExpensesPage() {
                     </>
                 )}
 
+                {activeTab === "monthly" && isAdmin && (
+                    <div className="space-y-8">
+                        {/* Master Operational Cost Overview Banner */}
+                        <div className="bg-gradient-to-br from-violet-950 via-indigo-950 to-slate-950 text-white p-6 sm:p-7 rounded-3xl shadow-xl border border-violet-800/40 relative overflow-hidden">
+                            <div className="absolute -right-10 -bottom-10 w-64 h-64 bg-violet-500/10 rounded-full blur-3xl pointer-events-none" />
+                            <div className="absolute -left-10 -top-10 w-64 h-64 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
+                            
+                            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 relative z-10">
+                                <div className="space-y-2.5 max-w-2xl">
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                        <span className="text-[11px] font-bold uppercase tracking-wider px-3 py-0.5 rounded-full bg-violet-500/20 text-violet-200 border border-violet-400/30 flex items-center gap-1.5">
+                                            <Sparkles size={12} className="text-violet-300" />
+                                            Total Monthly Operational Cost
+                                        </span>
+                                        <span className="text-xs text-violet-300/80 flex items-center gap-1">
+                                            <ShieldCheck size={13} className="text-emerald-400" />
+                                            Fixed Overheads + AI Daily Projected Demand
+                                        </span>
+                                    </div>
+                                    <h2 className="text-3xl sm:text-4xl font-black tracking-tight">
+                                        ₹{(grandTotalMonthlyOperationalCents / 100).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                        <span className="text-sm sm:text-base font-normal text-violet-300 ml-2">/ month</span>
+                                    </h2>
+                                    <p className="text-xs sm:text-sm text-violet-200/80 leading-relaxed">
+                                        Combined monthly operational budget: <strong className="text-white font-semibold">₹{(totalActiveMonthlyFixedCents / 100).toLocaleString("en-IN")}</strong> in fixed master commitments (Rent, Salaries, EB) + <strong className="text-white font-semibold">₹{(aiDailyProjections.totalProjectedMonthlyCents / 100).toLocaleString("en-IN")}</strong> projected from recurring daily needs (e.g. daily water cans, milk, supplies).
+                                    </p>
+                                </div>
+
+                                <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-2 gap-3 shrink-0">
+                                    <div className="bg-white/10 backdrop-blur-md rounded-2xl p-3.5 border border-white/10">
+                                        <p className="text-[10px] uppercase font-semibold text-violet-200 flex items-center gap-1">
+                                            <Building2 size={12} className="text-violet-300" /> 1. Fixed Overheads
+                                        </p>
+                                        <p className="text-base sm:text-lg font-bold text-white mt-1">
+                                            ₹{(totalActiveMonthlyFixedCents / 100).toLocaleString("en-IN", { maximumFractionDigits: 0 })}
+                                        </p>
+                                        <p className="text-[10px] text-violet-300/90 mt-0.5">{activeMonthlyOverheadsCount} direct commitments</p>
+                                    </div>
+
+                                    <div className="bg-white/10 backdrop-blur-md rounded-2xl p-3.5 border border-white/10">
+                                        <p className="text-[10px] uppercase font-semibold text-violet-200 flex items-center gap-1">
+                                            <Bot size={12} className="text-cyan-300" /> 2. AI Daily Projected
+                                        </p>
+                                        <p className="text-base sm:text-lg font-bold text-cyan-300 mt-1">
+                                            ₹{(aiDailyProjections.totalProjectedMonthlyCents / 100).toLocaleString("en-IN", { maximumFractionDigits: 0 })}
+                                        </p>
+                                        <p className="text-[10px] text-violet-300/90 mt-0.5">{aiDailyProjections.items.length} daily consumables</p>
+                                    </div>
+
+                                    <div className="bg-white/10 backdrop-blur-md rounded-2xl p-3.5 border border-white/10">
+                                        <p className="text-[10px] uppercase font-semibold text-violet-200">Daily Total Burn</p>
+                                        <p className="text-base sm:text-lg font-bold text-amber-300 mt-1">
+                                            ₹{(grandTotalDailyBurnCents / 100).toLocaleString("en-IN", { maximumFractionDigits: 0 })}
+                                        </p>
+                                        <p className="text-[10px] text-violet-300/90 mt-0.5">estimated / day</p>
+                                    </div>
+
+                                    <div className="bg-white/10 backdrop-blur-md rounded-2xl p-3.5 border border-white/10">
+                                        <p className="text-[10px] uppercase font-semibold text-violet-200">AI Savings Room</p>
+                                        <p className="text-base sm:text-lg font-bold text-emerald-300 mt-1">
+                                            ₹{(totalAiPotentialSavingsCents / 100).toLocaleString("en-IN", { maximumFractionDigits: 0 })}
+                                        </p>
+                                        <p className="text-[10px] text-violet-300/90 mt-0.5">wholesale / bulk opts</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* SECTION 1: MASTER FIXED OVERHEADS */}
+                        <div className="space-y-4">
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                                <div>
+                                    <h3 className="text-base sm:text-lg font-bold text-zinc-900 flex items-center gap-2">
+                                        <Building2 size={20} className="text-violet-600" />
+                                        1. Fixed Monthly Overheads (Master Commitments)
+                                    </h3>
+                                    <p className="text-xs text-zinc-500 mt-0.5">
+                                        Direct recurring commitments (Rent, Staff Salaries, EB electricity, Internet, AMC). Fixed across all months.
+                                    </p>
+                                </div>
+                                <span className="text-xs font-bold text-violet-900 bg-violet-50 px-3 py-1.5 rounded-xl border border-violet-200 shrink-0 w-fit">
+                                    Total Fixed: ₹{(totalActiveMonthlyFixedCents / 100).toLocaleString("en-IN", { minimumFractionDigits: 2 })} / mo
+                                </span>
+                            </div>
+
+                            {/* Add Monthly Fixed Expense Form */}
+                            <div className="bg-white p-5 sm:p-6 rounded-2xl shadow-sm border border-zinc-100 space-y-4">
+                                <div className="flex items-center justify-between">
+                                    <div className="space-y-0.5">
+                                        <h4 className="font-bold text-zinc-900 flex items-center gap-2 text-sm sm:text-base">
+                                            <Plus size={16} className="text-violet-600" />
+                                            Add Fixed Monthly Commitment
+                                        </h4>
+                                        <p className="text-xs text-zinc-500">Rent, staff salaries, EB electricity bill, internet, water &amp; recurring fixed commitments</p>
+                                    </div>
+                                    <span className="text-[11px] font-semibold px-2.5 py-1 rounded-full bg-violet-50 text-violet-700 border border-violet-200">
+                                        Admin Managed
+                                    </span>
+                                </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                <div className="space-y-1">
+                                    <label className="text-xs font-semibold text-zinc-700">Expense Title / Item Name</label>
+                                    <Input
+                                        placeholder="e.g. Main Shop Rent, Staff Salary, EB Bill, Internet"
+                                        value={monthlyItemName}
+                                        onChange={(e) => setMonthlyItemName(e.target.value)}
+                                    />
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="text-xs font-semibold text-zinc-700">Monthly Amount (₹ / month)</label>
+                                    <Input
+                                        type="number"
+                                        placeholder="0.00"
+                                        value={monthlyAmount}
+                                        onChange={(e) => setMonthlyAmount(e.target.value)}
+                                    />
+                                    {monthlyAmount && Number(monthlyAmount) > 0 ? (
+                                        <p className="text-[11px] text-zinc-400 font-medium italic pl-1 tracking-tight">
+                                            {numberToWords(monthlyAmount)}
+                                        </p>
+                                    ) : null}
+                                </div>
+                            </div>
+
+                            <div className="space-y-1">
+                                <label className="text-xs font-semibold text-zinc-700">Notes / Due Date / Details (Optional)</label>
+                                <Input
+                                    placeholder="e.g. Due on 5th via NEFT, Meter No: 4520, 2 Cook Staff"
+                                    value={monthlyNotes}
+                                    onChange={(e) => setMonthlyNotes(e.target.value)}
+                                />
+                            </div>
+
+                            <Button className="w-full gap-2 bg-gradient-to-r from-violet-600 to-indigo-600 text-white hover:from-violet-700 hover:to-indigo-700 shadow-sm" onClick={addMonthlyExpense} disabled={monthlySaving}>
+                                {monthlySaving ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
+                                Add Fixed Monthly Expense
+                            </Button>
+                        </div>
+
+                        {/* Search & Category Filter for Overheads */}
+                        <div className="bg-white p-4 rounded-2xl shadow-sm border border-zinc-100 space-y-3">
+                            <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between">
+                                <div className="relative flex-1">
+                                    <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
+                                    <Input
+                                        placeholder="Search fixed expenses by name, category, notes..."
+                                        value={monthlySearchQuery}
+                                        onChange={(e) => setMonthlySearchQuery(e.target.value)}
+                                        className="pl-9 text-xs sm:text-sm h-10"
+                                    />
+                                    {monthlySearchQuery && (
+                                        <button onClick={() => setMonthlySearchQuery("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600">
+                                            <X size={14} />
+                                        </button>
+                                    )}
+                                </div>
+
+                                <div className="flex items-center gap-1.5 text-xs text-zinc-500 shrink-0">
+                                    <span>Showing:</span>
+                                    <strong className="text-zinc-800">{displayedMonthlyExpenses.length}</strong>
+                                    <span>of {monthlyExpenses.length} items</span>
+                                </div>
+                            </div>
+
+                            {/* Category Filter Pills */}
+                            <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+                                <button
+                                    onClick={() => setMonthlyCategoryFilter("all")}
+                                    className={`px-3 py-1 rounded-full text-xs font-semibold whitespace-nowrap transition-colors border ${
+                                        monthlyCategoryFilter === "all"
+                                            ? "bg-zinc-900 text-white border-zinc-900 shadow-xs"
+                                            : "bg-white text-zinc-600 border-zinc-200 hover:bg-zinc-50"
+                                    }`}
+                                >
+                                    All ({monthlyExpenses.length})
+                                </button>
+                                {MONTHLY_CATEGORIES.map(cat => {
+                                    const count = monthlyExpenses.filter(r => r.category === cat).length;
+                                    if (count === 0 && monthlyCategoryFilter !== cat) return null;
+                                    const isSelected = monthlyCategoryFilter === cat;
+                                    return (
+                                        <button
+                                            key={cat}
+                                            onClick={() => setMonthlyCategoryFilter(cat)}
+                                            className={`px-3 py-1 rounded-full text-xs font-semibold whitespace-nowrap transition-colors border ${
+                                                isSelected
+                                                    ? "bg-violet-700 text-white border-violet-700 shadow-xs"
+                                                    : "bg-white text-zinc-600 border-zinc-200 hover:bg-zinc-50"
+                                            }`}
+                                        >
+                                            {cat} ({count})
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        </div>
+
+                        {/* Monthly Entries List */}
+                        <div className="bg-white rounded-2xl shadow-sm border border-zinc-100 overflow-hidden">
+                            <div className="p-5 pb-3 flex items-center justify-between border-b border-zinc-100">
+                                <div>
+                                    <h2 className="font-bold text-zinc-900">
+                                        Fixed Monthly Overheads Catalog
+                                    </h2>
+                                    <p className="text-xs text-zinc-400">
+                                        Manage recurring commitments. Click the pencil icon to update rates when an expense increases.
+                                    </p>
+                                </div>
+                                <span className="text-sm font-bold text-violet-900 bg-violet-50 px-3 py-1 rounded-lg border border-violet-200">
+                                    Total: ₹{(totalActiveMonthlyFixedCents / 100).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} / mo
+                                </span>
+                            </div>
+
+                            {displayedMonthlyExpenses.length === 0 ? (
+                                <div className="flex flex-col items-center justify-center py-12 text-center px-5">
+                                    <Building2 className="w-12 h-12 text-zinc-300 mb-2" />
+                                    <p className="text-zinc-700 font-semibold text-sm">No fixed overheads found</p>
+                                    <p className="text-zinc-400 text-xs mt-1 max-w-sm">
+                                        {monthlySearchQuery || monthlyCategoryFilter !== "all"
+                                            ? "Try changing your search or category filter to see other fixed overheads."
+                                            : "Add your shop rent, staff salaries, EB electricity bills, or internet overheads using the form above."}
+                                    </p>
+                                </div>
+                            ) : (
+                                <div className="divide-y divide-zinc-100">
+                                    {displayedMonthlyExpenses.map((row) => {
+                                        const isEditing = monthlyEditingId === row.id;
+                                        const c = CATEGORY_COLORS[row.category] || { bg: "bg-zinc-100", text: "text-zinc-700", border: "border-zinc-200" };
+                                        const isActive = row.is_active !== false;
+                                        const priceChanged = row.previous_amount_cents && row.previous_amount_cents !== row.amount_cents;
+                                        const priceDiff = priceChanged ? row.amount_cents - row.previous_amount_cents! : 0;
+                                        const pricePercent = priceChanged && row.previous_amount_cents! > 0
+                                            ? ((priceDiff / row.previous_amount_cents!) * 100).toFixed(0)
+                                            : null;
+
+                                        return (
+                                            <div key={row.id} className={`px-5 py-4 transition-colors ${!isActive ? "bg-zinc-50/70 opacity-70" : "hover:bg-zinc-50/40"}`}>
+                                                {isEditing ? (
+                                                    <div className="space-y-3 p-4 bg-violet-50/40 rounded-xl border border-violet-200">
+                                                        <div className="flex items-center justify-between pb-1 border-b border-violet-100">
+                                                            <span className="text-xs font-bold text-violet-900">Edit Fixed Overhead</span>
+                                                            <span className="text-[11px] text-zinc-500">
+                                                                Updating amount records price change history automatically
+                                                            </span>
+                                                        </div>
+                                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                                            <div className="space-y-1">
+                                                                <label className="text-xs font-semibold text-zinc-700">Category</label>
+                                                                <select
+                                                                    value={monthlyEditCategory}
+                                                                    onChange={(e) => setMonthlyEditCategory(e.target.value)}
+                                                                    className="w-full rounded-lg border border-zinc-300 bg-white p-2 text-xs font-medium"
+                                                                >
+                                                                    {MONTHLY_CATEGORIES.map(cat => (
+                                                                        <option key={cat} value={cat}>{cat}</option>
+                                                                    ))}
+                                                                </select>
+                                                            </div>
+                                                            <div className="space-y-1">
+                                                                <label className="text-xs font-semibold text-zinc-700">Monthly Amount (₹)</label>
+                                                                <Input
+                                                                    type="number"
+                                                                    value={monthlyEditAmount}
+                                                                    onChange={(e) => setMonthlyEditAmount(e.target.value)}
+                                                                    placeholder="Amount"
+                                                                />
+                                                                {monthlyEditAmount && Number(monthlyEditAmount) > 0 ? (
+                                                                    <p className="text-[11px] text-zinc-400 font-medium italic pl-1 tracking-tight">
+                                                                        {numberToWords(monthlyEditAmount)}
+                                                                    </p>
+                                                                ) : null}
+                                                            </div>
+                                                        </div>
+                                                        <div className="space-y-1">
+                                                            <label className="text-xs font-semibold text-zinc-700">Item Name / Title</label>
+                                                            <Input value={monthlyEditItemName} onChange={(e) => setMonthlyEditItemName(e.target.value)} placeholder="Title" />
+                                                        </div>
+                                                        <div className="space-y-1">
+                                                            <label className="text-xs font-semibold text-zinc-700">Notes / Details</label>
+                                                            <Input value={monthlyEditNotes} onChange={(e) => setMonthlyEditNotes(e.target.value)} placeholder="Notes / details" />
+                                                        </div>
+                                                        <div className="flex gap-2 pt-2">
+                                                            <Button size="sm" className="flex-1 gap-1 bg-violet-700 hover:bg-violet-800 text-white" onClick={() => saveMonthlyEdit(row)}>
+                                                                <Check size={14} /> Save Changes
+                                                            </Button>
+                                                            <Button size="sm" variant="ghost" className="gap-1 text-zinc-600 hover:bg-zinc-100" onClick={cancelMonthlyEdit}>
+                                                                <X size={14} /> Cancel
+                                                            </Button>
+                                                        </div>
+                                                    </div>
+                                                ) : (
+                                                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                                        <div className="min-w-0 flex-1 space-y-1.5">
+                                                            <div className="flex items-center gap-2 flex-wrap">
+                                                                <span className="font-bold text-zinc-900 text-sm sm:text-base">{row.item_name}</span>
+                                                                {!isActive && (
+                                                                    <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded bg-zinc-200 text-zinc-600">
+                                                                        Paused
+                                                                    </span>
+                                                                )}
+                                                            </div>
+
+                                                            {row.notes && (
+                                                                <p className="text-xs text-zinc-600 line-clamp-2 flex items-center gap-1.5">
+                                                                    <Info size={13} className="text-zinc-400 shrink-0" />
+                                                                    <span>{row.notes}</span>
+                                                                </p>
+                                                            )}
+
+                                                            {/* Price Change Audit Pill */}
+                                                            {priceChanged && (
+                                                                <div className="flex items-center gap-2 flex-wrap pt-0.5">
+                                                                    <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-md flex items-center gap-1 border ${
+                                                                        priceDiff > 0
+                                                                            ? "bg-rose-50 text-rose-700 border-rose-200"
+                                                                            : "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                                                    }`}>
+                                                                        {priceDiff > 0 ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
+                                                                        <span>
+                                                                            {priceDiff > 0 ? "Increased from" : "Decreased from"} ₹{(row.previous_amount_cents! / 100).toLocaleString("en-IN")}
+                                                                            {" "}({priceDiff > 0 ? "+" : ""}₹{(Math.abs(priceDiff) / 100).toLocaleString("en-IN")}{pricePercent ? ` · ${priceDiff > 0 ? "+" : ""}${pricePercent}%` : ""})
+                                                                        </span>
+                                                                    </span>
+                                                                </div>
+                                                            )}
+
+                                                            {/* Salary Structure Sync Pill if out of sync */}
+                                                            {row.category === "Salary" && totalSalaryStructureCents > 0 && row.amount_cents !== totalSalaryStructureCents && (
+                                                                <div className="flex items-center gap-2 pt-0.5">
+                                                                    <span className="text-[11px] font-medium text-amber-800 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-md flex items-center gap-1.5">
+                                                                        <Users size={12} className="text-amber-600" />
+                                                                        <span>Users & Roles Salary Structure: ₹{(totalSalaryStructureCents / 100).toLocaleString("en-IN")}</span>
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={async () => {
+                                                                                await supabaseClient.from("monthly_expenses").update({
+                                                                                    amount_cents: totalSalaryStructureCents,
+                                                                                    previous_amount_cents: row.amount_cents,
+                                                                                    notes: `Synced with Users & Roles salary structure (₹${(totalSalaryStructureCents / 100).toLocaleString("en-IN")})`,
+                                                                                    updated_at: new Date().toISOString(),
+                                                                                }).eq("id", row.id);
+                                                                                toast({ title: "Salary overhead synced", description: `Updated to ₹${(totalSalaryStructureCents / 100).toLocaleString("en-IN")}`, variant: "success" });
+                                                                                fetchMonthlyExpenses();
+                                                                            }}
+                                                                            className="underline font-bold text-amber-900 hover:text-amber-950 ml-1 cursor-pointer"
+                                                                        >
+                                                                            Sync Rate
+                                                                        </button>
+                                                                    </span>
+                                                                </div>
+                                                            )}
+
+                                                            {/* AI Daily Run-Rate Drift Pill for Consumables (e.g. Paper Plates, Water Cans) */}
+                                                            {(() => {
+                                                                const matchedAi = aiDailyProjections.items.find(
+                                                                    a => a.itemName.trim().toLowerCase() === row.item_name.trim().toLowerCase()
+                                                                );
+                                                                if (!matchedAi || matchedAi.projectedMonthlySpendCents === row.amount_cents) return null;
+                                                                const diff = matchedAi.projectedMonthlySpendCents - row.amount_cents;
+                                                                const isIncrease = diff > 0;
+                                                                return (
+                                                                    <div className="flex items-center gap-2 pt-0.5">
+                                                                        <span className={`text-[11px] font-medium px-2 py-0.5 rounded-md flex items-center gap-1.5 border ${
+                                                                            isIncrease ? "bg-amber-50 text-amber-900 border-amber-200" : "bg-blue-50 text-blue-900 border-blue-200"
+                                                                        }`}>
+                                                                            <Bot size={12} className={isIncrease ? "text-amber-600" : "text-blue-600"} />
+                                                                            <span>
+                                                                                Live Daily Run-Rate: ₹{(matchedAi.projectedMonthlySpendCents / 100).toLocaleString("en-IN")}/mo ({isIncrease ? "+" : ""}₹{(diff / 100).toLocaleString("en-IN")}/mo {isIncrease ? "higher" : "lower"} consumption)
+                                                                            </span>
+                                                                            <button
+                                                                                type="button"
+                                                                                onClick={() => addAiItemToMonthlyOverheads(matchedAi)}
+                                                                                className="underline font-bold hover:opacity-80 ml-1 cursor-pointer"
+                                                                            >
+                                                                                Update Budget
+                                                                            </button>
+                                                                        </span>
+                                                                    </div>
+                                                                );
+                                                            })()}
+
+                                                            <p className="text-[11px] text-zinc-400">
+                                                                {row.updated_at ? `Updated ${format(new Date(row.updated_at), "MMM d, yyyy")}` : `Created ${format(new Date(row.created_at), "MMM d, yyyy")}`}
+                                                                {row.submitted_by && namesById[row.submitted_by] && (
+                                                                    <> · by {namesById[row.submitted_by]}</>
+                                                                )}
+                                                            </p>
+                                                        </div>
+
+                                                        <div className="flex items-center justify-between sm:justify-end gap-3 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-zinc-100">
+                                                            <div className="text-left sm:text-right">
+                                                                <p className="text-lg sm:text-xl font-extrabold text-zinc-900 tracking-tight">
+                                                                    ₹{(row.amount_cents / 100).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                                    <span className="text-xs font-normal text-zinc-400 ml-1">/mo</span>
+                                                                </p>
+                                                                <p className="text-[11px] text-zinc-400">
+                                                                    ₹{((row.amount_cents * 12) / 100).toLocaleString("en-IN", { maximumFractionDigits: 0 })} / yr
+                                                                </p>
+                                                            </div>
+
+                                                            <div className="flex items-center gap-1.5 pl-2 border-l border-zinc-200">
+                                                                <button
+                                                                    onClick={() => toggleMonthlyActive(row)}
+                                                                    className={`p-2 rounded-lg transition-colors text-xs font-medium flex items-center gap-1 border ${
+                                                                        isActive
+                                                                            ? "bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100"
+                                                                            : "bg-zinc-100 border-zinc-200 text-zinc-500 hover:bg-zinc-200"
+                                                                    }`}
+                                                                    title={isActive ? "Pause Overhead" : "Resume Overhead"}
+                                                                >
+                                                                    <Power size={14} className={isActive ? "text-emerald-600" : "text-zinc-400"} />
+                                                                </button>
+                                                                <button
+                                                                    onClick={() => startMonthlyEdit(row)}
+                                                                    className="p-2 rounded-lg hover:bg-violet-50 text-violet-700 border border-violet-200 transition-colors"
+                                                                    title="Edit rate or details"
+                                                                >
+                                                                    <Pencil size={14} />
+                                                                </button>
+                                                                <button
+                                                                    onClick={() => deleteMonthlyExpense(row)}
+                                                                    className="p-2 rounded-lg hover:bg-rose-50 text-rose-600 border border-rose-200 transition-colors"
+                                                                    title="Delete fixed overhead"
+                                                                >
+                                                                    <Trash2 size={14} />
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                        {/* SECTION 2: AI-CALCULATED RECURRING MONTHLY DEMAND */}
+                        <div className="space-y-4 pt-6 border-t-2 border-zinc-200/60">
+                            {/* Section Header */}
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-gradient-to-r from-cyan-500/10 via-indigo-500/10 to-violet-500/10 p-5 rounded-2xl border border-cyan-200/60">
+                                <div className="space-y-1.5">
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                        <span className="text-[11px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-cyan-700 text-white shadow-xs flex items-center gap-1.5">
+                                            <Bot size={13} />
+                                            Agentic AI Engine
+                                        </span>
+                                        <span className="text-xs text-cyan-900 font-semibold flex items-center gap-1">
+                                            <Sparkles size={13} className="text-amber-500" />
+                                            30-Day Daily Run-Rate Projections
+                                        </span>
+                                    </div>
+                                    <h3 className="text-base sm:text-lg font-bold text-zinc-900">
+                                        2. AI-Calculated Recurring Monthly Demand (Derived from Daily Purchases)
+                                    </h3>
+                                    <p className="text-xs text-zinc-600 max-w-2xl leading-relaxed">
+                                        Agentic AI analyzes your daily expense entries, calculates your daily consumption velocity (e.g. buying 10 water cans daily @ ₹35/can), and projects your full 30-day recurring spend with wholesale vendor optimization advice.
+                                    </p>
+                                </div>
+
+                                <div className="flex sm:flex-col items-center sm:items-end justify-between sm:justify-center gap-1 shrink-0 bg-white/90 backdrop-blur-sm p-3.5 rounded-2xl border border-cyan-200 shadow-xs">
+                                    <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">AI Projected Spend</span>
+                                    <span className="text-lg sm:text-xl font-black text-cyan-950">
+                                        ₹{(aiDailyProjections.totalProjectedMonthlyCents / 100).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                                        <span className="text-xs font-normal text-zinc-400 ml-1">/ mo</span>
+                                    </span>
+                                    <span className="text-[10px] text-zinc-400">from {aiDailyProjections.items.length} daily recurring items</span>
+                                </div>
+                            </div>
+
+                            {/* Recurrence Filter Pills */}
+                            <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+                                <button
+                                    onClick={() => setAiRecurrenceFilter("all")}
+                                    className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all border ${
+                                        aiRecurrenceFilter === "all"
+                                            ? "bg-cyan-700 text-white border-cyan-700 shadow-xs"
+                                            : "bg-white text-zinc-600 border-zinc-200 hover:bg-zinc-50"
+                                    }`}
+                                >
+                                    All Recurring Items ({aiDailyProjections.items.length})
+                                </button>
+                                <button
+                                    onClick={() => setAiRecurrenceFilter("daily")}
+                                    className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all border ${
+                                        aiRecurrenceFilter === "daily"
+                                            ? "bg-emerald-600 text-white border-emerald-600 shadow-xs"
+                                            : "bg-white text-zinc-600 border-zinc-200 hover:bg-zinc-50"
+                                    }`}
+                                >
+                                    Daily Need / High Recurrence ({aiDailyProjections.items.filter(i => i.recurrenceLevel === "daily").length})
+                                </button>
+                                <button
+                                    onClick={() => setAiRecurrenceFilter("frequent")}
+                                    className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all border ${
+                                        aiRecurrenceFilter === "frequent"
+                                            ? "bg-blue-600 text-white border-blue-600 shadow-xs"
+                                            : "bg-white text-zinc-600 border-zinc-200 hover:bg-zinc-50"
+                                    }`}
+                                >
+                                    Frequent Consumables ({aiDailyProjections.items.filter(i => i.recurrenceLevel === "frequent").length})
+                                </button>
+                            </div>
+
+                            {/* AI Projected Cards List */}
+                            {displayedAiItems.length === 0 ? (
+                                <div className="bg-white rounded-2xl border border-dashed border-zinc-200 p-8 text-center space-y-2">
+                                    <Bot className="w-10 h-10 text-zinc-300 mx-auto" />
+                                    <p className="text-sm font-semibold text-zinc-700">No daily recurring items detected yet</p>
+                                    <p className="text-xs text-zinc-400 max-w-md mx-auto">
+                                        Log your daily store purchases (e.g., 20L water cans, milk, vegetables, packaging, fuel) in the Daily Expense tab. The AI will automatically compute your daily consumption velocity and project your 30-day recurring spend here.
+                                    </p>
+                                </div>
+                            ) : (
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    {displayedAiItems.map((item, idx) => (
+                                        <div
+                                            key={idx}
+                                            className="bg-white rounded-2xl border border-zinc-200 shadow-sm hover:shadow-md transition-all p-5 flex flex-col justify-between space-y-4 hover:border-cyan-300"
+                                        >
+                                            <div className="space-y-3">
+                                                <div className="flex items-start justify-between gap-3">
+                                                    <div className="min-w-0 flex-1">
+                                                        <div className="flex items-center gap-2 flex-wrap">
+                                                            <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded-md border ${
+                                                                item.recurrenceLevel === "daily"
+                                                                    ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                                                    : "bg-blue-50 text-blue-700 border-blue-200"
+                                                            }`}>
+                                                                {item.recurrenceLevel === "daily" ? "Daily Need" : "Frequent Consumable"}
+                                                            </span>
+                                                            <span className="text-[10px] font-semibold text-zinc-500 bg-zinc-100 px-2 py-0.5 rounded-md">
+                                                                {item.categorySuggestion}
+                                                            </span>
+                                                        </div>
+                                                        <h4 className="text-base font-bold text-zinc-900 mt-1.5 truncate" title={item.itemName}>
+                                                            {item.itemName}
+                                                        </h4>
+                                                        <p className="text-[11px] text-zinc-400 mt-0.5">
+                                                            Logged across {item.purchaseDaysCount} of {item.totalDaysSpan} recorded days ({item.confidenceScore}% consistency)
+                                                        </p>
+                                                    </div>
+
+                                                    <div className="text-right shrink-0">
+                                                        <p className="text-lg sm:text-xl font-black text-zinc-900">
+                                                            ₹{(item.projectedMonthlySpendCents / 100).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                                                            <span className="text-xs font-normal text-zinc-400 ml-1">/mo</span>
+                                                        </p>
+                                                        <p className="text-[11px] text-zinc-500 font-medium">
+                                                            ~{Math.round(item.projectedMonthlyQuantity)} units / month
+                                                        </p>
+                                                    </div>
+                                                </div>
+
+                                                {/* Quantity & Daily Velocity Metrics */}
+                                                <div className="grid grid-cols-2 gap-2 bg-zinc-50 p-3 rounded-xl border border-zinc-100 text-xs">
+                                                    <div>
+                                                        <span className="text-[10px] uppercase font-semibold text-zinc-400 block">Daily Consumption</span>
+                                                        <span className="font-bold text-zinc-800 text-sm">
+                                                            {item.avgDailyQuantity.toFixed(1)} <span className="text-xs font-normal text-zinc-500">units / day</span>
+                                                        </span>
+                                                    </div>
+                                                    <div>
+                                                        <span className="text-[10px] uppercase font-semibold text-zinc-400 block">Avg Daily Outflow</span>
+                                                        <span className="font-bold text-zinc-800 text-sm">
+                                                            ₹{(item.avgDailySpendCents / 100).toFixed(2)} <span className="text-xs font-normal text-zinc-500">(@ ₹{(item.avgUnitCostCents / 100).toFixed(2)}/unit)</span>
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {/* Dynamic Lock / Sync Action Footer */}
+                                            {(() => {
+                                                const lockedOverhead = monthlyExpenses.find(
+                                                    m => m.item_name.trim().toLowerCase() === item.itemName.trim().toLowerCase()
+                                                );
+                                                const isLocked = !!lockedOverhead;
+                                                const isDrifted = isLocked && lockedOverhead.amount_cents !== item.projectedMonthlySpendCents;
+                                                const driftDiff = isDrifted ? item.projectedMonthlySpendCents - lockedOverhead.amount_cents : 0;
+
+                                                return (
+                                                    <div className="pt-2 border-t border-zinc-100 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5">
+                                                        <div className="text-[11px] text-zinc-500">
+                                                            {isDrifted ? (
+                                                                <span className="font-semibold text-amber-700 flex items-center gap-1">
+                                                                    <TrendingUp size={12} className="text-amber-600 shrink-0" />
+                                                                    Fixed at ₹{(lockedOverhead.amount_cents / 100).toLocaleString("en-IN")}/mo ({driftDiff > 0 ? "+" : ""}₹{(driftDiff / 100).toLocaleString("en-IN")}/mo consumption {driftDiff > 0 ? "increase" : "decrease"})
+                                                                </span>
+                                                            ) : isLocked ? (
+                                                                <span className="text-emerald-700 font-semibold flex items-center gap-1">
+                                                                    <Check size={12} className="text-emerald-600 shrink-0" />
+                                                                    Locked in Fixed Overheads at ₹{(lockedOverhead.amount_cents / 100).toLocaleString("en-IN")}/mo
+                                                                </span>
+                                                            ) : item.suggestedSavingsCents > 0 ? (
+                                                                <span className="text-emerald-700 font-medium">
+                                                                    Potential wholesale saving: ₹{(item.suggestedSavingsCents / 100).toLocaleString("en-IN")}/mo
+                                                                </span>
+                                                            ) : (
+                                                                <span className="text-zinc-400">Regular store operating consumable</span>
+                                                            )}
+                                                        </div>
+
+                                                        <div className="flex items-center gap-1.5 shrink-0 justify-end flex-wrap">
+                                                            {isLocked && (
+                                                                <Button
+                                                                    size="sm"
+                                                                    variant="ghost"
+                                                                    onClick={() => removeAiItemFromMonthlyOverheads(item)}
+                                                                    className="text-rose-600 hover:bg-rose-50 hover:text-rose-700 border border-rose-200 text-xs font-semibold h-8 px-2.5 gap-1 shadow-2xs"
+                                                                    title="Remove from Fixed Monthly Overheads"
+                                                                >
+                                                                    <Trash2 size={13} />
+                                                                    <span>Remove from Fixed</span>
+                                                                </Button>
+                                                            )}
+
+                                                            <Button
+                                                                size="sm"
+                                                                onClick={() => addAiItemToMonthlyOverheads(item)}
+                                                                className={`text-xs font-semibold h-8 px-3 gap-1.5 shadow-xs transition-all ${
+                                                                    isDrifted
+                                                                        ? "bg-amber-600 hover:bg-amber-700 text-white"
+                                                                        : isLocked
+                                                                        ? "bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300"
+                                                                        : "bg-zinc-900 hover:bg-zinc-800 text-white"
+                                                                }`}
+                                                            >
+                                                                {isDrifted ? (
+                                                                    <>
+                                                                        <TrendingUp size={13} />
+                                                                        <span>Sync New Rate</span>
+                                                                    </>
+                                                                ) : isLocked ? (
+                                                                    <>
+                                                                        <Check size={13} className="text-emerald-600" />
+                                                                        <span>Synced</span>
+                                                                    </>
+                                                                ) : (
+                                                                    <>
+                                                                        <Plus size={13} />
+                                                                        <span>Lock as Fixed Overhead</span>
+                                                                    </>
+                                                                )}
+                                                            </Button>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })()}
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                )}
+
                 {activeTab === "overview" && isAdmin && (
                     <div className="space-y-6">
                         {/* Filters */}
@@ -963,18 +2164,22 @@ export default function ExpensesPage() {
                             <div className="bg-white p-5 rounded-2xl shadow-sm border border-zinc-100">
                                 <p className="text-xs text-zinc-400 uppercase tracking-wider">Total Spent</p>
                                 <p className="text-2xl font-bold text-zinc-900 mt-1">₹{(overviewTotalCents / 100).toFixed(2)}</p>
+                                <p className="text-[11px] text-zinc-400 mt-0.5">{totalOverviewEntries} total entries</p>
                             </div>
                             <div className="bg-white p-5 rounded-2xl shadow-sm border border-zinc-100">
-                                <p className="text-xs text-zinc-400 uppercase tracking-wider">Entries</p>
-                                <p className="text-2xl font-bold text-zinc-900 mt-1">{overviewRows.length}</p>
+                                <p className="text-xs text-zinc-400 uppercase tracking-wider">Daily Expenses</p>
+                                <p className="text-2xl font-bold text-cyan-600 mt-1">₹{(overviewDailyTotalCents / 100).toFixed(2)}</p>
+                                <p className="text-[11px] text-zinc-400 mt-0.5">{overviewRows.length} daily entries</p>
                             </div>
                             <div className="bg-white p-5 rounded-2xl shadow-sm border border-zinc-100">
-                                <p className="text-xs text-zinc-400 uppercase tracking-wider">Distinct Items</p>
-                                <p className="text-2xl font-bold text-zinc-900 mt-1">{distinctItemCount}</p>
+                                <p className="text-xs text-zinc-400 uppercase tracking-wider">Monthly Overheads</p>
+                                <p className="text-2xl font-bold text-violet-600 mt-1">₹{(overviewMonthlyTotalCents / 100).toFixed(2)}</p>
+                                <p className="text-[11px] text-zinc-400 mt-0.5">{filteredMonthlyRows.length} recurring entries</p>
                             </div>
                             <div className="bg-white p-5 rounded-2xl shadow-sm border border-zinc-100">
                                 <p className="text-xs text-zinc-400 uppercase tracking-wider">Avg / Entry</p>
                                 <p className="text-2xl font-bold text-zinc-900 mt-1">₹{(avgPerEntryCents / 100).toFixed(2)}</p>
+                                <p className="text-[11px] text-zinc-400 mt-0.5">{distinctItemCount} distinct items</p>
                             </div>
                         </div>
 
@@ -1256,41 +2461,88 @@ export default function ExpensesPage() {
                         {/* Breakdown + Transactions */}
                         <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
                             {/* Item-wise Breakdown */}
-                            <div className="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-zinc-100 overflow-hidden h-fit">
-                                <div className="p-5 pb-3">
-                                    <h2 className="font-semibold text-zinc-900">Item-wise Breakdown</h2>
-                                    <p className="text-xs text-zinc-400 mt-0.5">How many of each thing was bought, and for how much</p>
+                            <div className="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-zinc-100 overflow-hidden h-fit space-y-4">
+                                <div className="p-5 pb-0">
+                                    <h2 className="font-semibold text-zinc-900">Expense Breakdown</h2>
+                                    <p className="text-xs text-zinc-400 mt-0.5">Daily supply items &amp; monthly fixed overheads</p>
                                 </div>
 
-                                {overviewItemSummary.length === 0 ? (
-                                    <div className="flex flex-col items-center justify-center py-10 text-center px-5">
-                                        <PackageSearch className="w-10 h-10 text-zinc-300 mb-2" />
-                                        <p className="text-zinc-500 text-sm">No expenses recorded for this period</p>
-                                    </div>
-                                ) : (
-                                    <div className="divide-y divide-zinc-50 max-h-[420px] overflow-y-auto">
-                                        {overviewItemSummary.map((item, idx) => (
-                                            <div key={idx} className="px-5 py-3 flex items-center justify-between gap-3">
-                                                <div className="min-w-0">
-                                                    <p className="font-medium text-zinc-900 truncate capitalize">{item.name}</p>
-                                                    <p className="text-[11px] text-zinc-400">Qty: {item.quantity}</p>
-                                                </div>
-                                                <span className="font-semibold text-zinc-900 shrink-0">₹{(item.cents / 100).toFixed(2)}</span>
-                                            </div>
-                                        ))}
+                                {/* Monthly Overheads Summary if any */}
+                                {monthlyItemSummary.length > 0 && (
+                                    <div className="px-5">
+                                        <div className="flex items-center justify-between mb-2">
+                                            <span className="text-xs font-bold text-violet-700 uppercase tracking-wider flex items-center gap-1.5">
+                                                <Building2 size={13} /> Monthly Fixed Costs
+                                            </span>
+                                            <span className="text-xs font-bold text-violet-700">
+                                                ₹{(overviewMonthlyTotalCents / 100).toFixed(2)}
+                                            </span>
+                                        </div>
+                                        <div className="divide-y divide-zinc-50 rounded-xl border border-violet-100 bg-violet-50/30 overflow-hidden">
+                                            {monthlyItemSummary.map((item, idx) => {
+                                                const c = CATEGORY_COLORS[item.category] || { bg: "bg-zinc-100", text: "text-zinc-700", border: "border-zinc-200" };
+                                                return (
+                                                    <div key={idx} className="px-3.5 py-2.5 flex items-center justify-between gap-3">
+                                                        <div className="min-w-0">
+                                                            <div className="flex items-center gap-1.5">
+                                                                <span className={`text-[9px] uppercase font-bold px-1.5 py-0.2 rounded border ${c.bg} ${c.text} ${c.border}`}>
+                                                                    {item.category}
+                                                                </span>
+                                                                <p className="font-medium text-xs text-zinc-900 truncate">{item.name}</p>
+                                                            </div>
+                                                        </div>
+                                                        <span className="font-bold text-xs text-zinc-900 shrink-0">₹{(item.cents / 100).toFixed(2)}</span>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
                                     </div>
                                 )}
+
+                                {/* Daily Items Summary */}
+                                <div>
+                                    <div className="px-5 pb-2 flex items-center justify-between">
+                                        <span className="text-xs font-bold text-cyan-700 uppercase tracking-wider flex items-center gap-1.5">
+                                            <ClipboardList size={13} /> Daily Supplies
+                                        </span>
+                                        <span className="text-xs font-bold text-cyan-700">
+                                            ₹{(overviewDailyTotalCents / 100).toFixed(2)}
+                                        </span>
+                                    </div>
+
+                                    {overviewItemSummary.length === 0 ? (
+                                        <div className="flex flex-col items-center justify-center py-6 text-center px-5">
+                                            <PackageSearch className="w-8 h-8 text-zinc-300 mb-1" />
+                                            <p className="text-zinc-400 text-xs">No daily supply expenses recorded</p>
+                                        </div>
+                                    ) : (
+                                        <div className="divide-y divide-zinc-50 max-h-[320px] overflow-y-auto">
+                                            {overviewItemSummary.map((item, idx) => (
+                                                <div key={idx} className="px-5 py-2.5 flex items-center justify-between gap-3">
+                                                    <div className="min-w-0">
+                                                        <p className="font-medium text-xs text-zinc-900 truncate capitalize">{item.name}</p>
+                                                        <p className="text-[10px] text-zinc-400">Qty: {item.quantity}</p>
+                                                    </div>
+                                                    <span className="font-semibold text-xs text-zinc-900 shrink-0">₹{(item.cents / 100).toFixed(2)}</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
                             </div>
 
                             {/* Transactions Table */}
                             <div className="lg:col-span-3 bg-white rounded-2xl shadow-sm border border-zinc-100 overflow-hidden">
                                 <div className="p-5 pb-3 flex items-center justify-between">
-                                    <h2 className="font-semibold text-zinc-900">All Transactions</h2>
+                                    <div>
+                                        <h2 className="font-semibold text-zinc-900">All Transactions</h2>
+                                        <p className="text-xs text-zinc-400">Daily expenses and monthly fixed overheads</p>
+                                    </div>
                                     <div className="flex items-center gap-1 text-xs">
-                                        <button onClick={() => toggleSort("date")} className={`flex items-center gap-1 px-2 py-1 rounded-md ${sortKey === "date" ? "bg-zinc-100 text-zinc-900" : "text-zinc-400"}`}>
+                                        <button onClick={() => toggleSort("date")} className={`flex items-center gap-1 px-2 py-1 rounded-md ${sortKey === "date" ? "bg-zinc-100 text-zinc-900 font-semibold" : "text-zinc-400"}`}>
                                             Date <ArrowUpDown size={12} />
                                         </button>
-                                        <button onClick={() => toggleSort("amount")} className={`flex items-center gap-1 px-2 py-1 rounded-md ${sortKey === "amount" ? "bg-zinc-100 text-zinc-900" : "text-zinc-400"}`}>
+                                        <button onClick={() => toggleSort("amount")} className={`flex items-center gap-1 px-2 py-1 rounded-md ${sortKey === "amount" ? "bg-zinc-100 text-zinc-900 font-semibold" : "text-zinc-400"}`}>
                                             Amount <ArrowUpDown size={12} />
                                         </button>
                                     </div>
@@ -1302,31 +2554,49 @@ export default function ExpensesPage() {
                                         <p className="text-zinc-500 text-sm">No transactions match these filters</p>
                                     </div>
                                 ) : (
-                                    <div className="overflow-x-auto max-h-[420px] overflow-y-auto">
+                                    <div className="overflow-x-auto max-h-[440px] overflow-y-auto">
                                         <table className="w-full text-sm text-left">
                                             <thead className="bg-zinc-50 border-b border-zinc-100 text-zinc-500 sticky top-0">
                                                 <tr>
-                                                    <th className="px-5 py-2.5 font-medium">Date</th>
-                                                    <th className="px-5 py-2.5 font-medium">Item</th>
-                                                    <th className="px-5 py-2.5 font-medium">Qty</th>
-                                                    <th className="px-5 py-2.5 font-medium">Amount</th>
-                                                    {isAdmin && <th className="px-5 py-2.5 font-medium">Added By</th>}
+                                                    <th className="px-4 py-2.5 font-medium">Date</th>
+                                                    <th className="px-4 py-2.5 font-medium">Category</th>
+                                                    <th className="px-4 py-2.5 font-medium">Item &amp; Details</th>
+                                                    <th className="px-4 py-2.5 font-medium">Amount</th>
+                                                    {isAdmin && <th className="px-4 py-2.5 font-medium">Added By</th>}
                                                 </tr>
                                             </thead>
                                             <tbody className="divide-y divide-zinc-50">
-                                                {sortedTransactions.map(row => (
-                                                    <tr key={row.id} className="hover:bg-zinc-50/50">
-                                                        <td className="px-5 py-3 whitespace-nowrap text-zinc-600">{format(new Date(`${row.expense_date}T00:00:00`), "d MMM yyyy")}</td>
-                                                        <td className="px-5 py-3 font-medium text-zinc-900">{row.item_name}</td>
-                                                        <td className="px-5 py-3 text-zinc-600">{row.quantity}</td>
-                                                        <td className="px-5 py-3 font-semibold text-zinc-900 whitespace-nowrap">₹{(row.price_cents / 100).toFixed(2)}</td>
-                                                        {isAdmin && (
-                                                            <td className="px-5 py-3 text-zinc-500 whitespace-nowrap">
-                                                                {row.submitted_by && namesById[row.submitted_by] ? namesById[row.submitted_by] : "-"}
+                                                {sortedTransactions.map(row => {
+                                                    const isMonthly = row.type === "monthly";
+                                                    const c = isMonthly && CATEGORY_COLORS[row.category]
+                                                        ? CATEGORY_COLORS[row.category]
+                                                        : { bg: "bg-cyan-50", text: "text-cyan-700", border: "border-cyan-200" };
+
+                                                    return (
+                                                        <tr key={row.id} className="hover:bg-zinc-50/50">
+                                                            <td className="px-4 py-3 whitespace-nowrap text-zinc-600 text-xs">
+                                                                {format(new Date(`${row.date}T00:00:00`), "d MMM yyyy")}
                                                             </td>
-                                                        )}
-                                                    </tr>
-                                                ))}
+                                                            <td className="px-4 py-3 whitespace-nowrap">
+                                                                <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded border ${c.bg} ${c.text} ${c.border}`}>
+                                                                    {row.category}
+                                                                </span>
+                                                            </td>
+                                                            <td className="px-4 py-3">
+                                                                <p className="font-medium text-zinc-900 text-xs">{row.item_name}</p>
+                                                                <p className="text-[11px] text-zinc-400">{row.subtext}</p>
+                                                            </td>
+                                                            <td className="px-4 py-3 font-semibold text-zinc-900 whitespace-nowrap text-xs">
+                                                                ₹{(row.amount_cents / 100).toFixed(2)}
+                                                            </td>
+                                                            {isAdmin && (
+                                                                <td className="px-4 py-3 text-zinc-500 whitespace-nowrap text-xs">
+                                                                    {row.submitted_by && namesById[row.submitted_by] ? namesById[row.submitted_by] : "-"}
+                                                                </td>
+                                                            )}
+                                                        </tr>
+                                                    );
+                                                })}
                                             </tbody>
                                         </table>
                                     </div>
@@ -1334,6 +2604,16 @@ export default function ExpensesPage() {
                             </div>
                         </div>
                     </div>
+                )}
+
+                {activeTab === "ai-advisor" && isAdmin && (
+                    <ExpenseAIAgent
+                        expenses={overviewRows.length > 0 ? overviewRows : allExpenses}
+                        priceList={priceList}
+                        periodLabel={overviewPeriodLabel}
+                        isAdmin={isAdmin}
+                        monthlyExpenses={activeMonthlyExpenses.length > 0 ? activeMonthlyExpenses : monthlyExpenses}
+                    />
                 )}
             </div>
         </div>
