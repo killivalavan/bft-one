@@ -131,8 +131,11 @@ export default function SalesPage() {
         return () => clearInterval(id);
     }, [date]);
 
-    async function getEffectiveBusinessId(): Promise<string | null> {
+    const DEFAULT_BUSINESS_ID = "a0000000-0000-0000-0000-000000000001";
+
+    async function getEffectiveBusinessId(): Promise<string> {
         if (currentBusinessId) return currentBusinessId;
+        if (business?.id) return business.id;
         if (userId) {
             const { data: prof } = await supabaseClient.from("profiles").select("business_id").eq("id", userId).maybeSingle();
             if (prof?.business_id) {
@@ -140,7 +143,7 @@ export default function SalesPage() {
                 return prof.business_id;
             }
         }
-        return null;
+        return DEFAULT_BUSINESS_ID;
     }
 
     async function saveCash() {
@@ -159,11 +162,12 @@ export default function SalesPage() {
         const saveDateStr = format(targetDate, "yyyy-MM-dd");
         const bId = await getEffectiveBusinessId();
 
-        let query = supabaseClient.from("daily_sales").select("id").eq("sale_date", saveDateStr);
-        if (bId) {
-            query = query.eq("business_id", bId);
-        }
-        const { data: existing } = await query.maybeSingle();
+        const { data: existing } = await supabaseClient
+            .from("daily_sales")
+            .select("id")
+            .eq("sale_date", saveDateStr)
+            .eq("business_id", bId)
+            .maybeSingle();
 
         let error;
         if (existing) {
@@ -175,10 +179,10 @@ export default function SalesPage() {
             error = err;
         } else {
             const { error: err } = await supabaseClient.from("daily_sales").insert({
+                business_id: bId,
                 sale_date: saveDateStr,
                 total_cash_cents: cents,
                 cash_submitted_by: userId,
-                ...(bId ? { business_id: bId } : {})
             });
             error = err;
         }
@@ -208,11 +212,13 @@ export default function SalesPage() {
         const saveDateStr = format(targetDate, "yyyy-MM-dd");
         const bId = await getEffectiveBusinessId();
 
-        let query = supabaseClient.from("daily_sales").select("id").eq("sale_date", saveDateStr);
-        if (bId) {
-            query = query.eq("business_id", bId);
-        }
-        const { data: existing } = await query.maybeSingle();
+        const { data: existing } = await supabaseClient
+            .from("daily_sales")
+            .select("id")
+            .eq("sale_date", saveDateStr)
+            .eq("business_id", bId)
+            .maybeSingle();
+
         if (!existing) {
             toast({ title: "Nothing to clear", variant: "info" });
             return;
@@ -248,11 +254,12 @@ export default function SalesPage() {
         const saveDateStr = format(targetDate, "yyyy-MM-dd");
         const bId = await getEffectiveBusinessId();
 
-        let query = supabaseClient.from("daily_sales").select("id").eq("sale_date", saveDateStr);
-        if (bId) {
-            query = query.eq("business_id", bId);
-        }
-        const { data: existing } = await query.maybeSingle();
+        const { data: existing } = await supabaseClient
+            .from("daily_sales")
+            .select("id")
+            .eq("sale_date", saveDateStr)
+            .eq("business_id", bId)
+            .maybeSingle();
 
         let error;
         if (existing) {
@@ -264,10 +271,10 @@ export default function SalesPage() {
             error = err;
         } else {
             const { error: err } = await supabaseClient.from("daily_sales").insert({
+                business_id: bId,
                 sale_date: saveDateStr,
                 upi_amount_cents: cents,
                 upi_submitted_by: userId,
-                ...(bId ? { business_id: bId } : {})
             });
             error = err;
         }

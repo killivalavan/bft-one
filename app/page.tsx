@@ -118,14 +118,6 @@ export default function Home() {
       description: "Manage billing and invoices."
     },
     {
-      label: "Pending Orders",
-      href: "/pending",
-      icon: LayoutDashboard,
-      colorClass: "text-rose-600",
-      bgClass: "bg-rose-50",
-      description: "View and manage active orders."
-    },
-    {
       label: "Notifications",
       href: "/notifications",
       icon: Bell,

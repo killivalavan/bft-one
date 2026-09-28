@@ -8,7 +8,7 @@ import { useProfile } from "@/lib/hooks/useProfile";
 import { useTenant } from "@/lib/context/TenantContext";
 import { cn } from "@/lib/utils/cn";
 import {
-  Home, CalendarCheck2, CalendarDays, Coffee, ClipboardList, Shield,
+  Home, CalendarCheck2, CalendarDays, Coffee, Shield,
   User, LogOut, ChevronDown, Bell, Wallet, TrendingUp, Globe, Sparkles, Store, LifeBuoy, Bug
 } from "lucide-react";
 import RaiseIssueModal from "@/components/support/RaiseIssueModal";
@@ -106,11 +106,10 @@ export default function Navbar() {
   // Focus Mode Links for fast-paced Cashier/Billing screen
   const focusLinks = [
     { href: "/", label: "Home", icon: Home },
-    { href: "/pending", label: "Pending Orders", icon: ClipboardList },
     { href: "/billing", label: "Billing / POS", icon: Coffee },
   ];
 
-  const isFocusMode = (pathname.startsWith("/billing") || pathname.startsWith("/pending")) && isModuleEnabled("billing");
+  const isFocusMode = pathname.startsWith("/billing") && isModuleEnabled("billing");
   const visibleLinks = isFocusMode ? focusLinks : allLinks;
 
   async function handleLogout() {
