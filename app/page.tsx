@@ -8,7 +8,7 @@ import { HomeHeader } from "@/components/home/HomeHeader";
 import { DashboardGrid } from "@/components/home/DashboardGrid";
 import {
   CalendarCheck2, Coffee, Shield,
-  CalendarDays, Wallet, Boxes, Bell, LayoutDashboard, Contact, Banknote, CalendarPlus, TrendingDown, Receipt
+  CalendarDays, Wallet, Boxes, Bell, LayoutDashboard, Contact, Banknote, CalendarPlus, TrendingDown, Receipt, FileText
 } from "lucide-react";
 
 export default function Home() {
@@ -29,22 +29,32 @@ export default function Home() {
 
   // Define Items
   const baseItems = [
-    ...(flags?.isAdmin ? [{
-      label: "Admin Panel",
-      href: "/admin",
-      icon: Shield,
-      colorClass: "text-purple-600",
-      bgClass: "bg-purple-50",
-      description: "Manage users and settings."
-    },
-    {
-      label: "Fill Timesheet",
-      href: "/admin/fill-timesheet",
-      icon: CalendarPlus,
-      colorClass: "text-fuchsia-600",
-      bgClass: "bg-fuchsia-50",
-      description: "Bulk update attendance."
-    }] : []),
+    ...(flags?.isAdmin ? [
+      {
+        label: "Invoice Generator",
+        href: "/invoices",
+        icon: FileText,
+        colorClass: "text-indigo-600",
+        bgClass: "bg-indigo-50",
+        description: "Generate & track official tax invoices."
+      },
+      {
+        label: "Admin Panel",
+        href: "/admin",
+        icon: Shield,
+        colorClass: "text-purple-600",
+        bgClass: "bg-purple-50",
+        description: "Manage users and settings."
+      },
+      {
+        label: "Fill Timesheet",
+        href: "/admin/fill-timesheet",
+        icon: CalendarPlus,
+        colorClass: "text-fuchsia-600",
+        bgClass: "bg-fuchsia-50",
+        description: "Bulk update attendance."
+      }
+    ] : []),
     ...(userEmail && (flags ? !flags.isAdmin : true) ? [{
       label: "My Salary",
       href: "/mysalary",

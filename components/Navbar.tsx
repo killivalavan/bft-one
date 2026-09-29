@@ -9,7 +9,7 @@ import { useTenant } from "@/lib/context/TenantContext";
 import { cn } from "@/lib/utils/cn";
 import {
   Home, CalendarCheck2, CalendarDays, Coffee, Shield,
-  User, LogOut, ChevronDown, Bell, Wallet, TrendingUp, Globe, Sparkles, Store, LifeBuoy, Bug
+  User, LogOut, ChevronDown, Bell, Wallet, TrendingUp, Globe, Sparkles, Store, LifeBuoy, Bug, FileText
 } from "lucide-react";
 import RaiseIssueModal from "@/components/support/RaiseIssueModal";
 
@@ -95,7 +95,10 @@ export default function Navbar() {
     : [
         { href: "/", label: "Dashboard", icon: Home },
         ...(flags?.isAdmin
-          ? [{ href: "/admin/fill-timesheet", label: "Fill Timesheet", icon: CalendarCheck2 }]
+          ? [
+              { href: "/invoices", label: "Invoices", icon: FileText },
+              { href: "/admin/fill-timesheet", label: "Fill Timesheet", icon: CalendarCheck2 }
+            ]
           : isModuleEnabled("sales") ? [{ href: "/sales", label: "Daily Sales", icon: TrendingUp }] : []),
         { href: "/calendar", label: "Calendar", icon: CalendarDays },
         ...(flags?.isAdmin

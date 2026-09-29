@@ -10,6 +10,7 @@ import { SalesReports } from "@/components/admin/SalesReports";
 import { generatePayslipPdf } from "@/lib/utils/payslip";
 import { ContactManager } from "@/components/admin/ContactManager";
 import { SalesManager } from "@/components/admin/SalesManager";
+import { StoreSettings } from "@/components/admin/StoreSettings";
 import { Loader2, ShieldAlert, LifeBuoy } from "lucide-react";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { useTenant } from "@/lib/context/TenantContext";
@@ -26,7 +27,7 @@ export default function AdminPage() {
   const { toast } = useToast();
   const { business } = useTenant();
   const [gate, setGate] = useState<AdminView>(AdminView.Loading);
-  const [tab, setTab] = useState<"users" | "products" | "reports" | "contacts" | "sales">("sales");
+  const [tab, setTab] = useState<"users" | "products" | "reports" | "contacts" | "sales" | "store">("sales");
 
   const [users, setUsers] = useState<Profile[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -584,6 +585,10 @@ export default function AdminPage() {
             onUpdateSystemUser={updateFullProfile}
             onDeleteSystemUser={removeUser}
           />
+        )}
+
+        {tab === 'store' && (
+          <StoreSettings />
         )}
 
 

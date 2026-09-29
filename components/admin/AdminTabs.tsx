@@ -1,21 +1,23 @@
 import Link from "next/link";
 import { cn } from "@/lib/utils/cn";
-import { Users, Package, FileText, Contact, Banknote, BarChart3 } from "lucide-react";
+import { Users, Package, FileText, Contact, Banknote, BarChart3, Store } from "lucide-react";
 
 interface AdminTabsProps {
-    activeTab: "users" | "products" | "reports" | "contacts" | "sales";
-    onChange: (tab: "users" | "products" | "reports" | "contacts" | "sales") => void;
+    activeTab: "users" | "products" | "reports" | "contacts" | "sales" | "store";
+    onChange: (tab: "users" | "products" | "reports" | "contacts" | "sales" | "store") => void;
 }
 
 export function AdminTabs({ activeTab, onChange }: AdminTabsProps) {
     const tabs = [
         { id: "sales", label: "Daily Sales", icon: Banknote },
-        // External entry point: opens the Spending Overview on the Expenses page.
+        // External entry points
         { id: "spending", label: "Spending Overview", icon: BarChart3, href: "/expenses?tab=overview" },
+        { id: "invoices", label: "Invoice Generator", icon: FileText, href: "/invoices" },
         { id: "users", label: "Users & Roles", icon: Users },
         { id: "products", label: "Product Catalog", icon: Package },
         { id: "reports", label: "Order Reports", icon: FileText },
         { id: "contacts", label: "Contacts", icon: Contact },
+        { id: "store", label: "Store & Logo", icon: Store },
     ] as const;
 
     return (

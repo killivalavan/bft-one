@@ -8,10 +8,12 @@ import { cn } from "@/lib/utils/cn";
 import { useTenant } from "@/lib/context/TenantContext";
 import {
   Search, X, Plus, Minus, Trash2, ShoppingBag, Receipt,
-  CreditCard, QrCode, Banknote, RefreshCw, Printer,
+  CreditCard, QrCode, Banknote, Printer, Download, FileText,
   Grid, List, ArrowRight,
-  Hash, Coffee, Zap, CheckCircle2, Phone, Send, MessageCircle, Copy, Check, ExternalLink
+  Hash, Coffee, Zap, CheckCircle2, Phone, MessageCircle, Copy, Check, ExternalLink
 } from "lucide-react";
+import { generateBillPdf } from "@/lib/utils/billPdf";
+import { InvoiceDetailsModal } from "@/components/billing/InvoiceDetailsModal";
 
 // ==========================================
 // Types
@@ -269,7 +271,6 @@ export default function BillingPage() {
   const [cashTendered, setCashTendered] = useState<string>("");
   const [applyGst, setApplyGst] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isSendingWhatsapp, setIsSendingWhatsapp] = useState(false);
   const [isCopied, setIsCopied] = useState(false);
 
   // Modals & Receipts
@@ -277,6 +278,8 @@ export default function BillingPage() {
   const [showMobileCartSheet, setShowMobileCartSheet] = useState(false);
   const [completedOrder, setCompletedOrder] = useState<CompletedOrder | null>(null);
   const [modalPhone, setModalPhone] = useState("");
+  const [showInvoiceModal, setShowInvoiceModal] = useState(false);
+  const [invoiceModalData, setInvoiceModalData] = useState<CompletedOrder | null>(null);
 
   const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -433,14 +436,14 @@ ${order.taxCents > 0 ? `🏛️ *GST (5%):* ₹${(order.taxCents / 100).toFixed(
       await navigator.clipboard.writeText(msg);
       setIsCopied(true);
       setTimeout(() => setIsCopied(false), 2000);
-      toast({ title: "Receipt Copied! 📋", description: "You can paste directly into any chat", variant: "success" });
+      toast({ title: "Receipt Copied! 📋", description: "You can paste directly into WhatsApp", variant: "success" });
     } catch {
       toast({ title: "Copy failed", description: "Please manually copy text", variant: "error" });
     }
   }
 
-  // Fast Direct WhatsApp Dispatch (Auto Background API / Direct App Protocol)
-  async function sendWhatsAppBill(order: CompletedOrder | null, targetPhone?: string, forceMode?: "app" | "web") {
+  // Open Directly in WhatsApp Web
+  function sendWhatsAppBill(order: CompletedOrder | null, targetPhone?: string) {
     if (!order) return;
     const rawPhone = targetPhone !== undefined ? targetPhone : (order.customerPhone || customerPhone || "");
     const cleanPhone = rawPhone.replace(/[^0-9]/g, "");
@@ -449,52 +452,21 @@ ${order.taxCents > 0 ? `🏛️ *GST (5%):* ₹${(order.taxCents / 100).toFixed(
     const msg = generateBillText(order);
     const encoded = encodeURIComponent(msg);
 
-    // Copy to clipboard silently as safety fallback
-    try { await navigator.clipboard.writeText(msg); } catch { }
+    // Copy to clipboard silently so the cashier can paste if needed
+    try { navigator.clipboard.writeText(msg); } catch { }
 
-    // 1. Try background Cloud API first if auto mode
-    if (!forceMode && formattedPhone) {
-      setIsSendingWhatsapp(true);
-      try {
-        const res = await fetch("/api/whatsapp/send-bill", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ phone: formattedPhone, message: msg, orderId: order.orderId })
-        });
-        const data = await res.json();
-        if (data.success && data.method === "cloud_api") {
-          toast({ title: "WhatsApp Sent! 🚀", description: `Delivered in background to +${formattedPhone}`, variant: "success" });
-          setIsSendingWhatsapp(false);
-          return;
-        }
-      } catch {
-        // Fallback to direct client launch
-      } finally {
-        setIsSendingWhatsapp(false);
-      }
-    }
+    // Direct WhatsApp Web URL
+    const webUrl = formattedPhone
+      ? `https://web.whatsapp.com/send?phone=${formattedPhone}&text=${encoded}`
+      : `https://web.whatsapp.com/send?text=${encoded}`;
 
-    // 2. Direct App Protocol (Bypasses the "Open WhatsApp Web" intermediate browser page)
-    if (forceMode === "web") {
-      // Force web if specifically requested
-      const webUrl = formattedPhone
-        ? `https://web.whatsapp.com/send?phone=${formattedPhone}&text=${encoded}`
-        : `https://web.whatsapp.com/send?text=${encoded}`;
-      window.open(webUrl, "_blank");
-    } else {
-      // Uses native whatsapp:// protocol which opens WhatsApp Desktop / Mobile app directly with 0 prompt
-      const appProtocol = formattedPhone
-        ? `whatsapp://send?phone=${formattedPhone}&text=${encoded}`
-        : `whatsapp://send?text=${encoded}`;
+    window.open(webUrl, "_blank");
 
-      // Open via native URI scheme
-      window.location.href = appProtocol;
-      toast({
-        title: "WhatsApp App Launched 📱",
-        description: formattedPhone ? `Opened chat for +${formattedPhone}` : "Select contact in WhatsApp",
-        variant: "info"
-      });
-    }
+    toast({
+      title: "Opening WhatsApp Web 💬",
+      description: formattedPhone ? `Opened chat for +${formattedPhone}` : "Receipt loaded into WhatsApp Web",
+      variant: "info"
+    });
   }
 
   // Submit and Complete Order Directly
@@ -558,11 +530,6 @@ ${order.taxCents > 0 ? `🏛️ *GST (5%):* ₹${(order.taxCents / 100).toFixed(
 
       setCompletedOrder(receiptData);
       setModalPhone(customerPhone || "");
-
-      // If customer phone was provided at checkout, auto-dispatch in background
-      if (customerPhone.trim()) {
-        sendWhatsAppBill(receiptData, customerPhone);
-      }
 
       // Clear current cart & inputs
       clear();
@@ -1217,7 +1184,7 @@ ${order.taxCents > 0 ? `🏛️ *GST (5%):* ₹${(order.taxCents / 100).toFixed(
                 className="w-full py-3.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-sm shadow-md shadow-emerald-600/20 flex items-center justify-center gap-2 transition-all active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
               >
                 {isSubmitting ? (
-                  <RefreshCw className="w-4 h-4 animate-spin" />
+                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
                 ) : (
                   <>
                     <span>Complete Payment &amp; Print • ₹{(finalTotalCents / 100).toFixed(2)}</span>
@@ -1369,7 +1336,11 @@ ${order.taxCents > 0 ? `🏛️ *GST (5%):* ₹${(order.taxCents / 100).toFixed(
                 onClick={submitOrder}
                 className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-bold text-sm shadow-md flex items-center justify-center gap-2 cursor-pointer"
               >
-                {isSubmitting ? <RefreshCw className="w-4 h-4 animate-spin" /> : `Complete Payment & Print Slip`}
+                {isSubmitting ? (
+                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  `Complete Payment & Print Slip`
+                )}
               </button>
             </div>
           </div>
@@ -1415,7 +1386,7 @@ ${order.taxCents > 0 ? `🏛️ *GST (5%):* ₹${(order.taxCents / 100).toFixed(
       )}
 
       {/* ======================================================== */}
-      {/* 6. ORDER SUCCESS RECEIPT & DIRECT WHATSAPP MODAL         */}
+      {/* 6. ORDER SUCCESS RECEIPT & WHATSAPP WEB MODAL            */}
       {/* ======================================================== */}
       {completedOrder && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in">
@@ -1466,23 +1437,21 @@ ${order.taxCents > 0 ? `🏛️ *GST (5%):* ₹${(order.taxCents / 100).toFixed(
               </div>
 
               {/* ======================================================== */}
-              {/* WhatsApp Quick Dispatch Card                            */}
+              {/* WhatsApp Web Direct Card                                */}
               {/* ======================================================== */}
               <div className="p-3 bg-emerald-50/90 rounded-2xl border border-emerald-200 space-y-2">
                 <div className="flex items-center justify-between">
                   <span className="font-bold text-emerald-900 flex items-center gap-1.5">
-                    <MessageCircle className="w-4 h-4 text-emerald-600" /> Send Bill via WhatsApp
+                    <MessageCircle className="w-4 h-4 text-emerald-600" /> WhatsApp Bill
                   </span>
-                  <div className="flex items-center gap-1">
-                    <button
-                      onClick={() => copyBillToClipboard(completedOrder)}
-                      className="text-[10px] text-emerald-800 hover:text-emerald-950 font-bold px-2 py-0.5 rounded-md bg-emerald-200/60 hover:bg-emerald-200 flex items-center gap-1 transition-colors cursor-pointer"
-                      title="Copy receipt text to clipboard"
-                    >
-                      {isCopied ? <Check className="w-3 h-3 text-emerald-700" /> : <Copy className="w-3 h-3" />}
-                      <span>{isCopied ? "Copied" : "Copy Bill"}</span>
-                    </button>
-                  </div>
+                  <button
+                    onClick={() => copyBillToClipboard(completedOrder)}
+                    className="text-[10px] text-emerald-800 hover:text-emerald-950 font-bold px-2 py-0.5 rounded-md bg-emerald-200/60 hover:bg-emerald-200 flex items-center gap-1 transition-colors cursor-pointer"
+                    title="Copy receipt text to clipboard"
+                  >
+                    {isCopied ? <Check className="w-3 h-3 text-emerald-700" /> : <Copy className="w-3 h-3" />}
+                    <span>{isCopied ? "Copied" : "Copy Text"}</span>
+                  </button>
                 </div>
 
                 <div className="flex items-center gap-2">
@@ -1490,61 +1459,223 @@ ${order.taxCents > 0 ? `🏛️ *GST (5%):* ₹${(order.taxCents / 100).toFixed(
                     <Phone className="w-3.5 h-3.5 text-zinc-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
                     <input
                       type="tel"
-                      placeholder="10-digit WhatsApp number"
+                      placeholder="10-digit mobile number"
                       value={modalPhone}
                       onChange={e => setModalPhone(e.target.value)}
                       className="w-full pl-8 pr-2 py-2 text-xs bg-white rounded-xl border border-emerald-200 focus:border-emerald-600 outline-none font-semibold text-zinc-900"
                     />
                   </div>
                   <button
-                    disabled={isSendingWhatsapp}
                     onClick={() => sendWhatsAppBill(completedOrder, modalPhone)}
-                    className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl flex items-center gap-1.5 transition-all shadow-xs cursor-pointer active:scale-95 shrink-0 disabled:opacity-50"
+                    className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl flex items-center gap-1.5 transition-all shadow-xs cursor-pointer active:scale-95 shrink-0"
                   >
-                    {isSendingWhatsapp ? (
-                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                    ) : (
-                      <>
-                        <Send className="w-3.5 h-3.5" />
-                        <span>Quick Send</span>
-                      </>
-                    )}
-                  </button>
-                </div>
-
-                {/* Secondary link for web if preferred */}
-                <div className="flex items-center justify-between pt-0.5 text-[10px] text-emerald-800">
-                  <span>🚀 Launches App directly &amp; copies text</span>
-                  <button
-                    onClick={() => sendWhatsAppBill(completedOrder, modalPhone, "web")}
-                    className="text-emerald-700 hover:underline flex items-center gap-0.5 font-semibold cursor-pointer"
-                  >
-                    <span>Use WhatsApp Web</span>
-                    <ExternalLink className="w-2.5 h-2.5" />
+                    <span>Open WhatsApp</span>
+                    <ExternalLink className="w-3.5 h-3.5" />
                   </button>
                 </div>
               </div>
 
-              {/* Print & Next Actions */}
-              <div className="grid grid-cols-2 gap-2 pt-1">
-                <button
-                  onClick={() => window.print()}
-                  className="py-2.5 px-3 bg-zinc-100 hover:bg-zinc-200 text-zinc-800 font-bold rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer"
-                >
-                  <Printer className="w-4 h-4" /> Print Slip
-                </button>
+              {/* Action Buttons: PDF Download, Print Slip, New Sale */}
+              <div className="space-y-2 pt-1">
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    onClick={() => {
+                      if (!completedOrder) return;
+                      setInvoiceModalData(completedOrder);
+                      setShowInvoiceModal(true);
+                    }}
+                    className="py-2.5 px-3 bg-indigo-50 hover:bg-indigo-100 text-indigo-900 border border-indigo-200 font-bold rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-2xs text-xs"
+                  >
+                    <Download className="w-3.5 h-3.5 text-indigo-600" /> Download PDF
+                  </button>
+
+                  <button
+                    onClick={() => window.print()}
+                    className="py-2.5 px-3 bg-zinc-100 hover:bg-zinc-200 text-zinc-800 font-bold rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer text-xs"
+                  >
+                    <Printer className="w-3.5 h-3.5 text-zinc-700" /> Print Slip
+                  </button>
+                </div>
+
                 <button
                   onClick={() => setCompletedOrder(null)}
-                  className="py-2.5 px-3 bg-zinc-900 hover:bg-zinc-800 text-white font-bold rounded-xl flex items-center justify-center gap-1.5 transition-all shadow-sm cursor-pointer"
+                  className="w-full py-2.5 px-3 bg-zinc-900 hover:bg-zinc-800 text-white font-bold rounded-xl flex items-center justify-center gap-1.5 transition-all shadow-xs cursor-pointer text-xs"
                 >
-                  <span>New Sale</span>
-                  <ArrowRight className="w-4 h-4" />
+                  <span>Start New Sale</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
                 </button>
               </div>
             </div>
           </div>
         </div>
       )}
+
+      {/* ======================================================== */}
+      {/* 7. CUSTOMER DETAILS & INVOICE OPTIONS MODAL              */}
+      {/* ======================================================== */}
+      <InvoiceDetailsModal
+        isOpen={showInvoiceModal}
+        onClose={() => setShowInvoiceModal(false)}
+        orderData={invoiceModalData}
+      />
+
+      {/* ======================================================== */}
+      {/* 8. DEDICATED THERMAL & DESKTOP PRINTABLE RECEIPT SLIP   */}
+      {/* ======================================================== */}
+      {completedOrder && (
+        <div id="printable-receipt-wrapper" className="hidden print:block">
+          <div id="printable-receipt" className="text-black bg-white">
+            <div className="text-center pb-2 border-b border-dashed border-black">
+              {/* Store Logo */}
+              {(business?.logo_url || "/dummy-logo.svg") && (
+                <div className="flex justify-center mb-1">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={business?.logo_url || "/dummy-logo.svg"}
+                    alt="Store Logo"
+                    className="h-10 w-auto max-w-[120px] object-contain mx-auto filter grayscale contrast-125"
+                  />
+                </div>
+              )}
+              <h2 className="text-sm font-bold tracking-tight uppercase leading-tight">
+                {business?.name || "Brown fening tea"}
+              </h2>
+              <p className="text-[10px] text-zinc-600 mt-0.5 font-medium">
+                TAX INVOICE / BILL RECEIPT
+              </p>
+            </div>
+
+            {/* Metadata */}
+            <div className="py-2 border-b border-dashed border-black text-[10px] space-y-0.5">
+              <div className="flex justify-between">
+                <span>Invoice #: <strong>{completedOrder.orderId}</strong></span>
+                <span>{completedOrder.date}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Customer: {completedOrder.customerName || "Walk-in Guest"}</span>
+                {completedOrder.tableNumber && (
+                  <span>Table/Token: <strong>#{completedOrder.tableNumber}</strong></span>
+                )}
+              </div>
+              {completedOrder.customerPhone && (
+                <div>Phone: {completedOrder.customerPhone}</div>
+              )}
+            </div>
+
+            {/* Itemized Table */}
+            <div className="py-2 border-b border-dashed border-black">
+              <table className="w-full text-left text-[10px]">
+                <thead>
+                  <tr className="border-b border-black font-bold">
+                    <th className="py-1">Item</th>
+                    <th className="py-1 text-center">Qty</th>
+                    <th className="py-1 text-right">Rate</th>
+                    <th className="py-1 text-right">Amt</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-dotted divide-zinc-300">
+                  {completedOrder.items.map((it, idx) => (
+                    <tr key={idx}>
+                      <td className="py-1 pr-1 font-medium leading-tight">{it.name}</td>
+                      <td className="py-1 text-center font-bold">{it.qty}</td>
+                      <td className="py-1 text-right">₹{(it.price_cents / 100).toFixed(2)}</td>
+                      <td className="py-1 text-right font-bold">₹{((it.price_cents * it.qty) / 100).toFixed(2)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Totals Calculation */}
+            <div className="py-2 border-b border-dashed border-black text-[10px] space-y-1">
+              <div className="flex justify-between">
+                <span>Subtotal ({completedOrder.items.reduce((s, i) => s + i.qty, 0)} items)</span>
+                <span>₹{(completedOrder.subtotalCents / 100).toFixed(2)}</span>
+              </div>
+              {completedOrder.taxCents > 0 && (
+                <div className="flex justify-between">
+                  <span>GST (5%)</span>
+                  <span>₹{(completedOrder.taxCents / 100).toFixed(2)}</span>
+                </div>
+              )}
+              <div className="flex justify-between items-baseline pt-1 border-t border-black text-xs font-black">
+                <span>NET TOTAL</span>
+                <span className="text-sm font-black">₹{(completedOrder.totalCents / 100).toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between text-[10px] pt-0.5 text-zinc-700">
+                <span>Payment Mode:</span>
+                <span className="font-bold uppercase">{completedOrder.paymentMode}</span>
+              </div>
+            </div>
+
+            {/* Token & Footer Message */}
+            <div className="pt-2 text-center text-[9px] text-zinc-700 space-y-1">
+              {completedOrder.tableNumber && (
+                <div className="py-1 px-3 border border-black inline-block rounded font-bold text-xs my-1">
+                  TOKEN #{completedOrder.tableNumber}
+                </div>
+              )}
+              <p className="font-semibold">Thank you for your visit!</p>
+              <p>Please visit again.</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Strict 1-Page Global Print CSS for 58mm / 80mm POS Thermal & Desktop Printers */}
+      <style jsx global>{`
+        @media print {
+          html, body {
+            height: auto !important;
+            min-height: 0 !important;
+            max-height: 100% !important;
+            overflow: visible !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            background: #ffffff !important;
+          }
+          /* Hide normal UI */
+          body > * {
+            visibility: hidden !important;
+          }
+          /* Only display the printable wrapper */
+          #printable-receipt-wrapper,
+          #printable-receipt-wrapper *,
+          #printable-receipt,
+          #printable-receipt * {
+            visibility: visible !important;
+          }
+          #printable-receipt-wrapper {
+            display: block !important;
+            position: absolute !important;
+            left: 0 !important;
+            top: 0 !important;
+            width: 100% !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            background: #ffffff !important;
+          }
+          #printable-receipt {
+            position: relative !important;
+            display: block !important;
+            width: 100% !important;
+            max-width: 78mm !important;
+            margin: 0 auto !important;
+            padding: 4px 8px !important;
+            background: #ffffff !important;
+            color: #000000 !important;
+            box-sizing: border-box !important;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace !important;
+            page-break-after: avoid !important;
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+          }
+          @page {
+            margin: 0;
+            size: auto;
+          }
+        }
+      `}</style>
     </div>
   );
 }

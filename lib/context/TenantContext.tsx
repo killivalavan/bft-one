@@ -9,6 +9,10 @@ export interface Business {
   name: string;
   slug: string;
   logo_url: string | null;
+  signature_url?: string | null;
+  address?: string | null;
+  phone?: string | null;
+  gstin?: string | null;
   currency_symbol: string;
   timezone: string;
   geofence_lat: number | null;
@@ -23,9 +27,13 @@ export interface Business {
 
 export const DEFAULT_BUSINESS: Business = {
   id: "a0000000-0000-0000-0000-000000000001",
-  name: "Brown Fening Tea - Navalur",
+  name: "Brown fening tea",
   slug: "bft-navalur",
-  logo_url: "/logo_payslip.jpg",
+  logo_url: "/dummy-logo.svg",
+  signature_url: "/default-signature.svg",
+  address: "255, Rajiv Gandhi Salai (OMR), Navalur,\nChennai,\nTamil Nadu, India - 600130",
+  phone: "+91 98765 43210",
+  gstin: "",
   currency_symbol: "₹",
   timezone: "Asia/Kolkata",
   geofence_lat: 12.8439,
@@ -205,11 +213,24 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
   }
 
   function normalizeBusiness(raw: Partial<Business> & Record<string, unknown>): Business {
+    const bizId = (raw.id as string) || DEFAULT_BUSINESS.id;
+    let localExtra: any = {};
+    try {
+      if (typeof window !== "undefined") {
+        const extraJson = localStorage.getItem(`bftone_tenant_extra_${bizId}`) || localStorage.getItem("bftone_tenant_cache");
+        if (extraJson) localExtra = JSON.parse(extraJson);
+      }
+    } catch {}
+
     return {
-      id: (raw.id as string) || DEFAULT_BUSINESS.id,
-      name: raw.name || DEFAULT_BUSINESS.name,
+      id: bizId,
+      name: raw.name || localExtra.name || DEFAULT_BUSINESS.name,
       slug: raw.slug || DEFAULT_BUSINESS.slug,
-      logo_url: raw.logo_url || DEFAULT_BUSINESS.logo_url,
+      logo_url: raw.logo_url || localExtra.logo_url || DEFAULT_BUSINESS.logo_url,
+      signature_url: (raw.signature_url as string) || localExtra.signature_url || DEFAULT_BUSINESS.signature_url,
+      address: (raw.address as string) || localExtra.address || DEFAULT_BUSINESS.address,
+      phone: (raw.phone as string) || localExtra.phone || DEFAULT_BUSINESS.phone,
+      gstin: (raw.gstin as string) || localExtra.gstin || DEFAULT_BUSINESS.gstin,
       currency_symbol: raw.currency_symbol || "₹",
       timezone: raw.timezone || "Asia/Kolkata",
       geofence_lat: raw.geofence_lat !== null ? Number(raw.geofence_lat) : DEFAULT_BUSINESS.geofence_lat,
@@ -225,7 +246,19 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
 
   function persistTenant(biz: Business) {
     try {
-      localStorage.setItem("bftone_tenant_cache", JSON.stringify(biz));
+      if (typeof window !== "undefined") {
+        localStorage.setItem("bftone_tenant_cache", JSON.stringify(biz));
+        if (biz.id) {
+          localStorage.setItem(`bftone_tenant_extra_${biz.id}`, JSON.stringify({
+            name: biz.name,
+            logo_url: biz.logo_url,
+            signature_url: biz.signature_url,
+            address: biz.address,
+            phone: biz.phone,
+            gstin: biz.gstin,
+          }));
+        }
+      }
     } catch {}
   }
 
