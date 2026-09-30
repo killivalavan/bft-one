@@ -132,19 +132,19 @@ export default function TimesheetPage() {
   }
 
   return (
-    <div className="min-h-screen bg-neutral-50/50 pb-20 md:pb-10">
+    <div className="min-h-screen bg-[#F8FAFC] pb-20 md:pb-10">
       <div className="max-w-md mx-auto p-4 space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between">
           <div className="space-y-4">
-            <Link href="/" className="inline-flex items-center gap-2 text-zinc-500 hover:text-zinc-800 transition-colors text-sm font-medium">
+            <Link href="/" className="inline-flex items-center gap-2 text-slate-500 hover:text-[#2563EB] transition-colors text-sm font-medium">
               <ChevronLeft size={16} />
               Back Home
             </Link>
-            <h1 className="text-2xl font-bold text-zinc-900 tracking-tight">Timesheet</h1>
+            <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Timesheet</h1>
           </div>
           {isAdmin && (
-            <Button size="sm" variant="outline" onClick={() => setShowPresentModal(true)} className="gap-2 bg-white border-zinc-200 text-zinc-700 hover:bg-zinc-50">
+            <Button size="sm" variant="outline" onClick={() => setShowPresentModal(true)} className="gap-2 bg-white border-slate-200 text-slate-700 hover:bg-slate-50 shadow-2xs">
               <Users size={16} />
               <span className="hidden sm:inline">Present Staff</span>
             </Button>

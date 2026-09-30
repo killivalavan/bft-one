@@ -9,7 +9,7 @@ import { useTenant } from "@/lib/context/TenantContext";
 import { cn } from "@/lib/utils/cn";
 import {
   Home, CalendarCheck2, CalendarDays, Coffee, Shield,
-  User, LogOut, ChevronDown, Bell, Wallet, TrendingUp, Globe, Sparkles, Store, LifeBuoy, Bug, FileText
+  User, LogOut, ChevronDown, Bell, Wallet, TrendingUp, Globe, Sparkles, Store, LifeBuoy, Bug, FileText, Boxes
 } from "lucide-react";
 import RaiseIssueModal from "@/components/support/RaiseIssueModal";
 
@@ -94,9 +94,12 @@ export default function Navbar() {
       ]
     : [
         { href: "/", label: "Dashboard", icon: Home },
+        ...(flags?.isAdmin || flags?.isStockManager || isModuleEnabled("stock")
+          ? [{ href: "/inventory", label: "Inventory", icon: Boxes }]
+          : []),
         ...(flags?.isAdmin
           ? [
-              { href: "/invoices", label: "Invoices", icon: FileText },
+              ...(isModuleEnabled("invoices") ? [{ href: "/invoices", label: "Invoices", icon: FileText }] : []),
               { href: "/admin/fill-timesheet", label: "Fill Timesheet", icon: CalendarCheck2 }
             ]
           : isModuleEnabled("sales") ? [{ href: "/sales", label: "Daily Sales", icon: TrendingUp }] : []),
@@ -142,7 +145,7 @@ export default function Navbar() {
         "sticky top-0 z-50 transition-all duration-300 backdrop-blur-xl",
         isSuperAdminView
           ? "bg-slate-950/90 border-b border-slate-800/80 text-white shadow-lg shadow-black/20"
-          : "bg-white/90 border-b border-zinc-200/80 text-zinc-900 shadow-sm"
+          : "bg-white/95 border-b border-slate-200/80 text-slate-900 shadow-xs"
       )}>
         <div className="max-w-[1600px] mx-auto px-3 sm:px-6 lg:px-8 xl:px-12">
           <div className={cn("flex items-center h-[68px] sm:h-20", isFocusMode ? "justify-center" : "justify-between")}>
@@ -155,56 +158,58 @@ export default function Navbar() {
                   className="flex items-center gap-2.5 sm:gap-3 group shrink-0"
                 >
                   {/* Brand Gem Icon */}
-                  <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-tr from-sky-600 via-indigo-600 to-sky-500 flex items-center justify-center text-white shadow-md shadow-sky-600/20 group-hover:scale-105 group-hover:shadow-sky-600/30 transition-all shrink-0">
+                  <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-[#2563EB] flex items-center justify-center text-white shadow-xs group-hover:bg-[#1D4ED8] group-hover:scale-105 transition-all shrink-0">
                     <Sparkles size={18} className="text-white" />
                   </div>
                   
                   <div className="flex flex-col justify-center min-w-0">
-                    <span className={cn(
-                      "font-extrabold text-lg sm:text-xl tracking-tight leading-none transition-colors",
-                      isSuperAdminView
-                        ? "text-white group-hover:text-sky-300"
-                        : "text-zinc-900 group-hover:text-sky-600"
-                    )}>
-                      SeyalPro
+                    <span className="font-extrabold text-lg sm:text-xl tracking-tight leading-none">
+                      {isSuperAdminView ? (
+                        <span className="text-white group-hover:text-blue-400">Seyal<span className="text-[#2563EB]">Pro</span></span>
+                      ) : (
+                        <span>
+                          <span className="text-[#0F172A]">Seyal</span>
+                          <span className="text-[#2563EB]">Pro</span>
+                        </span>
+                      )}
                     </span>
 
-                    {/* Mobile: Connected Store Green Pill Badge underneath SeyalPro */}
+                    {/* Mobile: Connected Store Pill Badge underneath SeyalPro */}
                     {isSuperAdminView ? (
-                      <div className="sm:hidden mt-1 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-indigo-500/15 text-indigo-300 border border-indigo-500/30 shadow-2xs max-w-[190px] truncate">
-                        <Globe size={11} className="text-indigo-400 animate-spin-slow shrink-0" />
+                      <div className="sm:hidden mt-1 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[10px] font-semibold bg-blue-950 text-blue-300 border border-blue-800 shadow-2xs max-w-[190px] truncate">
+                        <Globe size={11} className="text-blue-400 animate-spin-slow shrink-0" />
                         <span className="truncate">Super Admin Hub</span>
                       </div>
                     ) : business?.name ? (
-                      <div className="sm:hidden mt-1 inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200/90 shadow-2xs max-w-[190px] xs:max-w-[240px]">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
-                        <Store size={11} className="text-emerald-600 shrink-0" />
+                      <div className="sm:hidden mt-1 inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-[11px] font-semibold bg-[#EFF6FF] text-[#1E40AF] border border-[#BFDBFE] shadow-2xs max-w-[190px] xs:max-w-[240px]">
+                        <span className="w-1.5 h-1.5 rounded-full bg-[#2563EB] animate-pulse shrink-0" />
+                        <Store size={11} className="text-[#2563EB] shrink-0" />
                         <span className="truncate">{business.name}</span>
                       </div>
                     ) : null}
                   </div>
                 </Link>
 
-                {/* Desktop: Connected Store Green Pill Badge (Next to Brand) */}
+                {/* Desktop: Connected Store Pill Badge (Next to Brand) */}
                 {isSuperAdminView ? (
-                  <span className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-indigo-500/15 text-indigo-300 border border-indigo-500/30 shadow-sm">
-                    <Globe size={13} className="text-indigo-400 animate-spin-slow" />
+                  <span className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold bg-blue-950 text-blue-200 border border-blue-800 shadow-xs">
+                    <Globe size={13} className="text-blue-400 animate-spin-slow" />
                     <span>Super Admin Platform</span>
                   </span>
                 ) : business?.name ? (
                   <span
-                    className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200/90 shadow-sm max-w-[260px] truncate"
+                    className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold bg-[#EFF6FF] text-[#1E40AF] border border-[#BFDBFE] shadow-xs max-w-[260px] truncate"
                     title={business.name}
                   >
-                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
-                    <Store size={13} className="text-emerald-600 shrink-0" />
+                    <span className="w-2 h-2 rounded-full bg-[#2563EB] animate-pulse shrink-0" />
+                    <Store size={13} className="text-[#2563EB] shrink-0" />
                     <span className="truncate font-semibold">{business.name}</span>
                   </span>
                 ) : null}
               </div>
             )}
 
-            {/* Middle: Desktop Nav Pill Tabs */}
+            {/* Middle: Desktop Nav Tabs */}
             <div className={cn("flex items-center space-x-1 sm:space-x-1.5", !isFocusMode && "hidden md:flex")}>
               {visibleLinks.map((link) => {
                 const isActive = pathname === link.href;
@@ -213,17 +218,17 @@ export default function Navbar() {
                     key={link.href}
                     href={link.href}
                     className={cn(
-                      "px-3.5 py-2 rounded-xl text-sm font-semibold flex items-center gap-2 transition-all duration-200",
+                      "px-3.5 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 transition-all duration-150",
                       isSuperAdminView
                         ? isActive
-                          ? "bg-indigo-600 text-white shadow-md shadow-indigo-900/30"
+                          ? "bg-[#2563EB] text-white shadow-xs"
                           : "text-slate-300 hover:bg-slate-800/80 hover:text-white"
                         : isActive
-                          ? "bg-sky-600 text-white shadow-md shadow-sky-600/20"
-                          : "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900"
+                          ? "bg-[#2563EB] text-white shadow-xs"
+                          : "text-[#64748B] hover:bg-slate-100 hover:text-[#0F172A]"
                     )}
                   >
-                    <link.icon size={16} className={isActive ? "text-white" : isSuperAdminView ? "text-slate-400" : "text-zinc-400"} />
+                    <link.icon size={16} className={isActive ? "text-white" : "text-[#64748B]"} />
                     <span>{link.label}</span>
                   </Link>
                 );
@@ -237,27 +242,25 @@ export default function Navbar() {
                 <Link
                   href="/notifications"
                   className={cn(
-                    "relative p-2 rounded-xl border transition-all",
+                    "relative p-2 rounded-lg border transition-all",
                     isSuperAdminView
                       ? "text-slate-300 hover:text-white hover:bg-slate-800 border-slate-800"
-                      : "text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100 border-zinc-200/80"
+                      : "text-[#64748B] hover:text-[#0F172A] hover:bg-slate-100 border-[#E2E8F0]"
                   )}
                   title="Notifications"
                 >
                   <Bell size={18} />
-                  <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-rose-500 rounded-full ring-2 ring-white">
-                    <span className="absolute inset-0 rounded-full bg-rose-400 animate-ping opacity-75" />
-                  </span>
+                  <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-[#2563EB] rounded-full ring-2 ring-white" />
                 </Link>
 
                 {/* Support & Issues Hub strictly for Client Store Admins */}
                 {flags?.isAdmin && !flags?.isSuperAdmin && (
                   <button
                     onClick={() => setIssueModalOpen(true)}
-                    className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200/90 text-xs font-bold transition-all shadow-2xs active:scale-95"
+                    className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#EFF6FF] hover:bg-[#DBEAFE] text-[#1E40AF] border border-[#BFDBFE] text-xs font-semibold transition-all shadow-xs active:scale-95"
                     title="View raised issues or report a new bug to SeyalPro"
                   >
-                    <LifeBuoy size={14} className="text-amber-600" />
+                    <LifeBuoy size={14} className="text-[#2563EB]" />
                     <span className="hidden md:inline">Support & Issues</span>
                   </button>
                 )}
@@ -267,42 +270,42 @@ export default function Navbar() {
                   <button
                     onClick={() => setMenuOpen(!menuOpen)}
                     className={cn(
-                      "flex items-center gap-2 p-1.5 sm:pl-3 rounded-full border transition-all focus:outline-none focus:ring-2",
+                      "flex items-center gap-2 p-1.5 sm:pl-3 rounded-lg border transition-all focus:outline-none focus:ring-2",
                       isSuperAdminView
-                        ? "border-slate-700 bg-slate-800/80 hover:bg-slate-800 focus:ring-indigo-400/20"
-                        : "border-zinc-200 bg-zinc-50 hover:bg-zinc-100/80 focus:ring-sky-500/20"
+                        ? "border-slate-700 bg-slate-800/80 hover:bg-slate-800 focus:ring-blue-500/20"
+                        : "border-[#E2E8F0] bg-white hover:bg-slate-50 focus:ring-[#2563EB]/20"
                     )}
                   >
                     <span className={cn(
                       "text-xs font-bold leading-tight max-w-[120px] truncate hidden sm:block capitalize",
-                      isSuperAdminView ? "text-white" : "text-zinc-900"
+                      isSuperAdminView ? "text-white" : "text-[#0F172A]"
                     )}>
                       {displayName || "Guest"}
                     </span>
 
-                    <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-sky-600 to-indigo-600 text-white flex items-center justify-center text-xs font-extrabold shadow-sm">
+                    <div className="w-8 h-8 rounded-lg bg-[#2563EB] text-white flex items-center justify-center text-xs font-extrabold shadow-xs">
                       {initial}
                     </div>
-                    <ChevronDown size={14} className={isSuperAdminView ? "text-slate-400 mr-1" : "text-zinc-400 mr-1"} />
+                    <ChevronDown size={14} className="text-[#64748B] mr-1" />
                   </button>
 
                   {/* Dropdown Menu */}
                   {menuOpen && (
-                    <div className="absolute right-0 mt-2 w-56 bg-white rounded-2xl shadow-xl border border-zinc-200 p-1.5 animate-in fade-in zoom-in-95 duration-200 origin-top-right z-50">
-                      <div className="px-3.5 py-3 border-b border-zinc-100">
-                        <p className="text-sm font-bold text-zinc-900 capitalize">{displayName}</p>
-                        <p className="text-xs text-zinc-500 truncate">{userEmail}</p>
+                    <div className="absolute right-0 mt-2 w-56 bg-white rounded-xl shadow-lg border border-[#E2E8F0] p-1.5 animate-in fade-in zoom-in-95 duration-150 origin-top-right z-50">
+                      <div className="px-3.5 py-3 border-b border-slate-100">
+                        <p className="text-sm font-bold text-[#0F172A] capitalize">{displayName}</p>
+                        <p className="text-xs text-[#64748B] truncate">{userEmail}</p>
                         
                         {business?.name && !flags?.isSuperAdmin && (
-                          <div className="mt-2 flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-200/80 text-xs font-semibold">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
-                            <Store size={12} className="text-emerald-600 shrink-0" />
+                          <div className="mt-2 flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-[#EFF6FF] text-[#1E40AF] border border-[#BFDBFE] text-xs font-semibold">
+                            <span className="w-1.5 h-1.5 rounded-full bg-[#2563EB] animate-pulse shrink-0" />
+                            <Store size={12} className="text-[#2563EB] shrink-0" />
                             <span className="truncate">{business.name}</span>
                           </div>
                         )}
 
                         <div className="mt-2">
-                          <span className="inline-block px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider bg-zinc-100 text-zinc-700">
+                          <span className="inline-block px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider bg-slate-100 text-slate-700">
                             {flags?.isSuperAdmin ? "👑 Platform Super Admin" : flags?.isAdmin ? "🛡️ Store Admin" : "👤 Staff Member"}
                           </span>
                         </div>
@@ -311,10 +314,10 @@ export default function Navbar() {
                       <div className="py-1 space-y-0.5">
                         <Link
                           href="/profile"
-                          className="flex items-center gap-2.5 px-3 py-2 text-sm text-zinc-700 font-medium rounded-xl hover:bg-zinc-100 hover:text-zinc-900 transition-colors"
+                          className="flex items-center gap-2.5 px-3 py-2 text-sm text-[#0F172A] font-medium rounded-lg hover:bg-slate-100 transition-colors"
                           onClick={() => setMenuOpen(false)}
                         >
-                          <User size={16} className="text-zinc-400" />
+                          <User size={16} className="text-[#64748B]" />
                           <span>My Profile</span>
                         </Link>
 
@@ -324,9 +327,9 @@ export default function Navbar() {
                               setMenuOpen(false);
                               setIssueModalOpen(true);
                             }}
-                            className="w-full text-left flex items-center gap-2.5 px-3 py-2 text-sm text-amber-800 font-semibold rounded-xl hover:bg-amber-50 transition-colors"
+                            className="w-full text-left flex items-center gap-2.5 px-3 py-2 text-sm text-[#2563EB] font-semibold rounded-lg hover:bg-[#EFF6FF] transition-colors"
                           >
-                            <LifeBuoy size={16} className="text-amber-600" />
+                            <LifeBuoy size={16} className="text-[#2563EB]" />
                             <span>Support & Issues</span>
                           </button>
                         )}
@@ -334,19 +337,19 @@ export default function Navbar() {
                         {flags?.isSuperAdmin && (
                           <Link
                             href="/super-admin"
-                            className="flex items-center gap-2.5 px-3 py-2 text-sm text-purple-700 font-semibold rounded-xl hover:bg-purple-50 transition-colors"
+                            className="flex items-center gap-2.5 px-3 py-2 text-sm text-[#2563EB] font-semibold rounded-lg hover:bg-[#EFF6FF] transition-colors"
                             onClick={() => setMenuOpen(false)}
                           >
-                            <Globe size={16} className="text-purple-600" />
+                            <Globe size={16} className="text-[#2563EB]" />
                             <span>Super Admin Hub</span>
                           </Link>
                         )}
                       </div>
 
-                      <div className="pt-1 border-t border-zinc-100">
+                      <div className="pt-1 border-t border-slate-100">
                         <button
                           onClick={handleLogout}
-                          className="w-full text-left flex items-center gap-2.5 px-3 py-2 text-sm text-rose-600 font-medium rounded-xl hover:bg-rose-50 transition-colors"
+                          className="w-full text-left flex items-center gap-2.5 px-3 py-2 text-sm text-[#DC2626] font-medium rounded-lg hover:bg-[#FEF2F2] transition-colors"
                         >
                           <LogOut size={16} />
                           <span>Sign out</span>
@@ -366,7 +369,7 @@ export default function Navbar() {
 
       {/* Modern Mobile Bottom Navigation Bar */}
       {!isFocusMode && (
-        <div className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-xl border-t border-zinc-200/80 shadow-[0_-8px_24px_rgba(0,0,0,0.06)] pb-[env(safe-area-inset-bottom)]">
+        <div className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-xl border-t border-[#E2E8F0] shadow-md pb-[env(safe-area-inset-bottom)]">
           <div className="flex items-center justify-around h-16 px-2">
             {allLinks.map((link) => {
               const isActive = pathname === link.href;
@@ -377,23 +380,23 @@ export default function Navbar() {
                   href={link.href}
                   className={cn(
                     "relative flex flex-col items-center justify-center w-full h-full py-1 transition-all",
-                    isActive ? "text-sky-600" : "text-zinc-400 hover:text-zinc-600"
+                    isActive ? "text-[#2563EB]" : "text-[#64748B] hover:text-[#0F172A]"
                   )}
                 >
                   <div className={cn(
-                    "p-1.5 rounded-xl transition-all duration-200",
-                    isActive ? "bg-sky-50 scale-110" : "bg-transparent"
+                    "p-1.5 rounded-lg transition-all duration-200",
+                    isActive ? "bg-[#EFF6FF] scale-105" : "bg-transparent"
                   )}>
                     <Icon size={20} className={isActive ? "stroke-[2.5]" : "stroke-[1.75]"} />
                   </div>
                   <span className={cn(
                     "text-[10px] tracking-tight mt-0.5",
-                    isActive ? "font-bold text-sky-600" : "font-medium text-zinc-500"
+                    isActive ? "font-bold text-[#2563EB]" : "font-medium text-[#64748B]"
                   )}>
                     {link.label}
                   </span>
                   {isActive && (
-                    <span className="w-1 h-1 rounded-full bg-sky-600 absolute bottom-1.5" />
+                    <span className="w-1 h-1 rounded-full bg-[#2563EB] absolute bottom-1.5" />
                   )}
                 </Link>
               );
@@ -403,23 +406,23 @@ export default function Navbar() {
               href="/profile"
               className={cn(
                 "relative flex flex-col items-center justify-center w-full h-full py-1 transition-all",
-                pathname === "/profile" ? "text-sky-600" : "text-zinc-400 hover:text-zinc-600"
+                pathname === "/profile" ? "text-[#2563EB]" : "text-[#64748B] hover:text-[#0F172A]"
               )}
             >
               <div className={cn(
-                "p-1.5 rounded-xl transition-all duration-200",
-                pathname === "/profile" ? "bg-sky-50 scale-110" : "bg-transparent"
+                "p-1.5 rounded-lg transition-all duration-200",
+                pathname === "/profile" ? "bg-[#EFF6FF] scale-105" : "bg-transparent"
               )}>
                 <User size={20} className={pathname === "/profile" ? "stroke-[2.5]" : "stroke-[1.75]"} />
               </div>
               <span className={cn(
                 "text-[10px] tracking-tight mt-0.5",
-                pathname === "/profile" ? "font-bold text-sky-600" : "font-medium text-zinc-500"
+                pathname === "/profile" ? "font-bold text-[#2563EB]" : "font-medium text-[#64748B]"
               )}>
                 Profile
               </span>
               {pathname === "/profile" && (
-                <span className="w-1 h-1 rounded-full bg-sky-600 absolute bottom-1.5" />
+                <span className="w-1 h-1 rounded-full bg-[#2563EB] absolute bottom-1.5" />
               )}
             </Link>
           </div>

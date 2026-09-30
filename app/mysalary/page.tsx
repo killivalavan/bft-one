@@ -186,40 +186,39 @@ export default function MySalaryPage() {
   }
 
   return (
-    <div className="min-h-screen bg-neutral-50/50 pb-20">
+    <div className="min-h-screen bg-slate-50/50 pb-20">
       <div className="max-w-4xl mx-auto p-4 md:p-6 space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
 
         {/* Header */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="space-y-1">
-            <Link href="/" className="inline-flex items-center gap-2 text-zinc-500 hover:text-emerald-700 transition-colors text-sm font-medium">
+            <Link href="/" className="inline-flex items-center gap-2 text-slate-500 hover:text-[#2563EB] transition-colors text-sm font-medium">
               <ChevronLeft size={16} />
               Back Home
             </Link>
             <div className="flex items-center gap-3">
-              <h1 className="text-3xl font-bold text-zinc-900 tracking-tight">My Salary</h1>
+              <h1 className="text-3xl font-bold text-[#0F172A] tracking-tight">My Salary</h1>
               {isAdmin && (
                 <Button
                   size="sm"
-                  variant="outline"
                   onClick={downloadPayslip}
                   disabled={downloading}
-                  className="gap-2 text-emerald-700 border-emerald-200 bg-emerald-50 hover:bg-emerald-100 hover:border-emerald-300"
+                  className="gap-2 bg-[#2563EB] text-white hover:bg-[#1D4ED8] border-transparent shadow-xs"
                 >
                   {downloading ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
                   Payslip
                 </Button>
               )}
             </div>
-            <p className="text-zinc-500">Overview of earnings and deductions.</p>
+            <p className="text-[#64748B] text-sm">Overview of earnings and deductions.</p>
           </div>
 
-          <div className="flex items-center gap-4 bg-white p-1.5 rounded-xl border shadow-sm self-center md:self-auto">
-            <Button size="sm" variant="ghost" onClick={prevMonth} className="h-8 w-8 p-0 hover:bg-zinc-100">
+          <div className="flex items-center gap-4 bg-white p-1.5 rounded-xl border border-[#E2E8F0] shadow-xs self-center md:self-auto">
+            <Button size="sm" variant="ghost" onClick={prevMonth} className="h-8 w-8 p-0 hover:bg-slate-100 text-slate-700">
               <ChevronLeft size={16} />
             </Button>
-            <span className="min-w-[140px] text-center font-medium text-zinc-900 tabular-nums">{label}</span>
-            <Button size="sm" variant="ghost" onClick={nextMonth} className="h-8 w-8 p-0 hover:bg-zinc-100">
+            <span className="min-w-[140px] text-center font-semibold text-[#0F172A] tabular-nums text-sm">{label}</span>
+            <Button size="sm" variant="ghost" onClick={nextMonth} className="h-8 w-8 p-0 hover:bg-slate-100 text-slate-700">
               <ChevronRight size={16} />
             </Button>
           </div>
@@ -229,19 +228,19 @@ export default function MySalaryPage() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
 
           {/* Left Col: Chart */}
-          <div className="lg:col-span-1 bg-white rounded-2xl p-6 border border-zinc-200 shadow-sm flex flex-col items-center justify-center relative overflow-hidden">
-            <div className="absolute top-0 w-full h-1 bg-gradient-to-r from-emerald-400 to-rose-400"></div>
-            <h3 className="text-sm font-semibold text-zinc-900 uppercase tracking-wide mb-6">Salary Composition</h3>
+          <div className="lg:col-span-1 bg-white rounded-xl p-6 border border-[#E2E8F0] shadow-xs flex flex-col items-center justify-center relative overflow-hidden">
+            <div className="absolute top-0 w-full h-1 bg-[#16A34A]"></div>
+            <h3 className="text-xs font-semibold text-[#0F172A] uppercase tracking-wider mb-6">Salary Composition</h3>
             <SalaryChart base={base} deductions={totals.deductions} net={totals.net} />
 
             <div className="flex gap-6 mt-8 w-full justify-center">
               <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full bg-emerald-500"></div>
-                <span className="text-xs font-medium text-zinc-600">Net: <AnimatedNumber value={totals.net / 100} prefix="₹" /></span>
+                <div className="w-3 h-3 rounded-full bg-[#16A34A]"></div>
+                <span className="text-xs font-medium text-[#64748B]">Net: <AnimatedNumber value={totals.net / 100} prefix="₹" /></span>
               </div>
               <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full bg-rose-500"></div>
-                <span className="text-xs font-medium text-zinc-600">Ded: <AnimatedNumber value={totals.deductions / 100} prefix="₹" /></span>
+                <div className="w-3 h-3 rounded-full bg-slate-400"></div>
+                <span className="text-xs font-medium text-[#64748B]">Ded: <AnimatedNumber value={totals.deductions / 100} prefix="₹" /></span>
               </div>
             </div>
           </div>
@@ -252,14 +251,14 @@ export default function MySalaryPage() {
               label="Standard Pay"
               value={<AnimatedNumber value={(base + fixedAllowance) / 100} prefix="₹ " />}
               icon={Wallet}
-              color="emerald"
+              color="sky"
               subtext="Base + Fixed Allowance"
             />
             <StatCard
               label="Allowances"
               value={<AnimatedNumber value={totals.additions / 100} prefix="₹ " />}
               icon={TrendingUp}
-              color="amber"
+              color="emerald"
               subtext="Bonuses & Extras"
             />
             <StatCard
@@ -273,7 +272,7 @@ export default function MySalaryPage() {
               label="Net Pay"
               value={<AnimatedNumber value={totals.net / 100} prefix="₹ " />}
               icon={PiggyBank}
-              color="indigo"
+              color="emerald"
               subtext="Final Payout"
             />
           </div>
@@ -281,41 +280,37 @@ export default function MySalaryPage() {
 
         {/* Entries List */}
         <div className="space-y-4">
-          <h3 className="font-semibold text-zinc-900 px-1">Details</h3>
+          <h3 className="font-semibold text-[#0F172A] px-1 text-base">Details</h3>
 
-          <div className="rounded-2xl border border-neutral-200 bg-white overflow-hidden shadow-sm">
+          <div className="rounded-xl border border-[#E2E8F0] bg-white overflow-hidden shadow-xs">
             {entries.length === 0 ? (
-              <div className="p-8 text-center bg-neutral-50/50">
-                <div className="w-12 h-12 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto mb-3">
+              <div className="p-8 text-center bg-slate-50">
+                <div className="w-12 h-12 rounded-xl bg-[#F0FDF4] text-[#16A34A] flex items-center justify-center mx-auto mb-3 border border-[#DCFCE7]">
                   <Wallet size={20} />
                 </div>
-                <p className="text-zinc-900 font-medium">No deductions</p>
-                <p className="text-sm text-zinc-500">Full salary for this month so far!</p>
+                <p className="text-[#0F172A] font-semibold">No deductions</p>
+                <p className="text-xs text-[#64748B] mt-0.5">Full salary for this month so far!</p>
               </div>
             ) : (
-              <div className="divide-y divide-neutral-100">
+              <div className="divide-y divide-slate-100">
                 {entries.map((e) => {
-                  const reason = (e.reason || '').toLowerCase();
                   const isPositive = ['allowance', 'bonus', 'addition'].includes(e.kind);
-                  const badge = isPositive ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                    : reason === 'late' ? 'bg-rose-50 text-rose-700 border-rose-200'
-                      : reason === 'leave' ? 'bg-sky-50 text-sky-700 border-sky-200'
-                        : reason.includes('half day') ? 'bg-orange-50 text-orange-700 border-orange-200'
-                          : reason === 'advance' ? 'bg-amber-50 text-amber-700 border-amber-200'
-                            : 'bg-zinc-50 text-zinc-700 border-zinc-200';
+                  const badge = isPositive 
+                    ? 'bg-[#F0FDF4] text-[#15803D] border-[#BBF7D0]'
+                    : 'bg-[#FEF2F2] text-[#B91C1C] border-[#FECACA]';
 
                   return (
-                    <div key={e.id} className="group flex items-center justify-between p-4 hover:bg-neutral-50 transition-colors">
+                    <div key={e.id} className="group flex items-center justify-between p-4 hover:bg-slate-50 transition-colors">
                       <div className="flex items-center gap-3">
                         <div className="flex flex-col">
                           <span className={`self-start inline-flex items-center px-2 py-0.5 rounded-md border text-[10px] uppercase tracking-wider font-semibold ${badge}`}>
                             {e.reason}
                           </span>
-                          <span className="text-xs text-zinc-500 mt-1.5 font-medium tabular-nums">{e.entry_date}</span>
+                          <span className="text-xs text-[#64748B] mt-1 font-medium tabular-nums">{e.entry_date}</span>
                         </div>
                       </div>
                       <div className="text-right">
-                        <div className={`font-semibold tabular-nums ${isPositive ? 'text-emerald-600' : 'text-zinc-900'}`}>
+                        <div className={`font-semibold tabular-nums text-sm ${isPositive ? 'text-[#16A34A]' : 'text-[#DC2626]'}`}>
                           {isPositive ? '+' : '-'} ₹{(e.amount_cents / 100).toFixed(2)}
                         </div>
                       </div>

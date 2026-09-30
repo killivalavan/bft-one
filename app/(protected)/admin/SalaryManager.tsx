@@ -113,11 +113,11 @@ export default function SalaryManager({ userId, perDaySalary, onDownloadPayslip 
   })();
 
   return (
-    <div className={cn("grid gap-2 mt-2 transition-colors duration-300", isSettled ? "bg-emerald-50/80 p-3 rounded-xl border border-emerald-200" : "")}>
+    <div className={cn("grid gap-2 mt-2 transition-colors duration-300", isSettled ? "bg-emerald-50/70 p-3 rounded-xl border border-emerald-200" : "")}>
       <div className="flex items-center justify-between text-sm">
         <div className="flex items-center gap-2">
-          <div className="font-medium text-zinc-900">Payslip — {monthLabel}</div>
-          {isSettled && <span className="text-[10px] font-bold uppercase bg-emerald-200 text-emerald-800 px-1.5 py-0.5 rounded-md flex items-center gap-1"><CheckCircle size={10} /> Settled</span>}
+          <div className="font-semibold text-slate-900">Payslip — {monthLabel}</div>
+          {isSettled && <span className="text-[10px] font-bold uppercase bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-md flex items-center gap-1"><CheckCircle size={10} /> Settled</span>}
         </div>
         <div className="flex gap-2">
           <Button size="sm" variant="outline" onClick={() => setMonth(m => new Date(m.getFullYear(), m.getMonth() - 1, 1))}>Prev</Button>
@@ -125,43 +125,40 @@ export default function SalaryManager({ userId, perDaySalary, onDownloadPayslip 
         </div>
       </div>
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-        <div className="rounded-xl border p-2 bg-white text-center">
-          <div className="text-[11px] text-zinc-600">Base salary</div>
-          <div className="text-lg font-semibold text-zinc-900">₹ {(base / 100).toFixed(2)}</div>
+        <div className="rounded-xl border border-slate-200 p-2 bg-white text-center">
+          <div className="text-[11px] text-slate-500 font-medium">Base salary</div>
+          <div className="text-lg font-semibold text-slate-900">₹ {(base / 100).toFixed(2)}</div>
         </div>
-        <div className="rounded-xl border p-2 bg-white text-center">
-          <div className="text-[11px] text-zinc-600">Fixed + Extra</div>
-          <div className="text-lg font-semibold text-emerald-600">₹ {((fixedAllowance + totals.additions) / 100).toFixed(2)}</div>
+        <div className="rounded-xl border border-slate-200 p-2 bg-white text-center">
+          <div className="text-[11px] text-slate-500 font-medium">Fixed + Extra</div>
+          <div className="text-lg font-semibold text-emerald-700">₹ {((fixedAllowance + totals.additions) / 100).toFixed(2)}</div>
         </div>
-        <div className="rounded-xl border p-2 bg-white text-center">
-          <div className="text-[11px] text-zinc-600">Deductions</div>
-          <div className="text-lg font-semibold text-red-600">₹ {(totals.deductions / 100).toFixed(2)}</div>
+        <div className="rounded-xl border border-slate-200 p-2 bg-white text-center">
+          <div className="text-[11px] text-slate-500 font-medium">Deductions</div>
+          <div className="text-lg font-semibold text-slate-700">₹ {(totals.deductions / 100).toFixed(2)}</div>
         </div>
-        <div className="rounded-xl border p-2 bg-white text-center">
-          <div className="text-[11px] text-zinc-600">Net Pay</div>
-          <div className="text-lg font-bold text-zinc-900">₹ {(totals.net / 100).toFixed(2)}</div>
+        <div className="rounded-xl border border-slate-200 p-2 bg-white text-center">
+          <div className="text-[11px] text-slate-500 font-medium">Net Pay</div>
+          <div className="text-lg font-bold text-slate-900">₹ {(totals.net / 100).toFixed(2)}</div>
         </div>
       </div>
-      <div className="grid gap-2 text-zinc-900">
+      <div className="grid gap-2 text-slate-900">
         {rows.map((r, idx) => {
-          const reason = String(r.reason || '').toLowerCase();
-          const badge = reason === 'late' ? 'bg-red-50 text-red-700 border-red-200'
-            : reason === 'leave' ? 'bg-sky-50 text-sky-700 border-sky-200'
-              : reason.includes('half day') ? 'bg-orange-50 text-orange-700 border-orange-200'
-                : reason === 'advance' ? 'bg-amber-50 text-amber-700 border-amber-200'
-                  : reason === 'adjustment' ? 'bg-violet-50 text-violet-700 border-violet-200'
-                    : 'bg-zinc-50 text-zinc-700 border-zinc-200';
+          const isPos = ['allowance', 'bonus', 'addition'].includes(r.kind);
+          const badge = isPos 
+            ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+            : 'bg-slate-100 text-slate-800 border-slate-200';
           return (
-            <div key={r.id} className={`rounded-xl border border-zinc-200 p-2 flex items-center justify-between text-sm text-zinc-900 bg-white hover:bg-zinc-50 transition-colors ${idx % 2 === 1 ? 'bg-zinc-50/40' : ''}`}>
+            <div key={r.id} className={`rounded-xl border border-slate-200 p-2.5 flex items-center justify-between text-sm text-slate-900 bg-white hover:bg-slate-50 transition-colors ${idx % 2 === 1 ? 'bg-slate-50/50' : ''}`}>
               <div>
-                <div className="font-medium text-zinc-900 flex items-center gap-2">
-                  <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border ${badge}`}>{r.reason}</span>
+                <div className="font-medium text-slate-900 flex items-center gap-2">
+                  <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md border text-xs font-semibold ${badge}`}>{r.reason}</span>
                 </div>
-                <div className="text-[12px] text-zinc-700">{r.entry_date} • {r.kind}</div>
+                <div className="text-[12px] text-slate-500 mt-0.5">{r.entry_date} • {r.kind}</div>
               </div>
               <div className="flex items-center gap-2">
-                <div className={`font-semibold ${['allowance', 'bonus', 'addition'].includes(r.kind) ? 'text-emerald-600' : 'text-red-600'}`}>
-                  {['allowance', 'bonus', 'addition'].includes(r.kind) ? '+' : '-'} ₹ {(r.amount_cents / 100).toFixed(2)}
+                <div className={`font-semibold tabular-nums ${isPos ? 'text-emerald-700' : 'text-slate-900'}`}>
+                  {isPos ? '+' : '-'} ₹ {(r.amount_cents / 100).toFixed(2)}
                 </div>
                 <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => del(r.id)}>Delete</Button>
               </div>
@@ -169,14 +166,14 @@ export default function SalaryManager({ userId, perDaySalary, onDownloadPayslip 
           );
         })}
         {rows.length === 0 && (
-          <div className="text-sm text-zinc-500">No entries</div>
+          <div className="text-sm text-slate-400 py-2">No entries</div>
         )}
       </div>
       <div className="grid gap-2 sm:grid-cols-4">
         <Input type="date" value={form.date} onChange={e => setForm(f => ({ ...f, date: e.target.value }))} />
         <Input placeholder="Reason" value={form.reason} onChange={e => setForm(f => ({ ...f, reason: e.target.value }))} />
         <Input type="number" placeholder="Amount (₹)" value={form.amount} onChange={e => setForm(f => ({ ...f, amount: e.target.value }))} />
-        <select className="h-11 px-3 rounded-lg border border-zinc-300" value={form.kind} onChange={e => setForm(f => ({ ...f, kind: e.target.value }))}>
+        <select className="h-11 px-3 rounded-lg border border-slate-200 text-slate-900 font-medium focus:ring-2 focus:ring-[#2563EB]/20 focus:border-[#2563EB] outline-none" value={form.kind} onChange={e => setForm(f => ({ ...f, kind: e.target.value }))}>
           <option value="deduction">Deduction</option>
           <option value="allowance">Allowance</option>
           <option value="bonus">Bonus</option>
@@ -190,14 +187,14 @@ export default function SalaryManager({ userId, perDaySalary, onDownloadPayslip 
 
           <Button
             variant={isSettled ? "secondary" : "outline"}
-            className={cn("gap-2", isSettled ? "bg-emerald-100 text-emerald-800 hover:bg-emerald-200" : "")}
+            className={cn("gap-2", isSettled ? "bg-emerald-50 text-emerald-700 border-emerald-300 hover:bg-emerald-100" : "")}
             onClick={toggleSettled}
           >
             {isSettled ? <CheckCircle size={16} /> : <Circle size={16} />}
             {isSettled ? "Settled" : "Mark as Settled"}
           </Button>
 
-          <Button variant="outline" className="gap-2 text-emerald-600 border-emerald-200 hover:bg-emerald-50" onClick={() => onDownloadPayslip(userId, month)}>
+          <Button variant="outline" className="gap-2 text-[#2563EB] border-slate-200 hover:bg-[#EFF6FF]" onClick={() => onDownloadPayslip(userId, month)}>
             <Download size={14} /> Download Payslip
           </Button>
         </div>

@@ -23,11 +23,11 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
       <div className="fixed z-[100] bottom-24 left-1/2 -translate-x-1/2 w-full max-w-md px-4 space-y-2">
         {toasts.map(t => (
           <div key={t.id} className={twMerge(
-            "rounded-xl px-3 py-2 shadow-md text-white",
-            !t.variant && "bg-slate-900",
-            t.variant === "success" && "bg-emerald-600",
-            t.variant === "error" && "bg-red-600",
-            t.variant === "info" && "bg-sky-600",
+            "rounded-lg px-4 py-3 shadow-lg text-white border",
+            !t.variant && "bg-[#0F172A] border-slate-700",
+            t.variant === "success" && "bg-[#16A34A] border-emerald-500",
+            t.variant === "error" && "bg-[#DC2626] border-red-500",
+            t.variant === "info" && "bg-[#2563EB] border-blue-500",
           )}>
             <div className="text-sm font-semibold">{t.title}</div>
             {t.description && <div className="text-xs/relaxed opacity-90">{t.description}</div>}

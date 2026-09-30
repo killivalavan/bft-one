@@ -18,11 +18,11 @@ export function TimesheetCalendar({ value, onChange, filledDates, leaveDates }: 
     const today = new Date();
 
     return (
-        <Card className="border-0 shadow-lg bg-white/80 backdrop-blur-sm overflow-hidden">
-            <CardHeader className="bg-gradient-to-r from-sky-50 to-white border-b border-sky-100 pb-3">
-                <CardTitle className="text-sm font-semibold text-sky-900 flex items-center gap-2">
-                    <CalendarIcon size={16} className="text-sky-600" />
-                    Attendance Calendar
+        <Card className="border border-slate-200 shadow-xs bg-white overflow-hidden rounded-2xl">
+            <CardHeader className="bg-slate-50 border-b border-slate-200 pb-3">
+                <CardTitle className="text-sm font-semibold text-slate-900 flex items-center gap-2">
+                    <CalendarIcon size={16} className="text-[#2563EB]" />
+                    <span>Attendance Calendar</span>
                 </CardTitle>
             </CardHeader>
             <CardContent className="p-0">
@@ -52,18 +52,18 @@ export function TimesheetCalendar({ value, onChange, filledDates, leaveDates }: 
                 </div>
 
                 {/* Legend */}
-                <div className="bg-zinc-50/50 p-3 border-t border-zinc-100 flex justify-center gap-4 text-[11px] font-medium text-zinc-600">
+                <div className="bg-slate-50 p-3 border-t border-slate-200 flex justify-center gap-4 text-[11px] font-medium text-slate-600">
                     <div className="flex items-center gap-1.5">
-                        <span className="w-2.5 h-2.5 rounded-full bg-[#22c55e] shadow-sm ring-1 ring-white" />
-                        Present
+                        <span className="w-2.5 h-2.5 rounded-full bg-[#16A34A] shadow-xs" />
+                        <span>Present</span>
                     </div>
                     <div className="flex items-center gap-1.5">
-                        <span className="w-2.5 h-2.5 rounded-full bg-[#0ea5e9] shadow-sm ring-1 ring-white" />
-                        Leave
+                        <span className="w-2.5 h-2.5 rounded-full bg-[#2563EB] shadow-xs" />
+                        <span>Leave</span>
                     </div>
                     <div className="flex items-center gap-1.5">
-                        <span className="w-2.5 h-2.5 rounded-full bg-[#ef4444] shadow-sm ring-1 ring-white" />
-                        Missing
+                        <span className="w-2.5 h-2.5 rounded-full bg-[#DC2626] shadow-xs" />
+                        <span>Missing</span>
                     </div>
                 </div>
             </CardContent>

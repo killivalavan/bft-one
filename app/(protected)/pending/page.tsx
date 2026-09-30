@@ -71,14 +71,14 @@ export default function PendingPage() {
       <div className="max-w-4xl mx-auto p-4 md:p-6 space-y-6">
         <div className="flex items-center justify-between">
           <div className="space-y-1">
-            <div className="flex items-center gap-2 text-zinc-500 text-sm font-medium">
-              <Link href="/" className="hover:text-sky-700 transition-colors flex items-center gap-1">
+            <div className="flex items-center gap-2 text-slate-500 text-sm font-medium">
+              <Link href="/" className="hover:text-[#2563EB] transition-colors flex items-center gap-1">
                 <ChevronLeft size={16} /> Home
               </Link>
             </div>
-            <h1 className="text-3xl font-bold text-zinc-900 tracking-tight">Pending Orders</h1>
+            <h1 className="text-3xl font-bold text-[#0F172A] tracking-tight">Pending Orders</h1>
           </div>
-          <div className="text-sm font-medium px-3 py-1 bg-indigo-100 text-indigo-700 rounded-full">
+          <div className="text-xs font-semibold px-3 py-1 bg-[#FFFBEB] text-[#B45309] rounded-md border border-[#FDE68A]">
             {orders.length} Active
           </div>
         </div>

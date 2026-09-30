@@ -8,9 +8,9 @@ interface ProfileStatsProps {
 
 export function ProfileStats({ inTime, phone, emergency }: ProfileStatsProps) {
     const items = [
-        { label: "Check-in Time", value: inTime || "Not set", icon: Clock, color: "text-indigo-600", bg: "bg-indigo-50" },
-        { label: "Phone Number", value: phone || "Not set", icon: Phone, color: "text-emerald-600", bg: "bg-emerald-50" },
-        { label: "Emergency Contact", value: emergency || "Not set", icon: Heart, color: "text-rose-600", bg: "bg-rose-50" },
+        { label: "Check-in Time", value: inTime || "Not set", icon: Clock, color: "text-[#2563EB]", bg: "bg-[#EFF6FF] border border-[#DBEAFE]" },
+        { label: "Phone Number", value: phone || "Not set", icon: Phone, color: "text-slate-700", bg: "bg-slate-100 border border-slate-200" },
+        { label: "Emergency Contact", value: emergency || "Not set", icon: Heart, color: "text-[#DC2626]", bg: "bg-[#FEF2F2] border border-[#FEE2E2]" },
     ];
 
     return (

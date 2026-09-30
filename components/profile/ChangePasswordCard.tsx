@@ -133,29 +133,29 @@ export function ChangePasswordCard() {
 
         {/* Confirm Password Input */}
         <div className="space-y-1">
-          <label className="text-xs font-semibold text-zinc-600">Confirm New Password</label>
+          <label className="text-xs font-semibold text-slate-700">Confirm New Password</label>
           <input
             type={showPassword ? "text" : "password"}
             value={confirmPassword}
             onChange={(e) => setConfirmPassword(e.target.value)}
             placeholder="Re-enter your new password"
-            className="w-full px-3 py-2 rounded-xl bg-white border border-zinc-200 text-sm text-zinc-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 shadow-sm"
+            className="w-full px-3 py-2 rounded-lg bg-white border border-[#E2E8F0] text-sm text-[#0F172A] placeholder-[#94A3B8] focus:outline-none focus:ring-2 focus:ring-[#2563EB]/20 focus:border-[#2563EB] shadow-xs"
           />
         </div>
 
         {/* Status Feedback */}
         {message && (
           <div
-            className={`p-3 rounded-xl text-xs font-medium flex items-center gap-2 ${
+            className={`p-3 rounded-lg text-xs font-medium flex items-center gap-2 ${
               message.type === "success"
-                ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
-                : "bg-rose-50 text-rose-800 border border-rose-200"
+                ? "bg-[#F0FDF4] text-[#15803D] border border-[#BBF7D0]"
+                : "bg-slate-100 text-slate-800 border border-slate-200"
             }`}
           >
             {message.type === "success" ? (
-              <ShieldCheck size={16} className="text-emerald-600 shrink-0" />
+              <ShieldCheck size={16} className="text-[#16A34A] shrink-0" />
             ) : (
-              <AlertCircle size={16} className="text-rose-600 shrink-0" />
+              <AlertCircle size={16} className="text-slate-600 shrink-0" />
             )}
             <span>{message.text}</span>
           </div>
@@ -164,7 +164,7 @@ export function ChangePasswordCard() {
         <button
           type="submit"
           disabled={loading || !newPassword || !confirmPassword}
-          className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs sm:text-sm font-semibold shadow-sm transition-all disabled:opacity-50"
+          className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg bg-[#2563EB] hover:bg-[#1D4ED8] text-white text-xs sm:text-sm font-semibold shadow-xs transition-all disabled:opacity-50 cursor-pointer"
         >
           {loading ? (
             <>

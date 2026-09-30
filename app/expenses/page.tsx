@@ -61,16 +61,16 @@ const MONTHLY_CATEGORIES = [
 ];
 
 const CATEGORY_COLORS: Record<string, { bg: string; text: string; border: string }> = {
-    Rent: { bg: "bg-purple-50", text: "text-purple-700", border: "border-purple-200" },
-    Salary: { bg: "bg-blue-50", text: "text-blue-700", border: "border-blue-200" },
-    Electricity: { bg: "bg-amber-50", text: "text-amber-700", border: "border-amber-200" },
-    Water: { bg: "bg-sky-50", text: "text-sky-700", border: "border-sky-200" },
-    Internet: { bg: "bg-teal-50", text: "text-teal-700", border: "border-teal-200" },
-    Insurance: { bg: "bg-emerald-50", text: "text-emerald-700", border: "border-emerald-200" },
-    Maintenance: { bg: "bg-orange-50", text: "text-orange-700", border: "border-orange-200" },
-    Transport: { bg: "bg-indigo-50", text: "text-indigo-700", border: "border-indigo-200" },
-    Marketing: { bg: "bg-pink-50", text: "text-pink-700", border: "border-pink-200" },
-    Other: { bg: "bg-zinc-100", text: "text-zinc-700", border: "border-zinc-200" },
+    Rent: { bg: "bg-[#EFF6FF]", text: "text-[#1E40AF]", border: "border-[#BFDBFE]" },
+    Salary: { bg: "bg-slate-100", text: "text-slate-800", border: "border-slate-200" },
+    Electricity: { bg: "bg-[#FFFBEB]", text: "text-[#B45309]", border: "border-[#FDE68A]" },
+    Water: { bg: "bg-slate-100", text: "text-slate-800", border: "border-slate-200" },
+    Internet: { bg: "bg-[#EFF6FF]", text: "text-[#1E40AF]", border: "border-[#BFDBFE]" },
+    Insurance: { bg: "bg-slate-100", text: "text-slate-800", border: "border-slate-200" },
+    Maintenance: { bg: "bg-[#FFFBEB]", text: "text-[#B45309]", border: "border-[#FDE68A]" },
+    Transport: { bg: "bg-slate-100", text: "text-slate-800", border: "border-slate-200" },
+    Marketing: { bg: "bg-[#F5F3FF]", text: "text-[#6D28D9]", border: "border-[#DDD6FE]" },
+    Other: { bg: "bg-slate-100", text: "text-slate-800", border: "border-slate-200" },
 };
 
 const CATEGORY_PRESETS: Record<string, string[]> = {
@@ -1261,11 +1261,11 @@ export default function ExpensesPage() {
                         </button>
                         <button
                             onClick={() => setActiveTab("ai-advisor")}
-                            className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs sm:text-sm font-medium rounded-lg transition-all relative ${activeTab === "ai-advisor" ? "bg-gradient-to-r from-cyan-600 to-teal-600 text-white shadow-sm" : "text-zinc-600 hover:text-zinc-900 hover:bg-zinc-200/50"}`}
+                            className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs sm:text-sm font-medium rounded-lg transition-all relative ${activeTab === "ai-advisor" ? "bg-gradient-to-r from-violet-600 to-indigo-600 text-white shadow-sm" : "text-zinc-600 hover:text-zinc-900 hover:bg-zinc-200/50"}`}
                         >
-                            <Sparkles size={15} className={activeTab === "ai-advisor" ? "text-cyan-200 animate-pulse" : "text-cyan-600"} />
+                            <Sparkles size={15} className={activeTab === "ai-advisor" ? "text-violet-200 animate-pulse" : "text-violet-600"} />
                             <span>AI Advisor</span>
-                            <span className={`text-[9px] uppercase font-bold px-1.5 py-0.2 rounded-full ${activeTab === "ai-advisor" ? "bg-white/20 text-white" : "bg-cyan-100 text-cyan-800"}`}>
+                            <span className={`text-[9px] uppercase font-bold px-1.5 py-0.2 rounded-full ${activeTab === "ai-advisor" ? "bg-white/20 text-white" : "bg-violet-100 text-violet-800"}`}>
                                 Agent
                             </span>
                         </button>

@@ -24,26 +24,26 @@ export function NotificationItem({ notification }: NotificationItemProps) {
         <div className={cn(
             "group relative flex gap-4 p-4 rounded-xl border transition-all duration-300",
             isStock
-                ? "bg-amber-50/50 border-amber-100 hover:border-amber-200"
-                : "bg-white border-zinc-100 hover:border-zinc-200 hover:shadow-sm"
+                ? "bg-amber-50/50 border-amber-200 hover:border-amber-300"
+                : "bg-white border-slate-200 hover:border-slate-300 hover:shadow-xs"
         )}>
             <div className={cn(
-                "shrink-0 w-10 h-10 rounded-full flex items-center justify-center",
-                isStock ? "bg-amber-100 text-amber-600" : "bg-sky-50 text-sky-600"
+                "shrink-0 w-10 h-10 rounded-xl flex items-center justify-center border",
+                isStock ? "bg-[#FFFBEB] text-[#D97706] border-[#FEF3C7]" : "bg-[#EFF6FF] text-[#2563EB] border-[#DBEAFE]"
             )}>
                 <Icon size={20} />
             </div>
 
             <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-zinc-900 leading-snug">
+                <p className="text-sm font-medium text-slate-900 leading-snug">
                     {notification.message}
                 </p>
                 <div className="flex items-center gap-2 mt-1.5">
-                    <span className="text-xs text-zinc-500 font-medium">{timeAgo}</span>
+                    <span className="text-xs text-slate-500 font-medium">{timeAgo}</span>
                     {notification.product_id && (
                         <Link
                             href={`/billing?pid=${notification.product_id}`}
-                            className="text-[10px] font-bold uppercase tracking-wide text-sky-600 hover:text-sky-700 hover:underline"
+                            className="text-[10px] font-bold uppercase tracking-wide text-[#2563EB] hover:text-[#1D4ED8] hover:underline"
                         >
                             View Product
                         </Link>
@@ -52,7 +52,7 @@ export function NotificationItem({ notification }: NotificationItemProps) {
             </div>
 
             {/* Status tag */}
-            <div className="absolute top-4 right-4 text-[10px] font-bold uppercase tracking-wider opacity-0 group-hover:opacity-100 transition-opacity text-zinc-400">
+            <div className="absolute top-4 right-4 text-[10px] font-bold uppercase tracking-wider opacity-0 group-hover:opacity-100 transition-opacity text-slate-400">
                 {notification.kind}
             </div>
         </div>

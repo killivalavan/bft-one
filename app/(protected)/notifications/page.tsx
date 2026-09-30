@@ -35,17 +35,17 @@ export default function NotificationsPage() {
   return (
     <div className="min-h-screen pb-20">
       <div className="max-w-2xl mx-auto p-4 md:p-6 space-y-6">
-        <div className="flex items-center gap-2 text-zinc-500 text-sm font-medium">
-          <Link href="/" className="hover:text-sky-700 transition-colors flex items-center gap-1">
+        <div className="flex items-center gap-2 text-slate-500 text-sm font-medium">
+          <Link href="/" className="hover:text-[#2563EB] transition-colors flex items-center gap-1">
             <ChevronLeft size={16} /> Home
           </Link>
         </div>
 
         <div className="flex items-center gap-3">
-          <div className="p-2 bg-rose-100 text-rose-600 rounded-xl">
+          <div className="p-2.5 bg-[#EFF6FF] text-[#2563EB] rounded-xl border border-[#BFDBFE]">
             <Bell size={24} />
           </div>
-          <h1 className="text-3xl font-bold text-zinc-900 tracking-tight">Notifications</h1>
+          <h1 className="text-3xl font-bold text-[#0F172A] tracking-tight">Notifications</h1>
         </div>
 
         <NotificationList notifications={items} loading={loading} />

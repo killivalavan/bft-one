@@ -290,45 +290,45 @@ export default function SalesPage() {
     if (loading) return <div className="min-h-screen flex items-center justify-center"><Loader2 className="animate-spin text-zinc-400" /></div>;
 
     return (
-        <div className="min-h-screen bg-neutral-50/50 pb-20 md:pb-10">
+        <div className="min-h-screen bg-slate-50/50 pb-20 md:pb-10">
             <div className="max-w-md mx-auto p-4 space-y-6">
                 {/* Header */}
                 <div className="space-y-4">
-                    <Link href="/" className="inline-flex items-center gap-2 text-zinc-500 hover:text-zinc-800 transition-colors text-sm font-medium">
+                    <Link href="/" className="inline-flex items-center gap-2 text-slate-500 hover:text-[#2563EB] transition-colors text-sm font-medium">
                         <ChevronLeft size={16} />
                         Back Home
                     </Link>
 
                     <div className="flex items-center justify-between gap-4">
                         <div>
-                            <h1 className="text-2xl font-bold text-zinc-900 tracking-tight">Daily Sales Entry</h1>
-                            <p className="text-zinc-500 text-sm">Log sales data</p>
+                            <h1 className="text-2xl font-bold text-[#0F172A] tracking-tight">Daily Sales Entry</h1>
+                            <p className="text-[#64748B] text-sm">Log sales data</p>
                         </div>
 
                         {/* Display the date user is entering for (non-admin only) */}
                         {!isAdmin && (
                             <div className="text-right">
-                                <p className="text-[10px] sm:text-xs text-zinc-500 uppercase tracking-wider">Entering for</p>
-                                <p className="text-base sm:text-lg font-bold text-zinc-900">{format(date, "MMM dd, yyyy")}</p>
+                                <p className="text-[10px] sm:text-xs text-slate-500 uppercase tracking-wider font-semibold">Entering for</p>
+                                <p className="text-base sm:text-lg font-bold text-[#0F172A]">{format(date, "MMM dd, yyyy")}</p>
                             </div>
                         )}
                         {isAdmin && (
-                            <div className="flex items-center gap-1 bg-white border border-zinc-200 rounded-lg p-1 shadow-sm">
-                                <button onClick={() => { setDate(addDays(date, -1)); setManualOverride(true); }} className="p-2 hover:bg-zinc-50 rounded-md text-zinc-600">
+                            <div className="flex items-center gap-1 bg-white border border-[#E2E8F0] rounded-xl p-1 shadow-xs">
+                                <button onClick={() => { setDate(addDays(date, -1)); setManualOverride(true); }} className="p-2 hover:bg-slate-50 rounded-lg text-slate-600">
                                     <ChevronLeft size={18} />
                                 </button>
-                                <div className="px-2 text-sm font-semibold text-zinc-900 min-w-[100px] text-center">
+                                <div className="px-2 text-sm font-semibold text-[#0F172A] min-w-[100px] text-center">
                                     {isToday ? "Today" : format(date, "MMM dd")}
                                 </div>
                                 <button
                                     onClick={() => { setDate(addDays(date, 1)); setManualOverride(true); }}
-                                    className="p-2 hover:bg-zinc-50 rounded-md text-zinc-600 disabled:opacity-30"
+                                    className="p-2 hover:bg-slate-50 rounded-lg text-slate-600 disabled:opacity-30"
                                     disabled={isToday}
                                 >
                                     <ChevronRight size={18} />
                                 </button>
                                 {manualOverride && (
-                                    <button onClick={() => { setManualOverride(false); setDate(getInitialDate()); }} className="ml-2 text-xs px-2 py-1 rounded bg-zinc-100 hover:bg-zinc-200">
+                                    <button onClick={() => { setManualOverride(false); setDate(getInitialDate()); }} className="ml-2 text-xs px-2 py-1 rounded bg-slate-100 hover:bg-slate-200 font-semibold text-slate-700">
                                         Auto
                                     </button>
                                 )}
@@ -336,14 +336,14 @@ export default function SalesPage() {
                         )}
                     </div>
                     {!isToday && (
-                        <div className="bg-amber-50 text-amber-800 text-xs px-3 py-2 rounded-lg border border-amber-200 flex items-center gap-2">
-                            <Calendar size={12} />
+                        <div className="bg-slate-100 text-slate-800 text-xs px-3 py-2 rounded-lg border border-[#E2E8F0] flex items-center gap-2">
+                            <Calendar size={12} className="text-[#2563EB]" />
                             Viewing past entry: <strong>{format(date, "MMMM do, yyyy")}</strong>
                         </div>
                     )}
                     {/* Helper note when current time is before 9am */}
                     {new Date().getHours() < 9 && (
-                        <div className="bg-blue-50 text-blue-700 text-sm px-4 py-3 rounded-lg border border-blue-200 flex items-center gap-2">
+                        <div className="bg-[#EFF6FF] text-[#1E40AF] text-sm px-4 py-3 rounded-lg border border-[#BFDBFE] flex items-center gap-2">
                             <Calendar size={14} />
                             <span><strong>Note:</strong> You are entering sales for yesterday (shop closing). This will auto-switch to today at 9:00 AM.</span>
                         </div>
@@ -352,13 +352,13 @@ export default function SalesPage() {
 
                 <div className="grid gap-6">
                     {/* Cash Section */}
-                    <div className="bg-white p-6 rounded-2xl shadow-sm border border-zinc-100 space-y-4">
+                    <div className="bg-white p-6 rounded-xl shadow-xs border border-[#E2E8F0] space-y-4">
                         <div className="flex items-center justify-between">
-                            <h2 className="font-semibold text-zinc-900">Total Cash</h2>
-                            {cashSaved && <span className="text-xs font-bold text-emerald-600 bg-emerald-50 px-2 py-1 rounded-full flex items-center gap-1"><Lock size={10} /> Saved</span>}
+                            <h2 className="font-semibold text-[#0F172A]">Total Cash</h2>
+                            {cashSaved && <span className="text-xs font-bold text-[#15803D] bg-[#F0FDF4] px-2.5 py-1 rounded-md flex items-center gap-1 border border-[#BBF7D0]"><Lock size={10} /> Saved</span>}
                         </div>
                         <div className="space-y-3">
-                            <label className="text-sm font-medium text-zinc-600">Enter Cash Amount (₹)</label>
+                            <label className="text-sm font-medium text-[#64748B]">Enter Cash Amount (₹)</label>
                             <Input
                                 type="number"
                                 placeholder="0.00"
@@ -369,11 +369,11 @@ export default function SalesPage() {
                             />
                             {/* Show submitter info in grey */}
                             {cashSaved && cashSubmittedBy && (
-                                <p className="text-xs text-zinc-400">Updated by: {cashSubmittedBy}</p>
+                                <p className="text-xs text-slate-400">Updated by: {cashSubmittedBy}</p>
                             )}
                             <div className="flex gap-2">
                                 {!cashSaved && (
-                                    <Button className="w-full gap-2" onClick={saveCash}>
+                                    <Button className="w-full gap-2 bg-[#2563EB] text-white hover:bg-[#1D4ED8]" onClick={saveCash}>
                                         <Save size={16} /> Save Cash Entry
                                     </Button>
                                 )}
@@ -388,7 +388,7 @@ export default function SalesPage() {
                                     </div>
                                 )}
                                 {cashSaved && cashEditing && (
-                                    <Button className="w-full gap-2" onClick={saveCash}>
+                                    <Button className="w-full gap-2 bg-[#2563EB] text-white hover:bg-[#1D4ED8]" onClick={saveCash}>
                                         <Save size={16} /> Save
                                     </Button>
                                 )}
@@ -398,16 +398,16 @@ export default function SalesPage() {
 
                     {/* UPI Section - Admin Only */}
                     {isAdmin ? (
-                        <div className="bg-white p-6 rounded-2xl shadow-sm border border-zinc-100 space-y-4 relative overflow-hidden">
-                            <div className="absolute top-0 right-0 p-2 bg-purple-50 rounded-bl-xl border-b border-l border-purple-100 text-[10px] font-bold text-purple-600 uppercase tracking-wider">
+                        <div className="bg-white p-6 rounded-xl shadow-xs border border-[#E2E8F0] space-y-4 relative overflow-hidden">
+                            <div className="absolute top-0 right-0 p-2 bg-[#EFF6FF] rounded-bl-lg border-b border-l border-[#BFDBFE] text-[10px] font-bold text-[#1E40AF] uppercase tracking-wider">
                                 Admin Only
                             </div>
                             <div className="flex items-center justify-between">
-                                <h2 className="font-semibold text-zinc-900">Online / UPI</h2>
-                                {upiSaved && <span className="text-xs font-bold text-emerald-600 bg-emerald-50 px-2 py-1 rounded-full flex items-center gap-1"><Lock size={10} /> Saved</span>}
+                                <h2 className="font-semibold text-[#0F172A]">Online / UPI</h2>
+                                {upiSaved && <span className="text-xs font-bold text-[#15803D] bg-[#F0FDF4] px-2.5 py-1 rounded-md flex items-center gap-1 border border-[#BBF7D0]"><Lock size={10} /> Saved</span>}
                             </div>
                             <div className="space-y-3">
-                                <label className="text-sm font-medium text-zinc-600">Enter UPI Amount (₹)</label>
+                                <label className="text-sm font-medium text-[#64748B]">Enter UPI Amount (₹)</label>
                                 <Input
                                     type="number"
                                     placeholder="0.00"
@@ -418,7 +418,7 @@ export default function SalesPage() {
                                 />
                                 <div className="flex gap-2">
                                     {!upiSaved && (
-                                        <Button className="w-full gap-2" onClick={saveUpi} variant="primary">
+                                        <Button className="w-full gap-2 bg-[#2563EB] text-white hover:bg-[#1D4ED8]" onClick={saveUpi}>
                                             <Save size={16} /> Save UPI Entry
                                         </Button>
                                     )}
@@ -428,7 +428,7 @@ export default function SalesPage() {
                                         </Button>
                                     )}
                                     {upiSaved && upiEditing && (
-                                        <Button className="w-full gap-2" onClick={saveUpi} variant="primary">
+                                        <Button className="w-full gap-2 bg-[#2563EB] text-white hover:bg-[#1D4ED8]" onClick={saveUpi}>
                                             <Save size={16} /> Save
                                         </Button>
                                     )}
@@ -440,16 +440,16 @@ export default function SalesPage() {
 
                 {/* Success Modal for Regular Users */}
                 {showSaveSuccess && !isAdmin && (
-                    <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50 animate-in fade-in duration-300 p-4">
-                        <div className="bg-white rounded-2xl shadow-2xl p-6 sm:p-8 max-w-sm w-full text-center animate-in scale-in duration-300">
-                            <div className="w-14 h-14 sm:w-16 sm:h-16 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                                <svg className="w-7 h-7 sm:w-8 sm:h-8 text-emerald-600 animate-bounce" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-50 animate-in fade-in duration-300 p-4">
+                        <div className="bg-white rounded-xl shadow-2xl p-6 sm:p-8 max-w-sm w-full text-center border border-[#E2E8F0]">
+                            <div className="w-14 h-14 sm:w-16 sm:h-16 bg-[#F0FDF4] rounded-xl flex items-center justify-center mx-auto mb-4 border border-[#DCFCE7]">
+                                <svg className="w-7 h-7 sm:w-8 sm:h-8 text-[#16A34A]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                                 </svg>
                             </div>
-                            <h3 className="text-xl sm:text-2xl font-bold text-zinc-900 mb-2">Thank You!</h3>
-                            <p className="text-sm sm:text-base text-zinc-600 mb-4">Thanks for your calculation. Your entry has been recorded successfully.</p>
-                            <p className="text-xs sm:text-sm text-zinc-400">This message will close automatically...</p>
+                            <h3 className="text-xl sm:text-2xl font-bold text-[#0F172A] mb-2">Thank You!</h3>
+                            <p className="text-sm sm:text-base text-[#64748B] mb-4">Thanks for your calculation. Your entry has been recorded successfully.</p>
+                            <p className="text-xs sm:text-sm text-slate-400">This message will close automatically...</p>
                         </div>
                     </div>
                 )}

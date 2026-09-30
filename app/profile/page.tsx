@@ -38,8 +38,8 @@ export default function ProfilePage() {
     <div className="min-h-screen bg-white md:bg-zinc-50/50 pb-20">
       <div className="max-w-xl mx-auto md:py-8">
         <div className="bg-white rounded-2xl shadow-sm border-zinc-200 overflow-hidden md:border">
-          <div className="p-4 border-b border-zinc-100 flex items-center gap-2 text-zinc-500 text-sm font-medium">
-            <Link href="/" className="hover:text-sky-700 transition-colors flex items-center gap-1">
+          <div className="p-4 border-b border-[#E2E8F0] flex items-center gap-2 text-slate-500 text-sm font-medium">
+            <Link href="/" className="hover:text-[#2563EB] transition-colors flex items-center gap-1">
               <ChevronLeft size={16} /> Home
             </Link>
           </div>

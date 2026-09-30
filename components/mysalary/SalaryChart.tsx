@@ -35,8 +35,8 @@ export function SalaryChart({ base, deductions, net }: SalaryChartProps) {
                 className="absolute inset-0 rounded-full transition-all duration-1000 ease-out"
                 style={{
                     background: `conic-gradient(
-                        #10b981 0% ${netPercent}%, 
-                        #f43f5e ${netPercent}% 100%
+                        #16A34A 0% ${netPercent}%, 
+                        #E2E8F0 ${netPercent}% 100%
                     )`
                 }}
             ></div>

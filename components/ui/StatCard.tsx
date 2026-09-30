@@ -6,42 +6,37 @@ interface StatCardProps {
     value: string | number | React.ReactNode;
     icon?: LucideIcon;
     subtext?: string;
-    color?: "sky" | "rose" | "indigo" | "amber" | "emerald";
+    color?: "sky" | "rose" | "indigo" | "amber" | "emerald" | "zinc" | "slate";
     className?: string;
 }
 
 export function StatCard({ label, value, icon: Icon, subtext, color = "sky", className }: StatCardProps) {
-    const colors = {
-        sky: "bg-sky-50 border-sky-100 text-sky-700",
-        rose: "bg-rose-50 border-rose-100 text-rose-700",
-        indigo: "bg-indigo-50 border-indigo-100 text-indigo-700",
-        amber: "bg-amber-50 border-amber-100 text-amber-700",
-        emerald: "bg-emerald-50 border-emerald-100 text-emerald-700",
-    };
-
     const iconColors = {
-        sky: "bg-sky-100 text-sky-600",
-        rose: "bg-rose-100 text-rose-600",
-        indigo: "bg-indigo-100 text-indigo-600",
-        amber: "bg-amber-100 text-amber-600",
-        emerald: "bg-emerald-100 text-emerald-600",
+        sky: "bg-[#EFF6FF] text-[#2563EB] border border-[#DBEAFE]",
+        blue: "bg-[#EFF6FF] text-[#2563EB] border border-[#DBEAFE]",
+        rose: "bg-[#FEF2F2] text-[#DC2626] border border-[#FEE2E2]",
+        indigo: "bg-[#F5F3FF] text-[#7C3AED] border border-[#EDE9FE]",
+        amber: "bg-[#FFFBEB] text-[#D97706] border border-[#FEF3C7]",
+        emerald: "bg-[#F0FDF4] text-[#16A34A] border border-[#DCFCE7]",
+        zinc: "bg-slate-100 text-slate-700 border border-slate-200",
+        slate: "bg-slate-100 text-slate-700 border border-slate-200",
     };
 
     return (
-        <div className={cn("p-4 rounded-2xl border bg-white shadow-sm flex flex-col justify-between", className)}>
+        <div className={cn("p-4 sm:p-5 rounded-xl border border-[#E2E8F0] bg-white shadow-xs flex flex-col justify-between transition-all hover:border-slate-300", className)}>
             <div>
-                <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs font-semibold text-zinc-500 uppercase tracking-wide">{label}</span>
+                <div className="flex items-center justify-between mb-2.5">
+                    <span className="text-xs font-semibold text-[#64748B] uppercase tracking-wider">{label}</span>
                     {Icon && (
-                        <div className={cn("w-8 h-8 rounded-full flex items-center justify-center", iconColors[color])}>
-                            <Icon size={16} />
+                        <div className={cn("w-9 h-9 rounded-lg flex items-center justify-center shadow-2xs", (iconColors as any)[color] || iconColors.sky)}>
+                            <Icon size={17} />
                         </div>
                     )}
                 </div>
-                <div className="text-2xl font-bold text-zinc-900 tabular-nums tracking-tight">{value}</div>
+                <div className="text-2xl font-bold text-[#0F172A] tabular-nums tracking-tight">{value}</div>
             </div>
             {subtext && (
-                <div className="mt-2 text-xs text-zinc-500 font-medium">
+                <div className="mt-2 text-xs text-[#64748B] font-normal">
                     {subtext}
                 </div>
             )}

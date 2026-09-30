@@ -288,10 +288,10 @@ export default function RaiseIssueModal({ isOpen, onClose, initialTab = "list" }
                   setSubmittedTicket(null);
                 }}
                 className={cn(
-                  "flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all",
+                  "flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all",
                   activeTab === "create"
-                    ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/20"
-                    : "bg-indigo-50 text-indigo-700 hover:bg-indigo-100"
+                    ? "bg-[#2563EB] text-white shadow-xs"
+                    : "bg-[#EFF6FF] text-[#1E40AF] hover:bg-[#DBEAFE] border border-[#BFDBFE]"
                 )}
               >
                 <Plus size={14} />

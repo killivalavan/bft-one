@@ -73,6 +73,57 @@ export async function POST(req: Request) {
       await supa.from('notifications').insert(notifs as any);
     }
 
+    // Recipe BOM Auto-Deduction for Inventory Items
+    try {
+      const { data: recipes } = await supa
+        .from('item_recipes')
+        .select('product_id, inventory_item_id, quantity_required, waste_factor_pct')
+        .in('product_id', ids);
+
+      if (recipes && recipes.length > 0) {
+        const invDeductions = new Map<string, number>();
+        for (const r of recipes) {
+          const soldQty = usage.get(r.product_id) || 0;
+          if (soldQty <= 0) continue;
+          const wasteFactor = 1 + ((r.waste_factor_pct || 0) / 100);
+          const totalIngQty = (Number(r.quantity_required) || 0) * soldQty * wasteFactor;
+          invDeductions.set(r.inventory_item_id, (invDeductions.get(r.inventory_item_id) || 0) + totalIngQty);
+        }
+
+        const invIds = Array.from(invDeductions.keys());
+        if (invIds.length > 0) {
+          const { data: invItems } = await supa
+            .from('inventory_items')
+            .select('id, current_stock, cost_per_unit')
+            .in('id', invIds);
+
+          if (invItems) {
+            for (const item of invItems) {
+              const deduct = invDeductions.get(item.id) || 0;
+              const cur = Number(item.current_stock) || 0;
+              const next = Math.max(0, cur - deduct);
+              await supa
+                .from('inventory_items')
+                .update({ current_stock: next, updated_at: new Date().toISOString() })
+                .eq('id', item.id);
+
+              await supa.from('stock_ledger').insert({
+                business_id: callerBusinessId,
+                inventory_item_id: item.id,
+                transaction_type: 'POS_CONSUMPTION',
+                quantity_delta: -deduct,
+                balance_after: next,
+                unit_cost: item.cost_per_unit,
+                reason: 'POS Order Auto-Deduction (Recipe BOM)',
+              });
+            }
+          }
+        }
+      }
+    } catch (recipeErr) {
+      console.error('Recipe auto-deduction error:', recipeErr);
+    }
+
     return NextResponse.json({ ok: true, updated: updates.length, notified: notifs.length });
   } catch (e:any) {
     return NextResponse.json({ error: e?.message || 'unknown' }, { status: 500 });

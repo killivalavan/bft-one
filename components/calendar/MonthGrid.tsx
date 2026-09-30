@@ -19,18 +19,18 @@ export function MonthGrid({ days, onDayClick, loading }: MonthGridProps) {
     const weekDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
     return (
-        <div className="bg-white rounded-2xl border border-zinc-200 shadow-sm overflow-hidden">
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
             {/* Header Row */}
-            <div className="grid grid-cols-7 border-b border-zinc-200 bg-zinc-50/50">
+            <div className="grid grid-cols-7 border-b border-slate-200 bg-slate-50">
                 {weekDays.map(d => (
-                    <div key={d} className="py-3 text-center text-xs font-semibold text-zinc-500 uppercase tracking-wide">
+                    <div key={d} className="py-3 text-center text-xs font-semibold text-slate-500 uppercase tracking-wider">
                         {d}
                     </div>
                 ))}
             </div>
 
             {/* Calendar Grid */}
-            <div className="grid grid-cols-7 bg-zinc-200 gap-px">
+            <div className="grid grid-cols-7 bg-slate-200 gap-px">
                 {days.map((d, i) => {
                     const isToday = d.iso === format(new Date(), 'yyyy-MM-dd');
                     const hasLeaves = d.names.length > 0;
@@ -42,20 +42,20 @@ export function MonthGrid({ days, onDayClick, loading }: MonthGridProps) {
                             disabled={loading}
                             className={cn(
                                 "relative min-h-[100px] md:min-h-[120px] p-2 text-left transition-all hover:z-10 bg-white",
-                                !d.inMonth && "bg-zinc-50/60 text-zinc-400",
-                                d.inMonth && "hover:bg-sky-50/30",
+                                !d.inMonth && "bg-slate-50/70 text-slate-400",
+                                d.inMonth && "hover:bg-[#EFF6FF]",
                                 loading && "opacity-80 cursor-wait",
-                                "group focus:outline-none focus:ring-2 focus:ring-inset focus:ring-sky-500"
+                                "group focus:outline-none focus:ring-2 focus:ring-inset focus:ring-[#2563EB]"
                             )}
                         >
                             {/* Date Number */}
                             <div className="flex items-start justify-between">
                                 <span
                                     className={cn(
-                                        "text-sm font-semibold rounded-full w-7 h-7 flex items-center justify-center",
+                                        "text-sm font-semibold rounded-lg w-7 h-7 flex items-center justify-center",
                                         isToday
-                                            ? "bg-sky-600 text-white shadow-md"
-                                            : d.inMonth ? "text-zinc-700 group-hover:text-sky-700" : "text-zinc-400"
+                                            ? "bg-[#2563EB] text-white shadow-xs"
+                                            : d.inMonth ? "text-[#0F172A] group-hover:text-[#2563EB]" : "text-slate-400"
                                     )}
                                 >
                                     {d.date.getDate()}
@@ -63,7 +63,7 @@ export function MonthGrid({ days, onDayClick, loading }: MonthGridProps) {
 
                                 {/* Dot indicator for small screens or overflow */}
                                 {hasLeaves && (
-                                    <span className="md:hidden w-1.5 h-1.5 rounded-full bg-rose-500" />
+                                    <span className="md:hidden w-1.5 h-1.5 rounded-full bg-[#2563EB]" />
                                 )}
                             </div>
 
@@ -74,14 +74,14 @@ export function MonthGrid({ days, onDayClick, loading }: MonthGridProps) {
                                         {d.names.slice(0, 3).map((name, idx) => (
                                             <div
                                                 key={idx}
-                                                className="hidden md:flex items-center gap-1.5 px-1.5 py-0.5 rounded text-[10px] bg-rose-50 text-rose-700 border border-rose-100 truncate shadow-sm group-hover:border-rose-200"
+                                                className="hidden md:flex items-center gap-1.5 px-1.5 py-0.5 rounded text-[10px] bg-slate-100 text-slate-800 border border-slate-200 truncate shadow-xs group-hover:border-blue-300"
                                             >
-                                                <span className="w-1.5 h-1.5 rounded-full bg-rose-400 shrink-0" />
+                                                <span className="w-1.5 h-1.5 rounded-full bg-[#2563EB] shrink-0" />
                                                 <span className="truncate font-medium">{name}</span>
                                             </div>
                                         ))}
                                         {d.names.length > 3 && (
-                                            <div className="hidden md:block text-[10px] text-zinc-400 pl-1">
+                                            <div className="hidden md:block text-[10px] text-slate-400 pl-1">
                                                 +{d.names.length - 3} more
                                             </div>
                                         )}
@@ -91,13 +91,13 @@ export function MonthGrid({ days, onDayClick, loading }: MonthGridProps) {
                                             {d.names.slice(0, 3).map((name, idx) => (
                                                 <div
                                                     key={idx}
-                                                    className="w-5 h-5 rounded-full bg-rose-100 border border-white text-[9px] flex items-center justify-center font-bold text-rose-600 ring-1 ring-white"
+                                                    className="w-5 h-5 rounded-full bg-slate-100 border border-white text-[9px] flex items-center justify-center font-bold text-slate-800 ring-1 ring-white"
                                                 >
                                                     {name[0]}
                                                 </div>
                                             ))}
                                             {d.names.length > 3 && (
-                                                <div className="w-5 h-5 rounded-full bg-zinc-100 border border-white text-[9px] flex items-center justify-center text-zinc-500 font-bold ring-1 ring-white">
+                                                <div className="w-5 h-5 rounded-full bg-slate-100 border border-white text-[9px] flex items-center justify-center text-slate-500 font-bold ring-1 ring-white">
                                                     +
                                                 </div>
                                             )}

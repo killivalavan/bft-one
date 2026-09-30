@@ -237,15 +237,15 @@ export function StoreSettings() {
 
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
-      <Card className="border border-zinc-200 shadow-sm rounded-2xl overflow-hidden bg-white">
-        <CardHeader className="bg-gradient-to-r from-emerald-50 to-teal-50 border-b border-zinc-200/80 p-6">
+      <Card className="border border-slate-200 shadow-sm rounded-2xl overflow-hidden bg-white">
+        <CardHeader className="bg-slate-50 border-b border-slate-200 p-6">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-bold shadow-xs">
+            <div className="w-10 h-10 rounded-xl bg-[#EFF6FF] text-[#2563EB] border border-[#2563EB]/20 flex items-center justify-center font-bold shadow-xs">
               <Store className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-lg font-bold text-zinc-900">Store Profile, Logo &amp; Signature</h2>
-              <p className="text-xs text-zinc-500">
+              <h2 className="text-lg font-bold text-slate-900">Store Profile, Logo &amp; Signature</h2>
+              <p className="text-xs text-slate-500">
                 Manage your store branding, official address, and authorised signature for PDF invoices
               </p>
             </div>

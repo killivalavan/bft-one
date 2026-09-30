@@ -91,11 +91,11 @@ export default function CalendarPage() {
   const monthLabel = month.toLocaleString(undefined, { month: "long", year: "numeric" });
 
   return (
-    <div className="min-h-screen bg-neutral-50/50 pb-20">
+    <div className="min-h-screen bg-slate-50/50 pb-20">
       <div className="max-w-6xl mx-auto p-4 md:p-6 space-y-6">
         {/* Top Nav */}
         <div className="flex items-center justify-between">
-          <Link href="/" className="inline-flex items-center gap-2 text-zinc-500 hover:text-zinc-800 transition-colors text-sm font-medium">
+          <Link href="/" className="inline-flex items-center gap-2 text-slate-500 hover:text-[#2563EB] transition-colors text-sm font-medium">
             <ChevronLeft size={16} />
             Back Home
           </Link>
@@ -104,14 +104,14 @@ export default function CalendarPage() {
         {/* Title & Controls */}
         <div className="grid grid-cols-1 md:grid-cols-3 items-center gap-4">
           <div className="flex justify-center md:justify-start">
-            <h1 className="text-2xl md:text-3xl font-bold text-zinc-900 tracking-tight flex items-center gap-3">
-              <CalendarDays className="text-sky-600" size={28} />
+            <h1 className="text-2xl md:text-3xl font-bold text-[#0F172A] tracking-tight flex items-center gap-3">
+              <CalendarDays className="text-[#2563EB]" size={28} />
               Global Leave Calendar
             </h1>
           </div>
 
           <div className="flex justify-center">
-            <div className="flex items-center gap-3 bg-white p-1 rounded-xl shadow-sm border border-zinc-200">
+            <div className="flex items-center gap-3 bg-white p-1 rounded-xl shadow-xs border border-slate-200">
               <Button variant="ghost" size="sm" onClick={prevMonth} className="h-8 w-8 p-0 rounded-lg hover:bg-zinc-100">
                 <ChevronLeft size={18} />
               </Button>

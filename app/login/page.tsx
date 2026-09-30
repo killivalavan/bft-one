@@ -81,55 +81,55 @@ export default function LoginPage() {
 
     return (
         <div className="min-h-[80vh] flex items-center justify-center p-4">
-            <div className="w-full max-w-md space-y-8 animate-in fade-in zoom-in-95 duration-500">
+            <div className="w-full max-w-md space-y-8 animate-in fade-in zoom-in-95 duration-300">
                 <div className="text-center space-y-2">
-                    <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-sky-600 text-white shadow-lg shadow-sky-200 mb-2">
+                    <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-[#2563EB] text-white shadow-xs mb-2">
                         <Boxes size={24} />
                     </div>
-                    <h1 className="text-2xl font-bold text-zinc-900 tracking-tight">
-                        SeyalPro
+                    <h1 className="text-2xl font-extrabold tracking-tight">
+                        <span className="text-[#0F172A]">Seyal</span><span className="text-[#2563EB]">Pro</span>
                     </h1>
                     {hasTenantParam && business?.name ? (
-                        <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-sky-50 text-sky-700 border border-sky-100">
-                            <span className="text-zinc-400">Workspace:</span>
+                        <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-semibold bg-[#EFF6FF] text-[#1E40AF] border border-[#BFDBFE]">
+                            <span className="text-slate-500">Workspace:</span>
                             <span className="font-bold">{business.name}</span>
                         </div>
                     ) : (
-                        <p className="text-xs text-sky-700 font-medium bg-sky-50 inline-block px-3 py-1 rounded-full border border-sky-100">
-                            Business Operating System
+                        <p className="text-xs text-[#1E40AF] font-semibold bg-[#EFF6FF] inline-block px-3 py-1 rounded-md border border-[#BFDBFE]">
+                            Enterprise Business Operating System
                         </p>
                     )}
-                    <p className="text-zinc-500 text-sm">Enter your credentials to access your workspace</p>
+                    <p className="text-[#64748B] text-sm">Enter your credentials to access your workspace</p>
                 </div>
 
-                <Card className="border-0 shadow-2xl shadow-zinc-200/50 ring-1 ring-zinc-100 overflow-hidden bg-white/80 backdrop-blur-sm">
-                    <CardHeader className="bg-zinc-50/50 border-b border-zinc-100 pb-4">
-                        <h2 className="text-sm font-semibold text-zinc-900 uppercase tracking-wider text-center">Sign In</h2>
+                <Card className="border border-[#E2E8F0] shadow-md rounded-xl overflow-hidden bg-white">
+                    <CardHeader className="bg-slate-50 border-b border-[#E2E8F0] pb-4">
+                        <h2 className="text-xs font-bold text-[#0F172A] uppercase tracking-wider text-center">Sign In</h2>
                     </CardHeader>
                     <CardContent className="p-6 md:p-8">
                         <form onSubmit={onLogin} className="space-y-4">
-                            <div className="space-y-2">
-                                <label className="text-xs font-semibold text-zinc-500 ml-1">Email</label>
+                            <div className="space-y-1.5">
+                                <label className="text-xs font-semibold text-[#0F172A]">Email</label>
                                 <Input
                                     placeholder="name@example.com"
                                     value={email}
                                     onChange={e => setEmail(e.target.value)}
-                                    className="h-10 bg-zinc-50 border-zinc-200 focus:bg-white transition-all"
+                                    className="h-10 bg-white border-[#E2E8F0] focus:border-[#2563EB] transition-all"
                                 />
                             </div>
-                            <div className="space-y-2">
-                                <label className="text-xs font-semibold text-zinc-500 ml-1">Password</label>
+                            <div className="space-y-1.5">
+                                <label className="text-xs font-semibold text-[#0F172A]">Password</label>
                                 <Input
                                     placeholder="••••••••"
                                     type="password"
                                     value={password}
                                     onChange={e => setPassword(e.target.value)}
-                                    className="h-10 bg-zinc-50 border-zinc-200 focus:bg-white transition-all"
+                                    className="h-10 bg-white border-[#E2E8F0] focus:border-[#2563EB] transition-all"
                                 />
                             </div>
 
                             {error && (
-                                <div className="p-3 rounded-lg bg-red-50 border border-red-100 text-red-600 text-sm font-medium animate-in slide-in-from-top-1">
+                                <div className="p-3 rounded-lg bg-[#FEF2F2] border border-[#FECACA] text-[#DC2626] text-xs font-medium animate-in slide-in-from-top-1">
                                     {error}
                                 </div>
                             )}
@@ -137,7 +137,7 @@ export default function LoginPage() {
                             <Button
                                 type="submit"
                                 block
-                                className="h-10 bg-sky-600 hover:bg-sky-700 text-white font-medium shadow-md shadow-sky-100 active:scale-[0.98] transition-all"
+                                className="h-10 bg-[#2563EB] hover:bg-[#1D4ED8] text-white font-semibold shadow-xs active:scale-[0.98] transition-all cursor-pointer"
                                 disabled={loading}
                             >
                                 {loading ? <Loader2 className="animate-spin" /> : "Access Dashboard"}
@@ -146,11 +146,11 @@ export default function LoginPage() {
                     </CardContent>
                 </Card>
 
-                <div className="text-center space-y-2 text-xs text-zinc-400">
+                <div className="text-center space-y-2 text-xs text-slate-400">
                     <p>&copy; {new Date().getFullYear()} {business?.name || "SeyalPro"}. All rights reserved.</p>
                     <a
                         href="/super-admin/login"
-                        className="inline-flex items-center gap-1 text-[11px] text-zinc-400 hover:text-indigo-600 transition-colors"
+                        className="inline-flex items-center gap-1 text-[11px] text-slate-400 hover:text-[#2563EB] transition-colors"
                     >
                         <span>Platform Root Portal (2FA)</span>
                     </a>

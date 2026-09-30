@@ -395,7 +395,7 @@ export async function generateBillPdf(data: BillPdfData) {
 
   autoTable(doc, {
     startY: currentY,
-    head: [[`Item Description`, `Quantity`, `Rate (${sym})`, `Amount (${sym})`]],
+    head: [[`Item`, `Quantity`, `Rate (${sym})`, `Amount (${sym})`]],
     body: tableBody,
     margin: { left: leftMargin, right: rightMargin },
     tableWidth: contentWidth,

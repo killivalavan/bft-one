@@ -13,7 +13,7 @@ import {
   Check, Edit3, Coffee, Receipt, CalendarCheck2, Boxes, Contact, Eye, EyeOff,
   ChevronRight, KeyRound, Sparkle, Store, BarChart3, Layers, Trash2, Download,
   MapPin, Clock, DollarSign, LayoutGrid, List, AlertOctagon, CheckSquare, ShieldAlert,
-  LifeBuoy, Bug, MessageSquare, Tag, Image as ImageIcon, Send
+  LifeBuoy, Bug, MessageSquare, Tag, Image as ImageIcon, Send, FileText
 } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils/cn";
@@ -74,6 +74,7 @@ interface PlatformAnalytics {
 
 const MODULE_DEFINITIONS = [
   { key: "billing", label: "Billing / POS", icon: Coffee, desc: "Cashier orders, table receipts & POS" },
+  { key: "invoices", label: "Generate Invoices", icon: FileText, desc: "B2B tax invoices, custom rates, PDF generation & history" },
   { key: "sales", label: "Daily Sales", icon: TrendingUp, desc: "Cash & UPI register settlements" },
   { key: "expenses", label: "Daily Expenses", icon: Receipt, desc: "Purchases, vendor invoices & costs" },
   { key: "timesheet", label: "Timesheets & GPS", icon: CalendarCheck2, desc: "Staff clock-in & GPS geofencing" },
@@ -365,6 +366,7 @@ export default function SuperAdminPage() {
             admin_email: countsByBiz[b.id]?.adminEmail || userEmail,
             enabled_modules: b.enabled_modules || {
               billing: true,
+              invoices: true,
               sales: true,
               expenses: true,
               timesheet: true,
@@ -414,6 +416,7 @@ export default function SuperAdminPage() {
             admin_email: userEmail,
             enabled_modules: {
               billing: true,
+              invoices: true,
               sales: true,
               expenses: true,
               timesheet: true,
@@ -672,6 +675,7 @@ export default function SuperAdminPage() {
       newAdminPassword: "",
       enabled_modules: {
         billing: biz.enabled_modules?.billing ?? true,
+        invoices: biz.enabled_modules?.invoices ?? true,
         sales: biz.enabled_modules?.sales ?? true,
         expenses: biz.enabled_modules?.expenses ?? true,
         timesheet: biz.enabled_modules?.timesheet ?? true,
@@ -919,23 +923,23 @@ export default function SuperAdminPage() {
   if (viewState === SuperAdminView.Restricted) {
     return (
       <div className="min-h-[70vh] flex flex-col items-center justify-center text-center p-6 space-y-4">
-        <div className="w-16 h-16 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center shadow-lg shadow-rose-500/10">
+        <div className="w-16 h-16 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center shadow-lg shadow-rose-500/10 border border-rose-200">
           <Shield size={32} />
         </div>
-        <h1 className="text-2xl font-bold text-zinc-900">Platform Access Restricted</h1>
-        <p className="text-zinc-500 max-w-md text-sm">
+        <h1 className="text-2xl font-bold text-[#0F172A]">Platform Access Restricted</h1>
+        <p className="text-[#64748B] max-w-md text-sm">
           This portal is reserved for SeyalPro Platform Super Administrators. Regular business administrators and staff members cannot access platform infrastructure.
         </p>
         <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
           <Link
             href="/super-admin/login"
-            className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs px-4 py-2.5 rounded-xl shadow-md transition-all"
+            className="inline-flex items-center gap-2 bg-[#2563EB] hover:bg-[#1D4ED8] text-white font-bold text-xs px-4 py-2.5 rounded-xl shadow-md transition-all cursor-pointer"
           >
             <Lock size={14} /> Platform Owner 2FA Login
           </Link>
           <Link
             href="/"
-            className="inline-flex items-center gap-2 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 font-semibold text-xs px-4 py-2.5 rounded-xl transition-all"
+            className="inline-flex items-center gap-2 bg-white hover:bg-slate-50 text-[#0F172A] border border-[#E2E8F0] font-semibold text-xs px-4 py-2.5 rounded-xl transition-all cursor-pointer"
           >
             <ArrowLeft size={14} /> Return to Store Dashboard
           </Link>
@@ -958,16 +962,16 @@ export default function SuperAdminPage() {
     <div className="w-full space-y-6 pb-20 animate-in fade-in duration-300">
       
       {/* Executive SaaS Hero Header Banner */}
-      <div className="relative rounded-3xl overflow-hidden bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950 text-white shadow-2xl border border-slate-800/80 p-6 sm:p-8 lg:p-10">
+      <div className="relative rounded-3xl overflow-hidden bg-gradient-to-br from-[#0F172A] via-[#1E293B] to-[#1E3A8A] text-white shadow-xl border border-slate-700/80 p-6 sm:p-8 lg:p-10">
         {/* Subtle Ambient Mesh Accents */}
-        <div className="absolute -right-20 -top-20 w-96 h-96 bg-indigo-500/20 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute -right-20 -top-20 w-96 h-96 bg-blue-500/20 rounded-full blur-3xl pointer-events-none" />
         <div className="absolute -left-20 -bottom-20 w-96 h-96 bg-sky-500/15 rounded-full blur-3xl pointer-events-none" />
 
         <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
           <div className="space-y-3">
             <div className="flex flex-wrap items-center gap-2.5">
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/20 text-indigo-300 text-xs font-bold uppercase tracking-wider border border-indigo-400/30 backdrop-blur-md">
-                <Globe size={13} className="text-indigo-400" />
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/20 text-blue-200 text-xs font-bold uppercase tracking-wider border border-blue-400/30 backdrop-blur-md">
+                <Globe size={13} className="text-blue-300" />
                 <span>SeyalPro Super Admin Portal</span>
               </div>
               <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/15 text-emerald-300 text-xs font-semibold border border-emerald-500/30">
@@ -1018,13 +1022,13 @@ export default function SuperAdminPage() {
               disabled={isRefreshing}
               className="bg-slate-800/80 hover:bg-slate-700 text-slate-200 border-slate-700 text-xs sm:text-sm font-semibold px-4 py-2.5 rounded-xl transition-all flex items-center gap-2"
             >
-              <RefreshCw size={15} className={cn(isRefreshing && "animate-spin text-indigo-400")} />
+              <RefreshCw size={15} className={cn(isRefreshing && "animate-spin text-blue-400")} />
               <span>{isRefreshing ? "Refreshing..." : "Refresh"}</span>
             </Button>
 
             <Button
               onClick={() => setShowAddModal(true)}
-              className="bg-gradient-to-r from-sky-500 via-indigo-500 to-indigo-600 hover:from-sky-400 hover:to-indigo-500 text-white font-bold text-xs sm:text-sm px-5 py-2.5 rounded-xl shadow-lg shadow-indigo-600/30 transition-all hover:scale-[1.02] active:scale-95 flex items-center gap-2"
+              className="bg-[#2563EB] hover:bg-[#1D4ED8] text-white font-bold text-xs sm:text-sm px-5 py-2.5 rounded-xl shadow-lg shadow-blue-600/30 transition-all flex items-center gap-2 cursor-pointer"
             >
               <Plus size={18} />
               <span>Onboard New Client</span>
@@ -1036,85 +1040,85 @@ export default function SuperAdminPage() {
       {/* 6-Column Platform KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
         {/* Gross Revenue */}
-        <Card className="border border-zinc-200/80 shadow-sm bg-white rounded-2xl p-5 hover:shadow-md transition-shadow">
+        <Card className="border border-[#E2E8F0] shadow-xs bg-white rounded-2xl p-5 hover:shadow-md transition-shadow">
           <div className="flex items-start justify-between">
             <div className="space-y-1">
-              <p className="text-[11px] font-bold text-zinc-500 uppercase tracking-wider">Gross Platform Sales</p>
-              <h3 className="text-xl font-black text-emerald-600 tracking-tight font-mono">
+              <p className="text-[11px] font-bold text-[#64748B] uppercase tracking-wider">Gross Platform Sales</p>
+              <h3 className="text-xl font-black text-[#16A34A] tracking-tight font-mono">
                 ₹{totalSales.toLocaleString(undefined, { maximumFractionDigits: 0 })}
               </h3>
-              <p className="text-[10px] text-zinc-400 font-medium">Across {totalOrders} orders</p>
+              <p className="text-[10px] text-[#64748B] font-medium">Across {totalOrders} orders</p>
             </div>
-            <div className="p-2.5 bg-emerald-50 text-emerald-600 rounded-xl border border-emerald-100">
+            <div className="p-2.5 bg-[#F0FDF4] text-[#15803D] rounded-xl border border-[#BBF7D0]">
               <TrendingUp size={20} />
             </div>
           </div>
         </Card>
 
         {/* Expenses */}
-        <Card className="border border-zinc-200/80 shadow-sm bg-white rounded-2xl p-5 hover:shadow-md transition-shadow">
+        <Card className="border border-[#E2E8F0] shadow-xs bg-white rounded-2xl p-5 hover:shadow-md transition-shadow">
           <div className="flex items-start justify-between">
             <div className="space-y-1">
-              <p className="text-[11px] font-bold text-zinc-500 uppercase tracking-wider">Total Combined Costs</p>
-              <h3 className="text-xl font-black text-rose-600 tracking-tight font-mono">
+              <p className="text-[11px] font-bold text-[#64748B] uppercase tracking-wider">Total Combined Costs</p>
+              <h3 className="text-xl font-black text-[#DC2626] tracking-tight font-mono">
                 ₹{totalExpenses.toLocaleString(undefined, { maximumFractionDigits: 0 })}
               </h3>
-              <p className="text-[10px] text-zinc-400 font-medium">Purchases & expenses</p>
+              <p className="text-[10px] text-[#64748B] font-medium">Purchases &amp; expenses</p>
             </div>
-            <div className="p-2.5 bg-rose-50 text-rose-600 rounded-xl border border-rose-100">
+            <div className="p-2.5 bg-[#FEF2F2] text-[#DC2626] rounded-xl border border-[#FECACA]">
               <Wallet size={20} />
             </div>
           </div>
         </Card>
 
         {/* Net Profit Margin */}
-        <Card className="border border-zinc-200/80 shadow-sm bg-white rounded-2xl p-5 hover:shadow-md transition-shadow">
+        <Card className="border border-[#E2E8F0] shadow-xs bg-white rounded-2xl p-5 hover:shadow-md transition-shadow">
           <div className="flex items-start justify-between">
             <div className="space-y-1">
-              <p className="text-[11px] font-bold text-zinc-500 uppercase tracking-wider">Net Platform Margin</p>
+              <p className="text-[11px] font-bold text-[#64748B] uppercase tracking-wider">Net Platform Margin</p>
               <h3 className={cn(
                 "text-xl font-black tracking-tight font-mono",
-                netProfit >= 0 ? "text-indigo-600" : "text-amber-600"
+                netProfit >= 0 ? "text-[#2563EB]" : "text-[#D97706]"
               )}>
                 ₹{netProfit.toLocaleString(undefined, { maximumFractionDigits: 0 })}
               </h3>
-              <p className="text-[10px] text-zinc-400 font-medium">{profitMarginPercent}% net margin rate</p>
+              <p className="text-[10px] text-[#64748B] font-medium">{profitMarginPercent}% net margin rate</p>
             </div>
-            <div className="p-2.5 bg-indigo-50 text-indigo-600 rounded-xl border border-indigo-100">
+            <div className="p-2.5 bg-[#EFF6FF] text-[#2563EB] rounded-xl border border-[#DBEAFE]">
               <BarChart3 size={20} />
             </div>
           </div>
         </Card>
 
         {/* Active Clients */}
-        <Card className="border border-zinc-200/80 shadow-sm bg-white rounded-2xl p-5 hover:shadow-md transition-shadow">
+        <Card className="border border-[#E2E8F0] shadow-xs bg-white rounded-2xl p-5 hover:shadow-md transition-shadow">
           <div className="flex items-start justify-between">
             <div className="space-y-1">
-              <p className="text-[11px] font-bold text-zinc-500 uppercase tracking-wider">Active Stores</p>
-              <h3 className="text-xl font-black text-zinc-900 tracking-tight font-mono">
-                {activeClients} <span className="text-xs font-semibold text-zinc-400">/ {businesses.length}</span>
+              <p className="text-[11px] font-bold text-[#64748B] uppercase tracking-wider">Active Stores</p>
+              <h3 className="text-xl font-black text-[#0F172A] tracking-tight font-mono">
+                {activeClients} <span className="text-xs font-semibold text-[#64748B]">/ {businesses.length}</span>
               </h3>
-              <p className="text-[10px] text-emerald-600 font-semibold">
+              <p className="text-[10px] text-[#16A34A] font-semibold">
                 {businesses.length > 0 ? `${((activeClients / businesses.length) * 100).toFixed(0)}% online` : "No stores"}
               </p>
             </div>
-            <div className="p-2.5 bg-purple-50 text-purple-600 rounded-xl border border-purple-100">
+            <div className="p-2.5 bg-[#EFF6FF] text-[#1E3A8A] rounded-xl border border-[#DBEAFE]">
               <Building2 size={20} />
             </div>
           </div>
         </Card>
 
         {/* Total Staff Users */}
-        <Card className="border border-zinc-200/80 shadow-sm bg-white rounded-2xl p-5 hover:shadow-md transition-shadow">
+        <Card className="border border-[#E2E8F0] shadow-xs bg-white rounded-2xl p-5 hover:shadow-md transition-shadow">
           <div className="flex items-start justify-between">
             <div className="space-y-1">
-              <p className="text-[11px] font-bold text-zinc-500 uppercase tracking-wider">Platform Staff Seats</p>
-              <h3 className="text-xl font-black text-zinc-900 tracking-tight font-mono">
+              <p className="text-[11px] font-bold text-[#64748B] uppercase tracking-wider">Platform Staff Seats</p>
+              <h3 className="text-xl font-black text-[#0F172A] tracking-tight font-mono">
                 {totalUsers}
               </h3>
-              <p className="text-[10px] text-zinc-400 font-medium">Across all store accounts</p>
+              <p className="text-[10px] text-[#64748B] font-medium">Across all store accounts</p>
             </div>
-            <div className="p-2.5 bg-sky-50 text-sky-600 rounded-xl border border-sky-100">
+            <div className="p-2.5 bg-[#EFF6FF] text-[#2563EB] rounded-xl border border-[#DBEAFE]">
               <Users size={20} />
             </div>
           </div>
@@ -1124,21 +1128,21 @@ export default function SuperAdminPage() {
         <Card
           onClick={() => setShowAllTicketsModal(true)}
           className={cn(
-            "border shadow-sm rounded-2xl p-5 hover:shadow-md transition-all cursor-pointer",
-            openIssues > 0 ? "border-amber-200 bg-amber-50/40" : "border-zinc-200/80 bg-white"
+            "border shadow-xs rounded-2xl p-5 hover:shadow-md transition-all cursor-pointer",
+            openIssues > 0 ? "border-[#FDE68A] bg-[#FFFBEB]" : "border-[#E2E8F0] bg-white"
           )}
         >
           <div className="flex items-start justify-between">
             <div className="space-y-1">
-              <p className="text-[11px] font-bold text-zinc-500 uppercase tracking-wider">Reported Issues</p>
+              <p className="text-[11px] font-bold text-[#64748B] uppercase tracking-wider">Reported Issues</p>
               <h3 className={cn(
                 "text-xl font-black tracking-tight font-mono flex items-center gap-1.5",
-                openIssues > 0 ? "text-amber-700" : "text-zinc-900"
+                openIssues > 0 ? "text-[#B45309]" : "text-[#0F172A]"
               )}>
                 <span>{openIssues} Open</span>
-                <span className="text-xs font-semibold text-zinc-400 font-sans">/ {totalIssues}</span>
+                <span className="text-xs font-semibold text-[#64748B] font-sans">/ {totalIssues}</span>
               </h3>
-              <p className="text-[10px] text-indigo-600 font-bold flex items-center gap-0.5">
+              <p className="text-[10px] text-[#2563EB] font-bold flex items-center gap-0.5">
                 <span>View All Tickets</span>
                 <ChevronRight size={12} />
               </p>
@@ -1146,8 +1150,8 @@ export default function SuperAdminPage() {
             <div className={cn(
               "p-2.5 rounded-xl border",
               openIssues > 0
-                ? "bg-amber-100 text-amber-700 border-amber-300"
-                : "bg-zinc-100 text-zinc-600 border-zinc-200"
+                ? "bg-[#FEF3C7] text-[#B45309] border-[#FDE68A]"
+                : "bg-slate-50 text-[#64748B] border-[#E2E8F0]"
             )}>
               <LifeBuoy size={20} className={cn(openIssues > 0 && "animate-spin-slow")} />
             </div>
@@ -1156,30 +1160,30 @@ export default function SuperAdminPage() {
       </div>
 
       {/* Main Client Table & Cards Section */}
-      <Card className="border border-zinc-200/80 shadow-sm bg-white rounded-3xl overflow-hidden">
+      <Card className="border border-[#E2E8F0] shadow-xs bg-white rounded-2xl overflow-hidden">
         {/* Table Toolbar / Filters */}
-        <div className="p-5 sm:p-6 border-b border-zinc-100 space-y-4">
+        <div className="p-5 sm:p-6 border-b border-[#E2E8F0] space-y-4">
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
             <div>
-              <h2 className="text-lg sm:text-xl font-extrabold text-zinc-900 flex items-center gap-2">
-                <span>Client Organizations & Workspaces</span>
-                <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-indigo-50 text-indigo-700 border border-indigo-100">
+              <h2 className="text-lg sm:text-xl font-extrabold text-[#0F172A] flex items-center gap-2">
+                <span>Client Organizations &amp; Workspaces</span>
+                <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-[#EFF6FF] text-[#1E3A8A] border border-[#DBEAFE]">
                   {filteredBusinesses.length} {filteredBusinesses.length === 1 ? "store" : "stores"}
                 </span>
               </h2>
-              <p className="text-xs text-zinc-500 mt-0.5">
+              <p className="text-xs text-[#64748B] mt-0.5">
                 Every store is fully isolated with dedicated POS, daily ledgers, products, staff roster, GPS geofencing, and permissions.
               </p>
             </div>
 
             <div className="flex items-center gap-3">
               {/* View Switcher Toggle */}
-              <div className="inline-flex rounded-xl bg-zinc-100 p-1 border border-zinc-200/80">
+              <div className="inline-flex rounded-xl bg-slate-100 p-1 border border-[#E2E8F0]">
                 <button
                   onClick={() => setViewMode("table")}
                   className={cn(
-                    "p-1.5 rounded-lg transition-all text-xs font-bold flex items-center gap-1.5",
-                    viewMode === "table" ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-500 hover:text-zinc-900"
+                    "p-1.5 rounded-lg transition-all text-xs font-bold flex items-center gap-1.5 cursor-pointer",
+                    viewMode === "table" ? "bg-white text-[#0F172A] shadow-xs" : "text-[#64748B] hover:text-[#0F172A]"
                   )}
                   title="Table View"
                 >
@@ -1189,8 +1193,8 @@ export default function SuperAdminPage() {
                 <button
                   onClick={() => setViewMode("cards")}
                   className={cn(
-                    "p-1.5 rounded-lg transition-all text-xs font-bold flex items-center gap-1.5",
-                    viewMode === "cards" ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-500 hover:text-zinc-900"
+                    "p-1.5 rounded-lg transition-all text-xs font-bold flex items-center gap-1.5 cursor-pointer",
+                    viewMode === "cards" ? "bg-white text-[#0F172A] shadow-xs" : "text-[#64748B] hover:text-[#0F172A]"
                   )}
                   title="Grid Cards View"
                 >
@@ -1201,18 +1205,18 @@ export default function SuperAdminPage() {
 
               {/* Quick Search */}
               <div className="relative w-full sm:w-72">
-                <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400" />
+                <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#94A3B8]" />
                 <input
                   type="text"
                   placeholder="Search store name, slug, email..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 text-xs sm:text-sm bg-zinc-50 border border-zinc-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all text-zinc-900 placeholder:text-zinc-400"
+                  className="w-full pl-10 pr-4 py-2 text-xs sm:text-sm bg-white border border-[#E2E8F0] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2563EB]/20 focus:border-[#2563EB] transition-all text-[#0F172A] placeholder:text-[#94A3B8]"
                 />
                 {searchQuery && (
                   <button
                     onClick={() => setSearchQuery("")}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600 text-xs font-bold"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-[#94A3B8] hover:text-[#0F172A] text-xs font-bold cursor-pointer"
                   >
                     ✕
                   </button>
@@ -1224,22 +1228,22 @@ export default function SuperAdminPage() {
           {/* Filter Pills Bar */}
           <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
             <div className="flex flex-wrap items-center gap-2">
-              <div className="flex items-center gap-1.5 text-xs font-bold text-zinc-400 mr-1">
+              <div className="flex items-center gap-1.5 text-xs font-bold text-[#64748B] mr-1">
                 <Filter size={13} />
                 <span>Filters:</span>
               </div>
 
               {/* Plan Filter */}
-              <div className="inline-flex rounded-xl bg-zinc-100 p-1 border border-zinc-200/80 text-xs">
+              <div className="inline-flex rounded-xl bg-slate-100 p-1 border border-[#E2E8F0] text-xs">
                 {["all", "starter", "pro", "enterprise"].map((plan) => (
                   <button
                     key={plan}
                     onClick={() => setPlanFilter(plan)}
                     className={cn(
-                      "px-2.5 py-1 rounded-lg font-semibold capitalize transition-all",
+                      "px-2.5 py-1 rounded-lg font-semibold capitalize transition-all cursor-pointer",
                       planFilter === plan
-                        ? "bg-white text-zinc-900 shadow-sm"
-                        : "text-zinc-500 hover:text-zinc-900"
+                        ? "bg-white text-[#0F172A] shadow-xs"
+                        : "text-[#64748B] hover:text-[#0F172A]"
                     )}
                   >
                     {plan}
@@ -1248,7 +1252,7 @@ export default function SuperAdminPage() {
               </div>
 
               {/* Status Filter */}
-              <div className="inline-flex rounded-xl bg-zinc-100 p-1 border border-zinc-200/80 text-xs">
+              <div className="inline-flex rounded-xl bg-slate-100 p-1 border border-[#E2E8F0] text-xs">
                 {[
                   { key: "all", label: "All Status" },
                   { key: "active", label: "Active" },
@@ -1258,10 +1262,10 @@ export default function SuperAdminPage() {
                     key={st.key}
                     onClick={() => setStatusFilter(st.key)}
                     className={cn(
-                      "px-2.5 py-1 rounded-lg font-semibold transition-all",
+                      "px-2.5 py-1 rounded-lg font-semibold transition-all cursor-pointer",
                       statusFilter === st.key
-                        ? "bg-white text-zinc-900 shadow-sm"
-                        : "text-zinc-500 hover:text-zinc-900"
+                        ? "bg-white text-[#0F172A] shadow-xs"
+                        : "text-[#64748B] hover:text-[#0F172A]"
                     )}
                   >
                     {st.label}
@@ -1272,11 +1276,11 @@ export default function SuperAdminPage() {
 
             {/* Sort Dropdown */}
             <div className="flex items-center gap-2 text-xs">
-              <span className="font-bold text-zinc-400">Sort By:</span>
+              <span className="font-bold text-[#64748B]">Sort By:</span>
               <select
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value)}
-                className="bg-zinc-50 border border-zinc-200 rounded-xl px-3 py-1.5 font-semibold text-zinc-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className="bg-white border border-[#E2E8F0] rounded-xl px-3 py-1.5 font-semibold text-[#0F172A] focus:outline-none focus:ring-2 focus:ring-[#2563EB]/20 focus:border-[#2563EB] cursor-pointer"
               >
                 <option value="revenue">Gross Sales (Highest)</option>
                 <option value="profit">Net Profit (Highest)</option>
@@ -1294,9 +1298,9 @@ export default function SuperAdminPage() {
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
-                <tr className="bg-zinc-50/80 text-zinc-500 text-[11px] uppercase tracking-wider font-bold border-b border-zinc-100">
-                  <th className="py-3.5 px-6">Store & Subdomain</th>
-                  <th className="py-3.5 px-4">Plan & Seats</th>
+                <tr className="bg-[#EFF6FF] text-[#1E3A8A] text-[11px] uppercase tracking-wider font-bold border-b border-[#DBEAFE]">
+                  <th className="py-3.5 px-6">Store &amp; Subdomain</th>
+                  <th className="py-3.5 px-4">Plan &amp; Seats</th>
                   <th className="py-3.5 px-4">Admin Email</th>
                   <th className="py-3.5 px-4">Financial Volume</th>
                   <th className="py-3.5 px-4">Reported Issues</th>
@@ -1305,7 +1309,7 @@ export default function SuperAdminPage() {
                   <th className="py-3.5 px-6 text-right">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-zinc-100 text-xs sm:text-sm">
+              <tbody className="divide-y divide-[#E2E8F0] text-xs sm:text-sm bg-white">
                 {filteredBusinesses.map((biz) => {
                   const isProtectedRoot = biz.id === "a0000000-0000-0000-0000-000000000001";
                   const enabledCount = Object.values(biz.enabled_modules || {}).filter(Boolean).length;
@@ -1314,36 +1318,36 @@ export default function SuperAdminPage() {
                   const totalCount = biz.total_issues_count || 0;
 
                   return (
-                    <tr key={biz.id} className="hover:bg-zinc-50/70 transition-colors group">
+                    <tr key={biz.id} className="hover:bg-[#F8FAFC] transition-colors group border-b border-[#E2E8F0]">
                       
                       {/* Store & Subdomain */}
                       <td className="py-4 px-6">
                         <div className="flex items-center gap-3">
                           <div className={cn(
-                            "w-10 h-10 rounded-2xl flex items-center justify-center font-black text-sm text-white shrink-0 shadow-sm",
+                            "w-10 h-10 rounded-2xl flex items-center justify-center font-black text-sm text-white shrink-0 shadow-xs",
                             biz.is_active
-                              ? "bg-gradient-to-tr from-sky-600 via-indigo-600 to-indigo-700 shadow-indigo-200"
-                              : "bg-zinc-400"
+                              ? "bg-[#2563EB]"
+                              : "bg-slate-400"
                           )}>
                             {biz.name[0]?.toUpperCase() || "S"}
                           </div>
                           <div>
-                            <div className="font-extrabold text-zinc-900 flex items-center gap-1.5">
+                            <div className="font-extrabold text-[#0F172A] flex items-center gap-1.5">
                               <span>{biz.name}</span>
                               {isProtectedRoot && (
-                                <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                                <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-[#FFFBEB] text-[#B45309] border border-[#FDE68A]">
                                   Default Root
                                 </span>
                               )}
                             </div>
-                            <div className="flex items-center gap-1 text-xs text-zinc-400 mt-0.5 font-mono">
+                            <div className="flex items-center gap-1 text-xs text-[#64748B] mt-0.5 font-mono">
                               <span>{biz.slug}.seyalpro.in</span>
                               <button
                                 onClick={() => copyToClipboard(`${biz.slug}.seyalpro.in`, `sub_${biz.id}`, "Subdomain")}
-                                className="hover:text-zinc-600 p-0.5"
+                                className="hover:text-[#0F172A] p-0.5 cursor-pointer"
                                 title="Copy Subdomain"
                               >
-                                {copiedKey === `sub_${biz.id}` ? <Check size={12} className="text-emerald-500" /> : <Copy size={12} />}
+                                {copiedKey === `sub_${biz.id}` ? <Check size={12} className="text-[#16A34A]" /> : <Copy size={12} />}
                               </button>
                             </div>
                           </div>
@@ -1355,14 +1359,14 @@ export default function SuperAdminPage() {
                         <div className="space-y-1">
                           <span className={cn(
                             "inline-block px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider",
-                            biz.plan_type === "enterprise" ? "bg-purple-100 text-purple-800" :
-                            biz.plan_type === "pro" ? "bg-indigo-50 text-indigo-700 border border-indigo-100" :
-                            "bg-zinc-100 text-zinc-700"
+                            biz.plan_type === "enterprise" ? "bg-[#EFF6FF] text-[#1E3A8A] border border-[#DBEAFE]" :
+                            biz.plan_type === "pro" ? "bg-[#EFF6FF] text-[#1E3A8A] border border-[#DBEAFE]" :
+                            "bg-slate-100 text-[#64748B] border border-[#E2E8F0]"
                           )}>
                             {biz.plan_type}
                           </span>
-                          <div className="text-xs text-zinc-500 flex items-center gap-1 font-medium">
-                            <Users size={12} className="text-zinc-400" />
+                          <div className="text-xs text-[#64748B] flex items-center gap-1 font-medium">
+                            <Users size={12} className="text-[#94A3B8]" />
                             <span>{biz.user_count} / {biz.max_users} seats</span>
                           </div>
                         </div>
@@ -1370,18 +1374,18 @@ export default function SuperAdminPage() {
 
                       {/* Admin Email */}
                       <td className="py-4 px-4">
-                        <div className="font-mono text-xs text-zinc-700 max-w-[180px] truncate flex items-center gap-1">
+                        <div className="font-mono text-xs text-[#0F172A] max-w-[180px] truncate flex items-center gap-1">
                           <span className="truncate">{biz.admin_email}</span>
                           <button
                             onClick={() => copyToClipboard(biz.admin_email, `email_${biz.id}`, "Admin Email")}
-                            className="text-zinc-400 hover:text-zinc-600 shrink-0"
+                            className="text-[#94A3B8] hover:text-[#0F172A] shrink-0 cursor-pointer"
                             title="Copy Email"
                           >
-                            {copiedKey === `email_${biz.id}` ? <Check size={12} className="text-emerald-500" /> : <Copy size={12} />}
+                            {copiedKey === `email_${biz.id}` ? <Check size={12} className="text-[#16A34A]" /> : <Copy size={12} />}
                           </button>
                         </div>
-                        <div className="text-[11px] text-zinc-400 mt-0.5 flex items-center gap-1">
-                          <KeyRound size={11} />
+                        <div className="text-[11px] text-[#64748B] mt-0.5 flex items-center gap-1">
+                          <KeyRound size={11} className="text-[#94A3B8]" />
                           <span>Standard Password Policy</span>
                         </div>
                       </td>
@@ -1389,15 +1393,15 @@ export default function SuperAdminPage() {
                       {/* Financials */}
                       <td className="py-4 px-4">
                         <div className="space-y-0.5">
-                          <div className="font-bold text-emerald-600 font-mono text-xs">
+                          <div className="font-bold text-[#16A34A] font-mono text-xs">
                             ₹{(biz.total_sales || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}
                           </div>
-                          <div className="text-[11px] text-zinc-400 font-mono">
+                          <div className="text-[11px] text-[#64748B] font-mono">
                             Cost: ₹{(biz.total_expenses || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}
                           </div>
                           <div className={cn(
                             "text-[10px] font-bold font-mono",
-                            (biz.net_profit || 0) >= 0 ? "text-indigo-600" : "text-amber-600"
+                            (biz.net_profit || 0) >= 0 ? "text-[#2563EB]" : "text-[#D97706]"
                           )}>
                             Net: ₹{(biz.net_profit || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}
                           </div>
@@ -1412,23 +1416,23 @@ export default function SuperAdminPage() {
                             setTicketStatusFilter("all");
                           }}
                           className={cn(
-                            "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-bold transition-all border",
+                            "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-bold transition-all border cursor-pointer",
                             openCount > 0
-                              ? "bg-amber-50 text-amber-700 hover:bg-amber-100 border-amber-200"
+                              ? "bg-[#FFFBEB] text-[#B45309] hover:bg-[#FEF3C7] border-[#FDE68A]"
                               : totalCount > 0
-                              ? "bg-zinc-100 text-zinc-700 hover:bg-zinc-200 border-zinc-200"
-                              : "bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border-emerald-200"
+                              ? "bg-slate-100 text-[#64748B] hover:bg-slate-200 border-[#E2E8F0]"
+                              : "bg-[#F0FDF4] text-[#15803D] hover:bg-[#DCFCE7] border-[#BBF7D0]"
                           )}
                           title="Click to view all reported tickets for this store"
                         >
                           {openCount > 0 ? (
                             <>
-                              <LifeBuoy size={13} className="text-amber-600 animate-spin-slow" />
+                              <LifeBuoy size={13} className="text-[#B45309] animate-spin-slow" />
                               <span>{openCount} Open ({totalCount})</span>
                             </>
                           ) : (
                             <>
-                              <CheckCircle size={13} className="text-emerald-600" />
+                              <CheckCircle size={13} className="text-[#16A34A]" />
                               <span>{totalCount > 0 ? `${totalCount} Solved` : "0 Issues"}</span>
                             </>
                           )}
@@ -1438,13 +1442,13 @@ export default function SuperAdminPage() {
                       {/* Active Modules */}
                       <td className="py-4 px-4">
                         <div className="space-y-1">
-                          <div className="flex items-center gap-1 text-xs font-bold text-zinc-700">
-                            <Sliders size={13} className="text-indigo-500" />
+                          <div className="flex items-center gap-1 text-xs font-bold text-[#0F172A]">
+                            <Sliders size={13} className="text-[#2563EB]" />
                             <span>{enabledCount} / {totalModules} active</span>
                           </div>
-                          <div className="w-24 h-1.5 rounded-full bg-zinc-100 overflow-hidden">
+                          <div className="w-24 h-1.5 rounded-full bg-slate-100 overflow-hidden">
                             <div
-                              className="h-full bg-indigo-500 rounded-full"
+                              className="h-full bg-[#2563EB] rounded-full"
                               style={{ width: `${(enabledCount / totalModules) * 100}%` }}
                             />
                           </div>
@@ -1456,14 +1460,14 @@ export default function SuperAdminPage() {
                         <button
                           onClick={() => toggleBusinessStatus(biz)}
                           className={cn(
-                            "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold transition-all",
+                            "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold transition-all cursor-pointer",
                             biz.is_active
-                              ? "bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200/80"
-                              : "bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200/80"
+                              ? "bg-[#F0FDF4] text-[#15803D] hover:bg-[#DCFCE7] border border-[#BBF7D0]"
+                              : "bg-[#FFF1F2] text-[#BE123C] hover:bg-[#FFE4E6] border border-[#FECDD3]"
                           )}
                           title="Click to toggle status"
                         >
-                          <span className={cn("w-1.5 h-1.5 rounded-full", biz.is_active ? "bg-emerald-500" : "bg-rose-500")} />
+                          <span className={cn("w-1.5 h-1.5 rounded-full", biz.is_active ? "bg-[#16A34A]" : "bg-[#E11D48]")} />
                           <span>{biz.is_active ? "Active" : "Suspended"}</span>
                         </button>
                       </td>
@@ -1474,7 +1478,7 @@ export default function SuperAdminPage() {
                           {/* Workspace Switcher */}
                           <button
                             onClick={() => handleSwitchWorkspace(biz.slug, biz.name)}
-                            className="p-2 rounded-xl text-indigo-600 hover:bg-indigo-50 border border-transparent hover:border-indigo-100 transition-all font-bold text-xs flex items-center gap-1"
+                            className="p-2 rounded-xl text-[#2563EB] hover:bg-[#EFF6FF] border border-transparent hover:border-[#DBEAFE] transition-all font-bold text-xs flex items-center gap-1 cursor-pointer"
                             title={`Switch into ${biz.name}`}
                           >
                             <ArrowRightLeft size={14} />
@@ -1484,7 +1488,7 @@ export default function SuperAdminPage() {
                           {/* Configure / Edit */}
                           <button
                             onClick={() => openEditModal(biz)}
-                            className="p-2 rounded-xl text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100 border border-transparent hover:border-zinc-200 transition-all text-xs font-semibold flex items-center gap-1"
+                            className="p-2 rounded-xl text-[#0F172A] hover:bg-slate-100 border border-[#E2E8F0] transition-all text-xs font-semibold flex items-center gap-1 cursor-pointer"
                             title="Edit Settings & Modules"
                           >
                             <Edit3 size={14} />
@@ -1498,7 +1502,7 @@ export default function SuperAdminPage() {
                                 setDeletingBiz(biz);
                                 setConfirmDeleteInput("");
                               }}
-                              className="p-2 rounded-xl text-zinc-400 hover:text-rose-600 hover:bg-rose-50 border border-transparent hover:border-rose-100 transition-all text-xs"
+                              className="p-2 rounded-xl text-[#64748B] hover:text-[#DC2626] hover:bg-rose-50 border border-transparent hover:border-rose-100 transition-all text-xs cursor-pointer"
                               title="Delete / Offboard Store"
                             >
                               <Trash2 size={15} />
@@ -1523,56 +1527,56 @@ export default function SuperAdminPage() {
               return (
                 <div
                   key={biz.id}
-                  className="rounded-2xl border border-zinc-200/80 p-5 bg-white hover:shadow-lg transition-all space-y-4 relative group"
+                  className="rounded-2xl border border-[#E2E8F0] p-5 bg-white hover:shadow-md transition-all space-y-4 relative group"
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex items-center gap-3">
-                      <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-sky-600 to-indigo-600 text-white font-black text-base flex items-center justify-center shadow-md shadow-indigo-100">
+                      <div className="w-12 h-12 rounded-2xl bg-[#2563EB] text-white font-black text-base flex items-center justify-center shadow-xs">
                         {biz.name[0]?.toUpperCase() || "S"}
                       </div>
                       <div>
-                        <h3 className="font-extrabold text-base text-zinc-900 flex items-center gap-1.5">
+                        <h3 className="font-extrabold text-base text-[#0F172A] flex items-center gap-1.5">
                           <span>{biz.name}</span>
                           {isProtectedRoot && (
-                            <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-50 text-amber-700">Root</span>
+                            <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-[#FFFBEB] text-[#B45309] border border-[#FDE68A]">Root</span>
                           )}
                         </h3>
-                        <p className="text-xs text-zinc-400 font-mono">{biz.slug}.seyalpro.in</p>
+                        <p className="text-xs text-[#64748B] font-mono">{biz.slug}.seyalpro.in</p>
                       </div>
                     </div>
 
                     <button
                       onClick={() => toggleBusinessStatus(biz)}
                       className={cn(
-                        "px-2.5 py-1 rounded-full text-xs font-bold transition-all flex items-center gap-1",
-                        biz.is_active ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700"
+                        "px-2.5 py-1 rounded-full text-xs font-bold transition-all flex items-center gap-1 cursor-pointer border",
+                        biz.is_active ? "bg-[#F0FDF4] text-[#15803D] border-[#BBF7D0]" : "bg-[#FFF1F2] text-[#BE123C] border-[#FECDD3]"
                       )}
                     >
-                      <span className={cn("w-1.5 h-1.5 rounded-full", biz.is_active ? "bg-emerald-500" : "bg-rose-500")} />
+                      <span className={cn("w-1.5 h-1.5 rounded-full", biz.is_active ? "bg-[#16A34A]" : "bg-[#E11D48]")} />
                       <span>{biz.is_active ? "Active" : "Suspended"}</span>
                     </button>
                   </div>
 
                   {/* Financials Row */}
-                  <div className="grid grid-cols-3 gap-2 p-3 bg-zinc-50 rounded-xl border border-zinc-100 text-center font-mono">
+                  <div className="grid grid-cols-3 gap-2 p-3 bg-slate-50 rounded-xl border border-[#E2E8F0] text-center font-mono">
                     <div>
-                      <span className="text-[10px] text-zinc-400 font-sans block uppercase font-bold">Sales</span>
-                      <span className="font-bold text-xs text-emerald-600">₹{(biz.total_sales || 0).toLocaleString()}</span>
+                      <span className="text-[10px] text-[#64748B] font-sans block uppercase font-bold">Sales</span>
+                      <span className="font-bold text-xs text-[#16A34A]">₹{(biz.total_sales || 0).toLocaleString()}</span>
                     </div>
                     <div>
-                      <span className="text-[10px] text-zinc-400 font-sans block uppercase font-bold">Expenses</span>
-                      <span className="font-bold text-xs text-rose-600">₹{(biz.total_expenses || 0).toLocaleString()}</span>
+                      <span className="text-[10px] text-[#64748B] font-sans block uppercase font-bold">Expenses</span>
+                      <span className="font-bold text-xs text-[#DC2626]">₹{(biz.total_expenses || 0).toLocaleString()}</span>
                     </div>
                     <div>
-                      <span className="text-[10px] text-zinc-400 font-sans block uppercase font-bold">Profit</span>
-                      <span className="font-bold text-xs text-indigo-600">₹{(biz.net_profit || 0).toLocaleString()}</span>
+                      <span className="text-[10px] text-[#64748B] font-sans block uppercase font-bold">Profit</span>
+                      <span className="font-bold text-xs text-[#2563EB]">₹{(biz.net_profit || 0).toLocaleString()}</span>
                     </div>
                   </div>
 
                   {/* Issues & Staff Info */}
-                  <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-zinc-500 pt-1">
+                  <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-[#64748B] pt-1">
                     <div className="flex items-center gap-1.5 font-medium">
-                      <Users size={14} className="text-zinc-400" />
+                      <Users size={14} className="text-[#94A3B8]" />
                       <span>{biz.user_count} / {biz.max_users} seats</span>
                     </div>
 
@@ -1582,22 +1586,22 @@ export default function SuperAdminPage() {
                         setTicketStatusFilter("all");
                       }}
                       className={cn(
-                        "flex items-center gap-1 font-bold px-2 py-0.5 rounded-lg border text-[11px]",
+                        "flex items-center gap-1 font-bold px-2 py-0.5 rounded-lg border text-[11px] cursor-pointer",
                         openCount > 0
-                          ? "bg-amber-50 text-amber-700 border-amber-200"
-                          : "bg-zinc-100 text-zinc-600 border-zinc-200"
+                          ? "bg-[#FFFBEB] text-[#B45309] border-[#FDE68A]"
+                          : "bg-slate-100 text-[#64748B] border-[#E2E8F0]"
                       )}
                     >
-                      <LifeBuoy size={12} className={openCount > 0 ? "text-amber-600" : "text-zinc-400"} />
+                      <LifeBuoy size={12} className={openCount > 0 ? "text-[#B45309]" : "text-[#94A3B8]"} />
                       <span>{openCount} Open Issues</span>
                     </button>
                   </div>
 
                   {/* Action Bar */}
-                  <div className="pt-3 border-t border-zinc-100 flex items-center justify-between gap-2">
+                  <div className="pt-3 border-t border-[#E2E8F0] flex items-center justify-between gap-2">
                     <Button
                       onClick={() => handleSwitchWorkspace(biz.slug, biz.name)}
-                      className="h-9 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl flex-1 flex items-center justify-center gap-1.5"
+                      className="h-9 bg-[#2563EB] hover:bg-[#1D4ED8] text-white font-bold text-xs rounded-xl flex-1 flex items-center justify-center gap-1.5 cursor-pointer shadow-xs"
                     >
                       <ArrowRightLeft size={14} />
                       <span>Launch Store</span>
@@ -1606,7 +1610,7 @@ export default function SuperAdminPage() {
                     <Button
                       variant="outline"
                       onClick={() => openEditModal(biz)}
-                      className="h-9 bg-zinc-50 hover:bg-zinc-100 text-zinc-800 border-zinc-200 text-xs font-semibold rounded-xl px-3"
+                      className="h-9 bg-white hover:bg-slate-50 text-[#0F172A] border-[#E2E8F0] text-xs font-semibold rounded-xl px-3 cursor-pointer"
                     >
                       <Edit3 size={14} />
                     </Button>
@@ -1617,7 +1621,7 @@ export default function SuperAdminPage() {
                           setDeletingBiz(biz);
                           setConfirmDeleteInput("");
                         }}
-                        className="p-2 rounded-xl text-zinc-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
+                        className="p-2 rounded-xl text-[#64748B] hover:text-[#DC2626] hover:bg-rose-50 transition-colors cursor-pointer"
                         title="Delete Store"
                       >
                         <Trash2 size={16} />
@@ -1634,22 +1638,24 @@ export default function SuperAdminPage() {
       {/* ========================================================================= */}
       {/* DRAWER / MODAL: CLIENT SUPPORT TICKETS & BUG REPORTS                      */}
       {/* ========================================================================= */}
+      {/* DRAWER / MODAL: CLIENT SUPPORT TICKETS & BUG REPORTS                      */}
+      {/* ========================================================================= */}
       {(selectedBizForIssues || showAllTicketsModal) && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto animate-in fade-in duration-200">
-          <div className="bg-white rounded-3xl max-w-3xl w-full p-6 sm:p-8 shadow-2xl border border-zinc-200 space-y-6 animate-in zoom-in-95 duration-200 my-8 max-h-[90vh] flex flex-col">
+          <div className="bg-white rounded-3xl max-w-3xl w-full p-6 sm:p-8 shadow-2xl border border-[#E2E8F0] space-y-6 animate-in zoom-in-95 duration-200 my-8 max-h-[90vh] flex flex-col">
             
             {/* Header */}
-            <div className="flex items-start justify-between border-b border-zinc-100 pb-4 shrink-0">
+            <div className="flex items-start justify-between border-b border-[#E2E8F0] pb-4 shrink-0">
               <div className="space-y-1">
                 <div className="flex items-center gap-2">
-                  <div className="p-1.5 rounded-lg bg-amber-50 text-amber-600">
+                  <div className="p-1.5 rounded-lg bg-[#EFF6FF] text-[#2563EB]">
                     <LifeBuoy size={20} />
                   </div>
-                  <h2 className="text-xl font-extrabold text-zinc-900">
+                  <h2 className="text-xl font-extrabold text-[#0F172A]">
                     {selectedBizForIssues ? `${selectedBizForIssues.name} — Reported Issues` : "All Client Support Tickets"}
                   </h2>
                 </div>
-                <p className="text-xs text-zinc-500">
+                <p className="text-xs text-[#64748B]">
                   Review client bug reports, inspect uploaded screenshots, and update ticket resolution status.
                 </p>
               </div>
@@ -1659,23 +1665,23 @@ export default function SuperAdminPage() {
                   setSelectedBizForIssues(null);
                   setShowAllTicketsModal(false);
                 }}
-                className="text-zinc-400 hover:text-zinc-600 text-lg font-bold p-1"
+                className="text-[#64748B] hover:text-[#0F172A] text-lg font-bold p-1 cursor-pointer"
               >
                 ✕
               </button>
             </div>
 
             {/* Status Filter Tabs */}
-            <div className="flex items-center gap-2 border-b border-zinc-100 pb-3 text-xs font-bold shrink-0">
+            <div className="flex items-center gap-2 border-b border-[#E2E8F0] pb-3 text-xs font-bold shrink-0">
               {["all", "open", "in_progress", "resolved", "closed"].map((st) => (
                 <button
                   key={st}
                   onClick={() => setTicketStatusFilter(st)}
                   className={cn(
-                    "px-3 py-1.5 rounded-xl capitalize transition-all",
+                    "px-3 py-1.5 rounded-xl capitalize transition-all cursor-pointer",
                     ticketStatusFilter === st
-                      ? "bg-zinc-900 text-white shadow-xs"
-                      : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200"
+                      ? "bg-[#2563EB] text-white shadow-xs"
+                      : "bg-slate-100 text-[#64748B] hover:bg-slate-200 hover:text-[#0F172A]"
                   )}
                 >
                   {st.replace("_", " ")}
@@ -1686,9 +1692,9 @@ export default function SuperAdminPage() {
             {/* Tickets List Scroll Area */}
             <div className="flex-1 overflow-y-auto space-y-4 pr-1">
               {displayedTickets.length === 0 ? (
-                <div className="text-center py-12 space-y-2 text-zinc-400">
-                  <LifeBuoy size={36} className="mx-auto text-zinc-300" />
-                  <p className="font-bold text-sm text-zinc-600">No issues found</p>
+                <div className="text-center py-12 space-y-2 text-[#64748B]">
+                  <LifeBuoy size={36} className="mx-auto text-[#94A3B8]" />
+                  <p className="font-bold text-sm text-[#0F172A]">No issues found</p>
                   <p className="text-xs">No client tickets match the current status filter.</p>
                 </div>
               ) : (
@@ -1698,27 +1704,27 @@ export default function SuperAdminPage() {
                   return (
                     <div
                       key={ticket.id}
-                      className="p-5 rounded-2xl border border-zinc-200 bg-white hover:border-zinc-300 shadow-2xs space-y-3.5 transition-all"
+                      className="p-5 rounded-2xl border border-[#E2E8F0] bg-white hover:border-[#CBD5E1] shadow-2xs space-y-3.5 transition-all"
                     >
                       {/* Top Bar: Ticket #, Store, Priority, Status */}
                       <div className="flex flex-wrap items-start justify-between gap-2">
                         <div className="space-y-1">
                           <div className="flex items-center gap-2">
-                            <span className="font-mono text-xs font-black text-indigo-600 px-2 py-0.5 rounded bg-indigo-50 border border-indigo-100">
+                            <span className="font-mono text-xs font-bold text-[#1E3A8A] px-2 py-0.5 rounded bg-[#EFF6FF] border border-[#DBEAFE]">
                               #{ticket.ticket_number}
                             </span>
-                            <h4 className="text-sm font-extrabold text-zinc-900">{ticket.title}</h4>
+                            <h4 className="text-sm font-extrabold text-[#0F172A]">{ticket.title}</h4>
                           </div>
 
-                          <div className="flex flex-wrap items-center gap-2 text-[11px] text-zinc-500">
+                          <div className="flex flex-wrap items-center gap-2 text-[11px] text-[#64748B]">
                             {ticket.businesses?.name && (
-                              <span className="font-bold text-zinc-800 flex items-center gap-1">
-                                <Store size={12} className="text-zinc-400" />
+                              <span className="font-bold text-[#0F172A] flex items-center gap-1">
+                                <Store size={12} className="text-[#94A3B8]" />
                                 {ticket.businesses.name}
                               </span>
                             )}
                             <span>•</span>
-                            <span>Reported by <span className="font-mono text-zinc-700">{ticket.creator_email}</span></span>
+                            <span>Reported by <span className="font-mono text-[#0F172A]">{ticket.creator_email}</span></span>
                             <span>•</span>
                             <span>{new Date(ticket.created_at).toLocaleString()}</span>
                           </div>
@@ -1730,8 +1736,8 @@ export default function SuperAdminPage() {
                             "px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider",
                             ticket.priority === "urgent" ? "bg-rose-100 text-rose-800" :
                             ticket.priority === "high" ? "bg-amber-100 text-amber-800" :
-                            ticket.priority === "medium" ? "bg-sky-100 text-sky-800" :
-                            "bg-zinc-100 text-zinc-700"
+                            ticket.priority === "medium" ? "bg-blue-100 text-blue-800" :
+                            "bg-slate-100 text-[#64748B]"
                           )}>
                             {ticket.priority}
                           </span>
@@ -1741,11 +1747,11 @@ export default function SuperAdminPage() {
                             disabled={isUpdating}
                             onChange={(e) => handleUpdateTicketStatus(ticket.id, e.target.value)}
                             className={cn(
-                              "text-xs font-bold px-2.5 py-1 rounded-xl border focus:outline-none focus:ring-2 focus:ring-indigo-500",
-                              ticket.status === "open" ? "bg-amber-50 text-amber-800 border-amber-300" :
-                              ticket.status === "in_progress" ? "bg-sky-50 text-sky-800 border-sky-300" :
-                              ticket.status === "resolved" ? "bg-emerald-50 text-emerald-800 border-emerald-300" :
-                              "bg-zinc-100 text-zinc-700 border-zinc-200"
+                              "text-xs font-bold px-2.5 py-1 rounded-xl border focus:outline-none focus:ring-2 focus:ring-[#2563EB]/20 focus:border-[#2563EB] cursor-pointer",
+                              ticket.status === "open" ? "bg-[#FFFBEB] text-[#B45309] border-[#FDE68A]" :
+                              ticket.status === "in_progress" ? "bg-[#EFF6FF] text-[#1E3A8A] border-[#DBEAFE]" :
+                              ticket.status === "resolved" ? "bg-[#F0FDF4] text-[#15803D] border-[#BBF7D0]" :
+                              "bg-slate-100 text-[#64748B] border-[#E2E8F0]"
                             )}
                           >
                             <option value="open">🟡 Open</option>
@@ -1757,17 +1763,17 @@ export default function SuperAdminPage() {
                       </div>
 
                       {/* Description */}
-                      <p className="text-xs text-zinc-700 leading-relaxed bg-zinc-50 p-3 rounded-xl border border-zinc-100">
+                      <p className="text-xs text-[#0F172A] leading-relaxed bg-slate-50 p-3 rounded-xl border border-[#E2E8F0]">
                         {ticket.description}
                       </p>
 
                       {/* Attachment Screenshot Preview */}
                       {ticket.attachment_url && (
                         <div className="space-y-1">
-                          <span className="text-[11px] font-bold text-zinc-500 uppercase tracking-wider block">
+                          <span className="text-[11px] font-bold text-[#64748B] uppercase tracking-wider block">
                             Attached Screenshot
                           </span>
-                          <div className="inline-block relative rounded-xl border border-zinc-200 overflow-hidden cursor-pointer hover:opacity-90 transition-opacity">
+                          <div className="inline-block relative rounded-xl border border-[#E2E8F0] overflow-hidden cursor-pointer hover:opacity-90 transition-opacity">
                             <img
                               src={ticket.attachment_url}
                               alt="Bug Screenshot"
@@ -1792,7 +1798,7 @@ export default function SuperAdminPage() {
             </div>
 
             {/* Footer */}
-            <div className="pt-3 border-t border-zinc-100 flex items-center justify-between text-xs text-zinc-500 shrink-0">
+            <div className="pt-3 border-t border-[#E2E8F0] flex items-center justify-between text-xs text-[#64748B] shrink-0">
               <span>Showing {displayedTickets.length} issues</span>
               <Button
                 variant="outline"
@@ -1800,7 +1806,7 @@ export default function SuperAdminPage() {
                   setSelectedBizForIssues(null);
                   setShowAllTicketsModal(false);
                 }}
-                className="rounded-xl"
+                className="rounded-xl border-[#E2E8F0] text-[#0F172A] hover:bg-slate-50 cursor-pointer"
               >
                 Close Inbox
               </Button>
@@ -1818,7 +1824,7 @@ export default function SuperAdminPage() {
           onClick={() => setViewingScreenshotUrl(null)}
           className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 cursor-zoom-out animate-in fade-in duration-200"
         >
-          <div className="relative max-w-4xl max-h-[85vh] p-2 bg-white rounded-2xl shadow-2xl overflow-hidden">
+          <div className="relative max-w-4xl max-h-[85vh] p-2 bg-white rounded-2xl shadow-2xl overflow-hidden border border-[#E2E8F0]">
             <img
               src={viewingScreenshotUrl}
               alt="Full screenshot"
@@ -1826,7 +1832,7 @@ export default function SuperAdminPage() {
             />
             <button
               onClick={() => setViewingScreenshotUrl(null)}
-              className="absolute top-4 right-4 w-8 h-8 rounded-full bg-black/60 hover:bg-black text-white flex items-center justify-center text-sm font-bold"
+              className="absolute top-4 right-4 w-8 h-8 rounded-full bg-black/60 hover:bg-black text-white flex items-center justify-center text-sm font-bold cursor-pointer"
             >
               ✕
             </button>
@@ -1839,21 +1845,21 @@ export default function SuperAdminPage() {
       {/* ========================================================================= */}
       {showAddModal && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto animate-in fade-in duration-200">
-          <div className="bg-white rounded-3xl max-w-xl w-full p-6 sm:p-8 shadow-2xl border border-zinc-200 space-y-6 animate-in zoom-in-95 duration-200 my-8">
+          <div className="bg-white rounded-3xl max-w-xl w-full p-6 sm:p-8 shadow-2xl border border-[#E2E8F0] space-y-6 animate-in zoom-in-95 duration-200 my-8">
             
-            <div className="flex items-start justify-between border-b border-zinc-100 pb-4">
+            <div className="flex items-start justify-between border-b border-[#E2E8F0] pb-4">
               <div className="space-y-1">
-                <h2 className="text-xl font-extrabold text-zinc-900 flex items-center gap-2">
-                  <Sparkles size={20} className="text-indigo-600" />
+                <h2 className="text-xl font-extrabold text-[#0F172A] flex items-center gap-2">
+                  <Sparkles size={20} className="text-[#2563EB]" />
                   <span>Onboard New Client Business</span>
                 </h2>
-                <p className="text-xs text-zinc-500">
+                <p className="text-xs text-[#64748B]">
                   Instantly provision an isolated tenant workspace with customized modules and dedicated admin login.
                 </p>
               </div>
               <button
                 onClick={() => setShowAddModal(false)}
-                className="text-zinc-400 hover:text-zinc-600 text-lg font-bold p-1"
+                className="text-[#64748B] hover:text-[#0F172A] text-lg font-bold p-1 cursor-pointer"
               >
                 ✕
               </button>
@@ -1862,27 +1868,27 @@ export default function SuperAdminPage() {
             <form onSubmit={handleCreateBusiness} className="space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-zinc-700">Business Name *</label>
+                  <label className="text-xs font-bold text-[#0F172A]">Business Name *</label>
                   <Input
                     placeholder="e.g. Royal Chai House"
                     value={formData.name}
                     onChange={(e) => handleNameChange(e.target.value)}
                     required
-                    className="h-10 bg-zinc-50 border-zinc-200 focus:bg-white"
+                    className="h-10 bg-white border-[#E2E8F0] text-[#0F172A] focus:border-[#2563EB]"
                   />
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-zinc-700">Subdomain Slug *</label>
+                  <label className="text-xs font-bold text-[#0F172A]">Subdomain Slug *</label>
                   <div className="flex items-center">
                     <Input
                       placeholder="royal-chai"
                       value={formData.slug}
                       onChange={(e) => setFormData((prev) => ({ ...prev, slug: e.target.value }))}
                       required
-                      className="h-10 bg-zinc-50 border-zinc-200 focus:bg-white rounded-r-none font-mono text-xs"
+                      className="h-10 bg-white border-[#E2E8F0] text-[#0F172A] focus:border-[#2563EB] rounded-r-none font-mono text-xs"
                     />
-                    <span className="h-10 px-3 bg-zinc-100 border border-l-0 border-zinc-200 text-zinc-500 text-xs font-mono font-medium rounded-r-xl flex items-center">
+                    <span className="h-10 px-3 bg-slate-50 border border-l-0 border-[#E2E8F0] text-[#64748B] text-xs font-mono font-medium rounded-r-xl flex items-center">
                       .seyalpro.in
                     </span>
                   </div>
@@ -1891,24 +1897,24 @@ export default function SuperAdminPage() {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-zinc-700">Store Admin Email *</label>
+                  <label className="text-xs font-bold text-[#0F172A]">Store Admin Email *</label>
                   <Input
                     type="email"
                     placeholder="owner@royalchai.com"
                     value={formData.adminEmail}
                     onChange={(e) => setFormData((prev) => ({ ...prev, adminEmail: e.target.value }))}
                     required
-                    className="h-10 bg-zinc-50 border-zinc-200 focus:bg-white text-xs"
+                    className="h-10 bg-white border-[#E2E8F0] text-[#0F172A] focus:border-[#2563EB] text-xs"
                   />
                 </div>
 
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between">
-                    <label className="text-xs font-bold text-zinc-700">Initial Password *</label>
+                    <label className="text-xs font-bold text-[#0F172A]">Initial Password *</label>
                     <button
                       type="button"
                       onClick={() => generateSecurePassword(false)}
-                      className="text-[11px] font-bold text-indigo-600 hover:underline flex items-center gap-1"
+                      className="text-[11px] font-bold text-[#2563EB] hover:underline flex items-center gap-1 cursor-pointer"
                     >
                       <Sparkle size={12} /> Auto-Generate
                     </button>
@@ -1920,12 +1926,12 @@ export default function SuperAdminPage() {
                       value={formData.adminPassword}
                       onChange={(e) => setFormData((prev) => ({ ...prev, adminPassword: e.target.value }))}
                       required
-                      className="h-10 bg-zinc-50 border-zinc-200 focus:bg-white pr-10 font-mono text-xs"
+                      className="h-10 bg-white border-[#E2E8F0] text-[#0F172A] focus:border-[#2563EB] pr-10 font-mono text-xs"
                     />
                     <button
                       type="button"
                       onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-[#94A3B8] hover:text-[#0F172A] cursor-pointer"
                     >
                       {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
                     </button>
@@ -1935,11 +1941,11 @@ export default function SuperAdminPage() {
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
                 <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-zinc-700">Subscription Tier</label>
+                  <label className="text-xs font-bold text-[#0F172A]">Subscription Tier</label>
                   <select
                     value={formData.planType}
                     onChange={(e) => setFormData((prev) => ({ ...prev, planType: e.target.value }))}
-                    className="w-full h-10 px-3 bg-zinc-50 border-zinc-200 rounded-xl text-xs font-bold focus:bg-white"
+                    className="w-full h-10 px-3 bg-white border border-[#E2E8F0] rounded-xl text-xs font-bold text-[#0F172A] focus:border-[#2563EB] cursor-pointer"
                   >
                     <option value="starter">Starter Plan (5 Seats)</option>
                     <option value="pro">Pro Plan (25 Seats)</option>
@@ -1948,34 +1954,34 @@ export default function SuperAdminPage() {
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-zinc-700">Max Staff Seats</label>
+                  <label className="text-xs font-bold text-[#0F172A]">Max Staff Seats</label>
                   <Input
                     type="number"
                     min={1}
                     max={500}
                     value={formData.maxUsers}
                     onChange={(e) => setFormData((prev) => ({ ...prev, maxUsers: Number(e.target.value) }))}
-                    className="h-10 bg-zinc-50 border-zinc-200 focus:bg-white text-xs"
+                    className="h-10 bg-white border-[#E2E8F0] text-[#0F172A] focus:border-[#2563EB] text-xs"
                   />
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-zinc-700">Currency Symbol</label>
+                  <label className="text-xs font-bold text-[#0F172A]">Currency Symbol</label>
                   <Input
                     value={formData.currencySymbol}
                     onChange={(e) => setFormData((prev) => ({ ...prev, currencySymbol: e.target.value }))}
                     placeholder="₹, $, €, £"
-                    className="h-10 bg-zinc-50 border-zinc-200 focus:bg-white text-xs font-bold"
+                    className="h-10 bg-white border-[#E2E8F0] text-[#0F172A] focus:border-[#2563EB] text-xs font-bold"
                   />
                 </div>
               </div>
 
               {/* Module Toggles */}
               <div className="space-y-2 pt-2">
-                <label className="text-xs font-bold text-zinc-700 uppercase tracking-wider block">
+                <label className="text-xs font-bold text-[#0F172A] uppercase tracking-wider block">
                   Enabled Feature Modules
                 </label>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto p-1 border border-zinc-100 rounded-2xl bg-zinc-50/50">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto p-1 border border-[#E2E8F0] rounded-2xl bg-slate-50/50">
                   {MODULE_DEFINITIONS.map((m) => {
                     const Icon = m.icon;
                     const isChecked = formData.modules[m.key] !== false;
@@ -1985,8 +1991,8 @@ export default function SuperAdminPage() {
                         className={cn(
                           "flex items-center gap-2.5 p-2.5 rounded-xl border transition-all cursor-pointer text-xs",
                           isChecked
-                            ? "bg-white border-indigo-200 shadow-sm text-zinc-900"
-                            : "bg-zinc-100/50 border-transparent text-zinc-400"
+                            ? "bg-white border-[#2563EB]/40 shadow-xs text-[#0F172A]"
+                            : "bg-slate-100/50 border-transparent text-[#64748B]"
                         )}
                       >
                         <input
@@ -1998,9 +2004,9 @@ export default function SuperAdminPage() {
                               modules: { ...prev.modules, [m.key]: e.target.checked },
                             }))
                           }
-                          className="rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4"
+                          className="rounded text-[#2563EB] focus:ring-[#2563EB] w-4 h-4 cursor-pointer"
                         />
-                        <Icon size={16} className={isChecked ? "text-indigo-600" : "text-zinc-400"} />
+                        <Icon size={16} className={isChecked ? "text-[#2563EB]" : "text-[#94A3B8]"} />
                         <span className="font-semibold">{m.label}</span>
                       </label>
                     );
@@ -2008,19 +2014,19 @@ export default function SuperAdminPage() {
                 </div>
               </div>
 
-              <div className="flex items-center justify-end gap-3 pt-4 border-t border-zinc-100">
+              <div className="flex items-center justify-end gap-3 pt-4 border-t border-[#E2E8F0]">
                 <Button
                   type="button"
                   variant="outline"
                   onClick={() => setShowAddModal(false)}
-                  className="rounded-xl"
+                  className="rounded-xl border-[#E2E8F0] text-[#0F172A] hover:bg-slate-50 cursor-pointer"
                 >
                   Cancel
                 </Button>
                 <Button
                   type="submit"
                   disabled={isSubmitting}
-                  className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl px-6 shadow-md shadow-indigo-200"
+                  className="bg-[#2563EB] hover:bg-[#1D4ED8] text-white font-bold rounded-xl px-6 shadow-md shadow-blue-500/20 cursor-pointer"
                 >
                   {isSubmitting ? <Loader2 className="animate-spin" /> : "Provision Client Workspace"}
                 </Button>
@@ -2035,33 +2041,33 @@ export default function SuperAdminPage() {
       {/* ========================================================================= */}
       {editingBiz && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto animate-in fade-in duration-200">
-          <div className="bg-white rounded-3xl max-w-2xl w-full p-6 sm:p-8 shadow-2xl border border-zinc-200 space-y-6 animate-in zoom-in-95 duration-200 my-8">
+          <div className="bg-white rounded-3xl max-w-2xl w-full p-6 sm:p-8 shadow-2xl border border-[#E2E8F0] space-y-6 animate-in zoom-in-95 duration-200 my-8">
             
             {/* Header */}
-            <div className="flex items-start justify-between border-b border-zinc-100 pb-4">
+            <div className="flex items-start justify-between border-b border-[#E2E8F0] pb-4">
               <div className="space-y-1">
                 <div className="flex items-center gap-2">
-                  <h2 className="text-xl font-extrabold text-zinc-900">
+                  <h2 className="text-xl font-extrabold text-[#0F172A]">
                     Configure {editingBiz.name}
                   </h2>
-                  <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-indigo-50 text-indigo-700 border border-indigo-100">
+                  <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-[#EFF6FF] text-[#1E3A8A] border border-[#DBEAFE]">
                     {editingBiz.slug}
                   </span>
                 </div>
-                <p className="text-xs text-zinc-500">
+                <p className="text-xs text-[#64748B]">
                   Update plan tier, toggle individual module features, adjust GPS geofencing, or reset store admin credentials.
                 </p>
               </div>
               <button
                 onClick={() => setEditingBiz(null)}
-                className="text-zinc-400 hover:text-zinc-600 text-lg font-bold p-1"
+                className="text-[#64748B] hover:text-[#0F172A] text-lg font-bold p-1 cursor-pointer"
               >
                 ✕
               </button>
             </div>
 
             {/* Navigation Tabs */}
-            <div className="flex items-center gap-1 border-b border-zinc-100 pb-2 overflow-x-auto text-xs font-bold">
+            <div className="flex items-center gap-1 border-b border-[#E2E8F0] pb-2 overflow-x-auto text-xs font-bold">
               {[
                 { id: "profile", label: "General & Plan", icon: Store },
                 { id: "modules", label: "Module Gates", icon: Sliders },
@@ -2075,10 +2081,10 @@ export default function SuperAdminPage() {
                     key={tab.id}
                     onClick={() => setEditTab(tab.id as any)}
                     className={cn(
-                      "px-3.5 py-2 rounded-xl transition-all flex items-center gap-1.5 whitespace-nowrap",
+                      "px-3.5 py-2 rounded-xl transition-all flex items-center gap-1.5 whitespace-nowrap cursor-pointer",
                       isActive
-                        ? "bg-indigo-600 text-white shadow-sm"
-                        : "text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900"
+                        ? "bg-[#2563EB] text-white shadow-xs"
+                        : "text-[#64748B] hover:bg-slate-100 hover:text-[#0F172A]"
                     )}
                   >
                     <Icon size={14} />
@@ -2095,33 +2101,33 @@ export default function SuperAdminPage() {
                 <div className="space-y-4 animate-in fade-in duration-200">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-1.5">
-                      <label className="text-xs font-bold text-zinc-700">Business Display Name</label>
+                      <label className="text-xs font-bold text-[#0F172A]">Business Display Name</label>
                       <Input
                         value={editFormData.name}
                         onChange={(e) => setEditFormData((prev) => ({ ...prev, name: e.target.value }))}
                         required
-                        className="h-10 bg-zinc-50 border-zinc-200"
+                        className="h-10 bg-white border-[#E2E8F0] text-[#0F172A] focus:border-[#2563EB]"
                       />
                     </div>
 
                     <div className="space-y-1.5">
-                      <label className="text-xs font-bold text-zinc-700">Subdomain Slug</label>
+                      <label className="text-xs font-bold text-[#0F172A]">Subdomain Slug</label>
                       <Input
                         value={editFormData.slug}
                         onChange={(e) => setEditFormData((prev) => ({ ...prev, slug: e.target.value }))}
                         required
-                        className="h-10 bg-zinc-50 border-zinc-200 font-mono text-xs"
+                        className="h-10 bg-white border-[#E2E8F0] text-[#0F172A] focus:border-[#2563EB] font-mono text-xs"
                       />
                     </div>
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div className="space-y-1.5">
-                      <label className="text-xs font-bold text-zinc-700">Subscription Plan</label>
+                      <label className="text-xs font-bold text-[#0F172A]">Subscription Plan</label>
                       <select
                         value={editFormData.plan_type}
                         onChange={(e) => setEditFormData((prev) => ({ ...prev, plan_type: e.target.value }))}
-                        className="w-full h-10 px-3 bg-zinc-50 border border-zinc-200 rounded-xl text-xs font-bold"
+                        className="w-full h-10 px-3 bg-white border border-[#E2E8F0] rounded-xl text-xs font-bold text-[#0F172A] focus:border-[#2563EB] cursor-pointer"
                       >
                         <option value="starter">Starter</option>
                         <option value="pro">Pro</option>
@@ -2130,24 +2136,24 @@ export default function SuperAdminPage() {
                     </div>
 
                     <div className="space-y-1.5">
-                      <label className="text-xs font-bold text-zinc-700">Max Staff Seats</label>
+                      <label className="text-xs font-bold text-[#0F172A]">Max Staff Seats</label>
                       <Input
                         type="number"
                         min={1}
                         max={500}
                         value={editFormData.max_users}
                         onChange={(e) => setEditFormData((prev) => ({ ...prev, max_users: Number(e.target.value) }))}
-                        className="h-10 bg-zinc-50 border-zinc-200 text-xs"
+                        className="h-10 bg-white border-[#E2E8F0] text-[#0F172A] focus:border-[#2563EB] text-xs"
                       />
                     </div>
 
                     <div className="space-y-1.5">
-                      <label className="text-xs font-bold text-zinc-700">Currency Symbol</label>
+                      <label className="text-xs font-bold text-[#0F172A]">Currency Symbol</label>
                       <Input
                         value={editFormData.currency_symbol}
                         onChange={(e) => setEditFormData((prev) => ({ ...prev, currency_symbol: e.target.value }))}
                         placeholder="₹"
-                        className="h-10 bg-zinc-50 border-zinc-200 text-xs font-bold"
+                        className="h-10 bg-white border-[#E2E8F0] text-[#0F172A] focus:border-[#2563EB] text-xs font-bold"
                       />
                     </div>
                   </div>
@@ -2157,7 +2163,7 @@ export default function SuperAdminPage() {
               {/* TAB 2: MODULE FEATURE GATES */}
               {editTab === "modules" && (
                 <div className="space-y-3 animate-in fade-in duration-200">
-                  <p className="text-xs text-zinc-500 font-medium">
+                  <p className="text-xs text-[#64748B] font-medium">
                     Enabling or disabling a module immediately adds or hides it from the client shop's navigation bar and mobile layout.
                   </p>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-h-64 overflow-y-auto p-1">
@@ -2176,27 +2182,27 @@ export default function SuperAdminPage() {
                           className={cn(
                             "flex items-start gap-3 p-3 rounded-2xl border transition-all cursor-pointer",
                             isEnabled
-                              ? "bg-indigo-50/50 border-indigo-200 shadow-sm"
-                              : "bg-zinc-50 border-zinc-200 text-zinc-400 opacity-60"
+                              ? "bg-[#EFF6FF] border-[#2563EB]/40 shadow-xs"
+                              : "bg-slate-50 border-[#E2E8F0] text-[#64748B] opacity-60"
                           )}
                         >
                           <div className={cn(
                             "p-2 rounded-xl shrink-0 mt-0.5",
-                            isEnabled ? "bg-indigo-600 text-white" : "bg-zinc-200 text-zinc-500"
+                            isEnabled ? "bg-[#2563EB] text-white" : "bg-slate-200 text-slate-500"
                           )}>
                             <Icon size={16} />
                           </div>
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center justify-between">
-                              <h4 className="font-extrabold text-xs text-zinc-900">{m.label}</h4>
+                              <h4 className="font-extrabold text-xs text-[#0F172A]">{m.label}</h4>
                               <span className={cn(
                                 "text-[10px] font-bold px-1.5 py-0.5 rounded",
-                                isEnabled ? "bg-indigo-100 text-indigo-700" : "bg-zinc-200 text-zinc-600"
+                                isEnabled ? "bg-[#2563EB]/15 text-[#2563EB]" : "bg-slate-200 text-slate-600"
                               )}>
                                 {isEnabled ? "ON" : "OFF"}
                               </span>
                             </div>
-                            <p className="text-[11px] text-zinc-500 mt-0.5 truncate">{m.desc}</p>
+                            <p className="text-[11px] text-[#64748B] mt-0.5 truncate">{m.desc}</p>
                           </div>
                         </div>
                       );
@@ -2208,56 +2214,56 @@ export default function SuperAdminPage() {
               {/* TAB 3: GPS GEOFENCING */}
               {editTab === "geofence" && (
                 <div className="space-y-4 animate-in fade-in duration-200">
-                  <div className="p-3.5 rounded-2xl bg-amber-50 border border-amber-200 text-amber-800 text-xs flex items-start gap-2.5">
-                    <MapPin size={18} className="shrink-0 text-amber-600 mt-0.5" />
+                  <div className="p-3.5 rounded-2xl bg-[#FFFBEB] border border-[#FDE68A] text-[#B45309] text-xs flex items-start gap-2.5">
+                    <MapPin size={18} className="shrink-0 text-[#B45309] mt-0.5" />
                     <div>
                       <p className="font-bold">GPS Attendance Enforcement</p>
-                      <p className="text-[11px] text-amber-700 mt-0.5">
+                      <p className="text-[11px] text-[#B45309] mt-0.5">
                         When enabled, employees can only clock in to Timesheets when physically within the specified radius of the store.
                       </p>
                     </div>
                   </div>
 
-                  <label className="flex items-center gap-2.5 p-3 rounded-xl border border-zinc-200 bg-zinc-50 cursor-pointer">
+                  <label className="flex items-center gap-2.5 p-3 rounded-xl border border-[#E2E8F0] bg-white cursor-pointer">
                     <input
                       type="checkbox"
                       checked={editFormData.geofence_enabled}
                       onChange={(e) => setEditFormData((prev) => ({ ...prev, geofence_enabled: e.target.checked }))}
-                      className="w-4 h-4 text-indigo-600 rounded"
+                      className="w-4 h-4 text-[#2563EB] rounded cursor-pointer"
                     />
-                    <span className="text-xs font-bold text-zinc-900">Enforce GPS Geofence for Staff Timesheets</span>
+                    <span className="text-xs font-bold text-[#0F172A]">Enforce GPS Geofence for Staff Timesheets</span>
                   </label>
 
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div className="space-y-1.5">
-                      <label className="text-xs font-bold text-zinc-700">Latitude</label>
+                      <label className="text-xs font-bold text-[#0F172A]">Latitude</label>
                       <Input
                         value={editFormData.geofence_lat}
                         onChange={(e) => setEditFormData((prev) => ({ ...prev, geofence_lat: e.target.value }))}
                         placeholder="e.g. 12.8439"
-                        className="h-10 bg-zinc-50 border-zinc-200 text-xs font-mono"
+                        className="h-10 bg-white border-[#E2E8F0] text-[#0F172A] focus:border-[#2563EB] text-xs font-mono"
                       />
                     </div>
 
                     <div className="space-y-1.5">
-                      <label className="text-xs font-bold text-zinc-700">Longitude</label>
+                      <label className="text-xs font-bold text-[#0F172A]">Longitude</label>
                       <Input
                         value={editFormData.geofence_lng}
                         onChange={(e) => setEditFormData((prev) => ({ ...prev, geofence_lng: e.target.value }))}
                         placeholder="e.g. 80.2268"
-                        className="h-10 bg-zinc-50 border-zinc-200 text-xs font-mono"
+                        className="h-10 bg-white border-[#E2E8F0] text-[#0F172A] focus:border-[#2563EB] text-xs font-mono"
                       />
                     </div>
 
                     <div className="space-y-1.5">
-                      <label className="text-xs font-bold text-zinc-700">Radius (Meters)</label>
+                      <label className="text-xs font-bold text-[#0F172A]">Radius (Meters)</label>
                       <Input
                         type="number"
                         min={20}
                         max={5000}
                         value={editFormData.geofence_radius_meters}
                         onChange={(e) => setEditFormData((prev) => ({ ...prev, geofence_radius_meters: Number(e.target.value) }))}
-                        className="h-10 bg-zinc-50 border-zinc-200 text-xs font-mono"
+                        className="h-10 bg-white border-[#E2E8F0] text-[#0F172A] focus:border-[#2563EB] text-xs font-mono"
                       />
                     </div>
                   </div>
@@ -2267,23 +2273,23 @@ export default function SuperAdminPage() {
               {/* TAB 4: RESET STORE ADMIN PASSWORD */}
               {editTab === "password" && (
                 <div className="space-y-4 animate-in fade-in duration-200">
-                  <div className="p-3.5 rounded-2xl bg-indigo-50 border border-indigo-200 text-indigo-900 text-xs space-y-1">
+                  <div className="p-3.5 rounded-2xl bg-[#EFF6FF] border border-[#DBEAFE] text-[#1E3A8A] text-xs space-y-1">
                     <p className="font-bold flex items-center gap-1.5">
-                      <KeyRound size={15} className="text-indigo-600" />
+                      <KeyRound size={15} className="text-[#2563EB]" />
                       <span>Direct Master Password Reset</span>
                     </p>
-                    <p className="text-[11px] text-indigo-700 leading-relaxed">
+                    <p className="text-[11px] text-[#1E3A8A] leading-relaxed">
                       If the store owner forgot their credentials, you can directly assign a new password without requiring email verification.
                     </p>
                   </div>
 
                   <div className="space-y-1.5">
                     <div className="flex items-center justify-between">
-                      <label className="text-xs font-bold text-zinc-700">New Store Admin Password</label>
+                      <label className="text-xs font-bold text-[#0F172A]">New Store Admin Password</label>
                       <button
                         type="button"
                         onClick={() => generateSecurePassword(true)}
-                        className="text-[11px] font-bold text-indigo-600 hover:underline flex items-center gap-1"
+                        className="text-[11px] font-bold text-[#2563EB] hover:underline flex items-center gap-1 cursor-pointer"
                       >
                         <Sparkle size={12} /> Auto-Generate
                       </button>
@@ -2293,26 +2299,26 @@ export default function SuperAdminPage() {
                       placeholder="Leave blank to keep unchanged"
                       value={editFormData.newAdminPassword || ""}
                       onChange={(e) => setEditFormData((prev) => ({ ...prev, newAdminPassword: e.target.value }))}
-                      className="h-10 bg-zinc-50 border-zinc-200 font-mono text-xs"
+                      className="h-10 bg-white border-[#E2E8F0] text-[#0F172A] focus:border-[#2563EB] font-mono text-xs"
                     />
                   </div>
                 </div>
               )}
 
               {/* Modal Actions */}
-              <div className="flex items-center justify-end gap-3 pt-4 border-t border-zinc-100">
+              <div className="flex items-center justify-end gap-3 pt-4 border-t border-[#E2E8F0]">
                 <Button
                   type="button"
                   variant="outline"
                   onClick={() => setEditingBiz(null)}
-                  className="rounded-xl"
+                  className="rounded-xl border-[#E2E8F0] text-[#0F172A] hover:bg-slate-50 cursor-pointer"
                 >
                   Cancel
                 </Button>
                 <Button
                   type="submit"
                   disabled={isEditSubmitting}
-                  className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl px-6 shadow-md shadow-indigo-200"
+                  className="bg-[#2563EB] hover:bg-[#1D4ED8] text-white font-bold rounded-xl px-6 shadow-md shadow-blue-500/20 cursor-pointer"
                 >
                   {isEditSubmitting ? <Loader2 className="animate-spin" /> : "Save Configuration"}
                 </Button>
@@ -2330,22 +2336,22 @@ export default function SuperAdminPage() {
           <div className="bg-white rounded-3xl max-w-md w-full p-6 sm:p-8 shadow-2xl border border-rose-200 space-y-6 animate-in zoom-in-95 duration-200">
             
             <div className="text-center space-y-3">
-              <div className="w-14 h-14 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center mx-auto shadow-inner">
+              <div className="w-14 h-14 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center mx-auto shadow-inner border border-rose-100">
                 <AlertOctagon size={30} />
               </div>
-              <h3 className="text-xl font-extrabold text-zinc-900">
+              <h3 className="text-xl font-extrabold text-[#0F172A]">
                 Permanently Delete Store?
               </h3>
-              <p className="text-xs text-zinc-500 leading-relaxed">
+              <p className="text-xs text-[#64748B] leading-relaxed">
                 This action is <span className="font-bold text-rose-600">irreversible</span>. It will permanently purge all sales records, expenses, timesheets, inventory, and staff login accounts for:
               </p>
-              <div className="p-3 rounded-xl bg-zinc-100 font-extrabold text-sm text-zinc-900 border border-zinc-200">
+              <div className="p-3 rounded-xl bg-slate-50 font-extrabold text-sm text-[#0F172A] border border-[#E2E8F0]">
                 {deletingBiz.name} ({deletingBiz.slug}.seyalpro.in)
               </div>
             </div>
 
             <div className="space-y-2">
-              <label className="text-xs font-bold text-zinc-700 block text-center">
+              <label className="text-xs font-bold text-[#0F172A] block text-center">
                 Type <span className="text-rose-600 font-mono font-bold">"{deletingBiz.name}"</span> below to confirm:
               </label>
               <Input
@@ -2353,7 +2359,7 @@ export default function SuperAdminPage() {
                 placeholder={deletingBiz.name}
                 value={confirmDeleteInput}
                 onChange={(e) => setConfirmDeleteInput(e.target.value)}
-                className="h-10 text-center font-bold text-xs bg-rose-50/50 border-rose-200 focus:bg-white text-zinc-900"
+                className="h-10 text-center font-bold text-xs bg-rose-50/50 border-rose-200 focus:bg-white text-[#0F172A]"
               />
             </div>
 
@@ -2364,7 +2370,7 @@ export default function SuperAdminPage() {
                   setDeletingBiz(null);
                   setConfirmDeleteInput("");
                 }}
-                className="flex-1 rounded-xl"
+                className="flex-1 rounded-xl border-[#E2E8F0] text-[#0F172A] hover:bg-slate-50 cursor-pointer"
               >
                 Cancel
               </Button>
@@ -2374,7 +2380,7 @@ export default function SuperAdminPage() {
                   isDeleting ||
                   confirmDeleteInput.trim().toLowerCase() !== deletingBiz.name.trim().toLowerCase()
                 }
-                className="flex-1 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-xl shadow-lg shadow-rose-200"
+                className="flex-1 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-xl shadow-lg shadow-rose-500/20 cursor-pointer"
               >
                 {isDeleting ? <Loader2 className="animate-spin" /> : "Delete Store"}
               </Button>

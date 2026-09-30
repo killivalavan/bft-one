@@ -42,6 +42,7 @@ export const DEFAULT_BUSINESS: Business = {
   geofence_enabled: true,
   enabled_modules: {
     billing: true,
+    invoices: true,
     sales: true,
     expenses: true,
     timesheet: true,

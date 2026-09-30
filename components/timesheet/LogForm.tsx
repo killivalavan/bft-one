@@ -33,21 +33,21 @@ export function LogForm({
     const yestStr = format(addDays(new Date(), -1), "MMM d");
 
     return (
-        <Card className="border-zinc-200 shadow-sm overflow-hidden">
+        <Card className="border-slate-200 shadow-xs overflow-hidden bg-white">
             <CardContent className="p-5 md:p-6 space-y-4">
                 {mode === "timesheet" ? (
                     <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
                         <div className="space-y-2">
-                            <label className="text-xs font-semibold uppercase tracking-wider text-zinc-500 flex items-center gap-1.5">
-                                <Timer size={14} />
+                            <label className="text-xs font-semibold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+                                <Timer size={14} className="text-[#2563EB]" />
                                 Select Date
                             </label>
                             <div className="grid grid-cols-2 gap-3">
                                 <button
                                     onClick={() => onDateChoiceChange("today")}
-                                    className={`px-4 py-3 rounded-lg border text-sm font-medium transition-all ${dateChoice === "today"
-                                            ? "bg-indigo-50 border-indigo-200 text-indigo-700 ring-1 ring-indigo-200"
-                                            : "bg-white border-zinc-200 text-zinc-600 hover:border-zinc-300 hover:bg-zinc-50"
+                                    className={`px-4 py-3 rounded-xl border text-sm font-medium transition-all cursor-pointer ${dateChoice === "today"
+                                            ? "bg-[#EFF6FF] border-[#2563EB]/40 text-[#2563EB] ring-1 ring-[#2563EB]/20 font-semibold"
+                                            : "bg-white border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-50"
                                         }`}
                                 >
                                     <span className="block text-xs opacity-70 mb-0.5">Today</span>
@@ -55,9 +55,9 @@ export function LogForm({
                                 </button>
                                 <button
                                     onClick={() => onDateChoiceChange("yesterday")}
-                                    className={`px-4 py-3 rounded-lg border text-sm font-medium transition-all ${dateChoice === "yesterday"
-                                            ? "bg-indigo-50 border-indigo-200 text-indigo-700 ring-1 ring-indigo-200"
-                                            : "bg-white border-zinc-200 text-zinc-600 hover:border-zinc-300 hover:bg-zinc-50"
+                                    className={`px-4 py-3 rounded-xl border text-sm font-medium transition-all cursor-pointer ${dateChoice === "yesterday"
+                                            ? "bg-[#EFF6FF] border-[#2563EB]/40 text-[#2563EB] ring-1 ring-[#2563EB]/20 font-semibold"
+                                            : "bg-white border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-50"
                                         }`}
                                 >
                                     <span className="block text-xs opacity-70 mb-0.5">Yesterday</span>
@@ -68,29 +68,29 @@ export function LogForm({
 
                         <Button
                             onClick={onSubmitTimesheet}
-                            className="w-full bg-indigo-600 hover:bg-indigo-700 text-white h-11 text-base shadow-md shadow-indigo-200 active:translate-y-0.5 transition-all"
+                            className="w-full bg-[#2563EB] hover:bg-[#1D4ED8] text-white h-11 text-sm font-semibold shadow-xs rounded-xl transition-all cursor-pointer"
                         >
                             <CheckCircleIcon className="w-4 h-4 mr-2" />
-                            Confrm & Submit
+                            Confirm &amp; Submit
                         </Button>
                     </div>
                 ) : (
                     <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
                         <div className="space-y-2">
-                            <label className="text-xs font-semibold uppercase tracking-wider text-zinc-500 flex items-center gap-1.5">
-                                <Timer size={14} />
+                            <label className="text-xs font-semibold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+                                <Timer size={14} className="text-[#2563EB]" />
                                 Date
                             </label>
                             <input
                                 type="date"
                                 value={leaveDate}
                                 onChange={(e) => onLeaveDateChange(e.target.value)}
-                                className="w-full px-4 py-2.5 rounded-lg border border-zinc-200 bg-white text-zinc-900 focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400 transition-shadow"
+                                className="w-full px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#EFF6FF] focus:border-[#2563EB] transition-all text-sm"
                             />
                         </div>
                         <div className="space-y-2">
-                            <label className="text-xs font-semibold uppercase tracking-wider text-zinc-500 flex items-center gap-1.5">
-                                <FileText size={14} />
+                            <label className="text-xs font-semibold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+                                <FileText size={14} className="text-[#2563EB]" />
                                 Reason
                             </label>
                             <input
@@ -98,12 +98,12 @@ export function LogForm({
                                 value={reason}
                                 placeholder="Sick, vacation, personal..."
                                 onChange={(e) => onReasonChange(e.target.value)}
-                                className="w-full px-4 py-2.5 rounded-lg border border-zinc-200 bg-white text-zinc-900 focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400 transition-shadow"
+                                className="w-full px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#EFF6FF] focus:border-[#2563EB] transition-all text-sm"
                             />
                         </div>
                         <Button
                             onClick={onSubmitLeave}
-                            className="w-full bg-indigo-600 hover:bg-indigo-700 text-white h-11 text-base shadow-md shadow-indigo-200 active:translate-y-0.5 transition-all"
+                            className="w-full bg-[#2563EB] hover:bg-[#1D4ED8] text-white h-11 text-sm font-semibold shadow-xs rounded-xl transition-all cursor-pointer"
                         >
                             <Send size={16} className="mr-2" />
                             Submit Leave Application

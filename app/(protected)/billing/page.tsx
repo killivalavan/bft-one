@@ -548,20 +548,20 @@ ${order.taxCents > 0 ? `🏛️ *GST (5%):* ₹${(order.taxCents / 100).toFixed(
   }
 
   return (
-    <div className="-mx-3 sm:-mx-6 lg:-mx-8 -my-2 sm:-my-4 min-h-[calc(100vh-5rem)] bg-zinc-100 flex flex-col">
+    <div className="-mx-3 sm:-mx-6 lg:-mx-8 -my-2 sm:-my-4 min-h-[calc(100vh-5rem)] bg-[#F8FAFC] flex flex-col">
       {/* ======================================================== */}
       {/* 1. TOP RESPONSIVE POS HEADER BAR                         */}
       {/* ======================================================== */}
-      <header className="bg-white border-b border-zinc-200 sticky top-0 z-30 px-3 sm:px-6 py-2.5 shadow-xs">
+      <header className="bg-white border-b border-slate-200 sticky top-0 z-30 px-3 sm:px-6 py-2.5 shadow-xs">
         <div className="flex items-center justify-between gap-3">
           {/* Left: Terminal & Business Badge */}
           <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-black shadow-sm shrink-0">
+            <div className="w-10 h-10 rounded-xl bg-[#EFF6FF] text-[#2563EB] border border-[#2563EB]/20 flex items-center justify-center font-bold shadow-xs shrink-0">
               <Zap className="w-5 h-5" />
             </div>
             <div className="min-w-0">
               <div className="flex items-center gap-2">
-                <h1 className="text-base sm:text-lg font-bold text-zinc-900 leading-tight truncate">
+                <h1 className="text-base sm:text-lg font-bold text-slate-900 leading-tight truncate">
                   {business?.name || "SeyalPro POS Terminal"}
                 </h1>
                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
@@ -569,7 +569,7 @@ ${order.taxCents > 0 ? `🏛️ *GST (5%):* ₹${(order.taxCents / 100).toFixed(
                   Live Sync
                 </span>
               </div>
-              <p className="text-xs text-zinc-500 hidden sm:block">
+              <p className="text-xs text-slate-500 hidden sm:block">
                 Express Billing Counter • Currency: ₹ (INR)
               </p>
             </div>
@@ -578,19 +578,19 @@ ${order.taxCents > 0 ? `🏛️ *GST (5%):* ₹${(order.taxCents / 100).toFixed(
           {/* Center: Search bar */}
           <div className="flex-1 max-w-md hidden md:block">
             <div className="relative">
-              <Search className="w-4 h-4 text-zinc-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
               <input
                 ref={searchInputRef}
                 type="text"
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
                 placeholder="Search products by name... (Press '/' to focus)"
-                className="w-full pl-9 pr-8 py-2 bg-zinc-50 hover:bg-zinc-100/80 focus:bg-white text-xs sm:text-sm text-zinc-900 placeholder:text-zinc-400 rounded-xl border border-zinc-200 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 outline-none transition-all"
+                className="w-full pl-9 pr-8 py-2 bg-slate-50 hover:bg-slate-100/80 focus:bg-white text-xs sm:text-sm text-slate-900 placeholder:text-slate-400 rounded-xl border border-slate-200 focus:border-[#2563EB] focus:ring-2 focus:ring-[#EFF6FF] outline-none transition-all"
               />
               {searchQuery && (
                 <button
                   onClick={() => setSearchQuery("")}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 rounded-full hover:bg-zinc-200 text-zinc-400 cursor-pointer"
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 rounded-full hover:bg-slate-200 text-slate-400 cursor-pointer"
                 >
                   <X className="w-3.5 h-3.5" />
                 </button>
@@ -601,12 +601,12 @@ ${order.taxCents > 0 ? `🏛️ *GST (5%):* ₹${(order.taxCents / 100).toFixed(
           {/* Right: Quick Actions */}
           <div className="flex items-center gap-1.5 sm:gap-2">
             {/* View Mode Toggle */}
-            <div className="hidden lg:flex items-center bg-zinc-100 p-1 rounded-xl border border-zinc-200">
+            <div className="hidden lg:flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200">
               <button
                 onClick={() => setViewMode("grid")}
                 className={cn(
                   "p-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer",
-                  viewMode === "grid" ? "bg-white text-emerald-700 shadow-xs" : "text-zinc-500 hover:text-zinc-800"
+                  viewMode === "grid" ? "bg-white text-[#2563EB] shadow-xs" : "text-slate-500 hover:text-slate-800"
                 )}
                 title="Grid View"
               >
@@ -616,7 +616,7 @@ ${order.taxCents > 0 ? `🏛️ *GST (5%):* ₹${(order.taxCents / 100).toFixed(
                 onClick={() => setViewMode("compact")}
                 className={cn(
                   "p-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer",
-                  viewMode === "compact" ? "bg-white text-emerald-700 shadow-xs" : "text-zinc-500 hover:text-zinc-800"
+                  viewMode === "compact" ? "bg-white text-[#2563EB] shadow-xs" : "text-slate-500 hover:text-slate-800"
                 )}
                 title="Compact List View"
               >
@@ -627,12 +627,12 @@ ${order.taxCents > 0 ? `🏛️ *GST (5%):* ₹${(order.taxCents / 100).toFixed(
             {/* Mobile Cart Trigger */}
             <button
               onClick={() => setShowMobileCartSheet(true)}
-              className="lg:hidden relative flex items-center gap-2 px-3.5 py-2 rounded-xl bg-emerald-600 text-white font-bold text-xs shadow-sm hover:bg-emerald-700 active:scale-95 transition-all cursor-pointer"
+              className="lg:hidden relative flex items-center gap-2 px-3.5 py-2 rounded-xl bg-[#2563EB] text-white font-bold text-xs shadow-sm hover:bg-[#1D4ED8] active:scale-95 transition-all cursor-pointer"
             >
               <ShoppingBag className="w-4 h-4" />
               <span>₹{(finalTotalCents / 100).toFixed(2)}</span>
               {cartCount > 0 && (
-                <span className="w-5 h-5 rounded-full bg-white text-emerald-700 text-[11px] font-black flex items-center justify-center">
+                <span className="w-5 h-5 rounded-full bg-white text-[#2563EB] text-[11px] font-black flex items-center justify-center">
                   {cartCount}
                 </span>
               )}
@@ -686,8 +686,8 @@ ${order.taxCents > 0 ? `🏛️ *GST (5%):* ₹${(order.taxCents / 100).toFixed(
                   className={cn(
                     "flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-semibold whitespace-nowrap transition-all duration-200 shrink-0 cursor-pointer",
                     active
-                      ? "bg-emerald-600 text-white shadow-sm ring-2 ring-emerald-300 ring-offset-1 font-bold scale-[1.02]"
-                      : "bg-white text-zinc-600 border border-zinc-200/80 hover:bg-zinc-50 hover:text-zinc-900 hover:border-zinc-300"
+                      ? "bg-[#2563EB] text-white shadow-sm ring-2 ring-[#2563EB]/20 font-bold scale-[1.02]"
+                      : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 hover:text-slate-900 hover:border-slate-300"
                   )}
                 >
                   <span className="text-base leading-none">{cat.icon_emoji || "☕"}</span>
@@ -695,7 +695,7 @@ ${order.taxCents > 0 ? `🏛️ *GST (5%):* ₹${(order.taxCents / 100).toFixed(
                   <span
                     className={cn(
                       "px-1.5 py-0.5 rounded-md text-[10px] font-bold",
-                      active ? "bg-white/20 text-white" : "bg-zinc-100 text-zinc-500"
+                      active ? "bg-white/20 text-white" : "bg-slate-100 text-slate-500"
                     )}
                   >
                     {count}
@@ -736,12 +736,12 @@ ${order.taxCents > 0 ? `🏛️ *GST (5%):* ₹${(order.taxCents / 100).toFixed(
                     className={cn(
                       "group bg-white rounded-2xl border transition-all duration-200 flex flex-col overflow-hidden relative",
                       qInCart > 0
-                        ? "border-emerald-500 ring-2 ring-emerald-100 shadow-md"
-                        : "border-zinc-200/90 hover:border-emerald-300 hover:shadow-md"
+                        ? "border-[#2563EB] ring-2 ring-[#2563EB]/20 shadow-xs"
+                        : "border-slate-200/90 hover:border-[#2563EB]/40 hover:shadow-sm"
                     )}
                   >
                     {/* Top Image area */}
-                    <div className="relative aspect-4/3 bg-zinc-100 overflow-hidden">
+                    <div className="relative aspect-4/3 bg-slate-100 overflow-hidden">
                       {p.image_url ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img
@@ -751,7 +751,7 @@ ${order.taxCents > 0 ? `🏛️ *GST (5%):* ₹${(order.taxCents / 100).toFixed(
                           loading="lazy"
                         />
                       ) : (
-                        <div className="w-full h-full flex flex-col items-center justify-center bg-emerald-50/50 text-emerald-700">
+                        <div className="w-full h-full flex flex-col items-center justify-center bg-[#EFF6FF] text-[#2563EB]">
                           <Coffee className="w-8 h-8 opacity-40 mb-1" />
                           <span className="text-[11px] font-semibold">{p.name.slice(0, 14)}</span>
                         </div>
@@ -760,7 +760,7 @@ ${order.taxCents > 0 ? `🏛️ *GST (5%):* ₹${(order.taxCents / 100).toFixed(
                       {/* Stock Indicators */}
                       <div className="absolute top-2 right-2 flex flex-col gap-1 items-end">
                         {st.oos ? (
-                          <span className="px-2 py-0.5 text-[9px] font-bold uppercase rounded-md bg-zinc-900/90 text-white shadow-xs">
+                          <span className="px-2 py-0.5 text-[9px] font-bold uppercase rounded-md bg-slate-900/90 text-white shadow-xs">
                             Sold Out
                           </span>
                         ) : st.low ? (
@@ -770,7 +770,7 @@ ${order.taxCents > 0 ? `🏛️ *GST (5%):* ₹${(order.taxCents / 100).toFixed(
                         ) : null}
 
                         {qInCart > 0 && (
-                          <span className="w-6 h-6 rounded-full bg-emerald-600 text-white text-xs font-black shadow-md flex items-center justify-center ring-2 ring-white animate-pop">
+                          <span className="w-6 h-6 rounded-full bg-[#2563EB] text-white text-xs font-black shadow-md flex items-center justify-center ring-2 ring-white animate-pop">
                             {qInCart}
                           </span>
                         )}
@@ -786,19 +786,19 @@ ${order.taxCents > 0 ? `🏛️ *GST (5%):* ₹${(order.taxCents / 100).toFixed(
                     {/* Product Details */}
                     <div className="p-3 flex-1 flex flex-col justify-between gap-2.5">
                       <div>
-                        <h3 className="text-xs sm:text-sm font-bold text-zinc-900 leading-snug line-clamp-2">
+                        <h3 className="text-xs sm:text-sm font-bold text-slate-900 leading-snug line-clamp-2">
                           {p.name}
                         </h3>
                         {p.subtitle && (
-                          <p className="text-[11px] text-zinc-500 line-clamp-1 mt-0.5">
+                          <p className="text-[11px] text-slate-500 line-clamp-1 mt-0.5">
                             {p.subtitle}
                           </p>
                         )}
                       </div>
 
-                      <div className="pt-1 border-t border-zinc-100 flex items-center justify-between">
+                      <div className="pt-1 border-t border-slate-100 flex items-center justify-between">
                         <div>
-                          <span className="text-sm sm:text-base font-black text-zinc-900">
+                          <span className="text-sm sm:text-base font-bold text-slate-900">
                             ₹{(p.price_cents / 100).toFixed(2)}
                           </span>
                         </div>
@@ -808,7 +808,7 @@ ${order.taxCents > 0 ? `🏛️ *GST (5%):* ₹${(order.taxCents / 100).toFixed(
                           {st.oos ? (
                             <button
                               disabled
-                              className="px-3 py-1.5 bg-zinc-100 text-zinc-400 rounded-xl text-xs font-bold cursor-not-allowed"
+                              className="px-3 py-1.5 bg-slate-100 text-slate-400 rounded-xl text-xs font-bold cursor-not-allowed"
                             >
                               Unavailable
                             </button>
@@ -822,15 +822,15 @@ ${order.taxCents > 0 ? `🏛️ *GST (5%):* ₹${(order.taxCents / 100).toFixed(
                                 image_url: p.image_url,
                                 unit_label: p.unit_label
                               })}
-                              className="px-3 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-600 text-emerald-700 hover:text-white border border-emerald-200 text-xs font-bold transition-all duration-200 flex items-center gap-1 active:scale-90 cursor-pointer"
+                              className="px-3 py-1.5 rounded-xl bg-[#EFF6FF] hover:bg-[#2563EB] text-[#2563EB] hover:text-white border border-[#2563EB]/20 text-xs font-bold transition-all duration-200 flex items-center gap-1 active:scale-90 cursor-pointer"
                             >
                               <Plus className="w-3.5 h-3.5" /> ADD
                             </button>
                           ) : (
-                            <div className="flex items-center bg-emerald-600 text-white rounded-xl p-0.5 shadow-sm">
+                            <div className="flex items-center bg-[#2563EB] text-white rounded-xl p-0.5 shadow-sm">
                               <button
                                 onClick={() => decrement(p.id)}
-                                className="w-6 h-6 flex items-center justify-center rounded-lg hover:bg-emerald-700 text-white transition-colors cursor-pointer"
+                                className="w-6 h-6 flex items-center justify-center rounded-lg hover:bg-[#1D4ED8] text-white transition-colors cursor-pointer"
                               >
                                 <Minus className="w-3 h-3" />
                               </button>
@@ -846,7 +846,7 @@ ${order.taxCents > 0 ? `🏛️ *GST (5%):* ₹${(order.taxCents / 100).toFixed(
                                   image_url: p.image_url,
                                   unit_label: p.unit_label
                                 })}
-                                className="w-6 h-6 flex items-center justify-center rounded-lg hover:bg-emerald-700 text-white transition-colors cursor-pointer"
+                                className="w-6 h-6 flex items-center justify-center rounded-lg hover:bg-[#1D4ED8] text-white transition-colors cursor-pointer"
                               >
                                 <Plus className="w-3 h-3" />
                               </button>
@@ -942,25 +942,25 @@ ${order.taxCents > 0 ? `🏛️ *GST (5%):* ₹${(order.taxCents / 100).toFixed(
         {/* ======================================================== */}
         {/* RIGHT COLUMN: DESKTOP CHECKOUT & BILLING TERMINAL PANEL  */}
         {/* ======================================================== */}
-        <aside className="hidden lg:flex w-[380px] xl:w-[420px] 2xl:w-[460px] bg-white border-l border-zinc-200 flex-col shrink-0 shadow-lg">
+        <aside className="hidden lg:flex w-[380px] xl:w-[420px] 2xl:w-[460px] bg-white border-l border-slate-200 flex-col shrink-0 shadow-sm">
           {/* Terminal Header */}
-          <div className="p-4 border-b border-zinc-200 bg-zinc-50/70 space-y-2">
+          <div className="p-4 border-b border-slate-200 bg-slate-50/70 space-y-2">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <Receipt className="w-5 h-5 text-emerald-600" />
-                <h2 className="text-base font-bold text-zinc-900">Current Order</h2>
+                <Receipt className="w-5 h-5 text-[#2563EB]" />
+                <h2 className="text-base font-bold text-slate-900">Current Order</h2>
               </div>
               <div className="flex items-center gap-1.5">
                 {cartCount > 0 && (
                   <button
                     onClick={clear}
-                    className="p-1.5 text-zinc-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors text-xs font-semibold flex items-center gap-1 cursor-pointer"
+                    className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors text-xs font-semibold flex items-center gap-1 cursor-pointer"
                     title="Clear All Items"
                   >
                     <Trash2 className="w-3.5 h-3.5" /> Clear
                   </button>
                 )}
-                <span className="px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 text-xs font-bold">
+                <span className="px-2 py-0.5 rounded-md bg-[#EFF6FF] text-[#2563EB] border border-[#2563EB]/20 text-xs font-bold">
                   {cartCount} {cartCount === 1 ? "item" : "items"}
                 </span>
               </div>
@@ -1097,8 +1097,8 @@ ${order.taxCents > 0 ? `🏛️ *GST (5%):* ₹${(order.taxCents / 100).toFixed(
                   className={cn(
                     "py-2 rounded-xl border flex items-center justify-center gap-1.5 transition-all cursor-pointer",
                     paymentMode === "upi"
-                      ? "bg-emerald-600 text-white border-emerald-600 shadow-xs"
-                      : "bg-white text-zinc-700 border-zinc-200 hover:bg-zinc-100"
+                      ? "bg-[#2563EB] text-white border-[#2563EB] shadow-xs"
+                      : "bg-white text-slate-700 border-slate-200 hover:bg-slate-100"
                   )}
                 >
                   <QrCode className="w-3.5 h-3.5" /> UPI / QR
@@ -1108,8 +1108,8 @@ ${order.taxCents > 0 ? `🏛️ *GST (5%):* ₹${(order.taxCents / 100).toFixed(
                   className={cn(
                     "py-2 rounded-xl border flex items-center justify-center gap-1.5 transition-all cursor-pointer",
                     paymentMode === "cash"
-                      ? "bg-emerald-600 text-white border-emerald-600 shadow-xs"
-                      : "bg-white text-zinc-700 border-zinc-200 hover:bg-zinc-100"
+                      ? "bg-[#2563EB] text-white border-[#2563EB] shadow-xs"
+                      : "bg-white text-slate-700 border-slate-200 hover:bg-slate-100"
                   )}
                 >
                   <Banknote className="w-3.5 h-3.5" /> Cash
@@ -1119,8 +1119,8 @@ ${order.taxCents > 0 ? `🏛️ *GST (5%):* ₹${(order.taxCents / 100).toFixed(
                   className={cn(
                     "py-2 rounded-xl border flex items-center justify-center gap-1.5 transition-all cursor-pointer",
                     paymentMode === "card"
-                      ? "bg-emerald-600 text-white border-emerald-600 shadow-xs"
-                      : "bg-white text-zinc-700 border-zinc-200 hover:bg-zinc-100"
+                      ? "bg-[#2563EB] text-white border-[#2563EB] shadow-xs"
+                      : "bg-white text-slate-700 border-slate-200 hover:bg-slate-100"
                   )}
                 >
                   <CreditCard className="w-3.5 h-3.5" /> Card

@@ -219,27 +219,26 @@ export default function SuperAdminLoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-white flex flex-col items-center justify-center p-4 relative overflow-hidden selection:bg-indigo-500 selection:text-white">
+    <div className="min-h-screen bg-slate-950 text-white flex flex-col items-center justify-center p-4 relative overflow-hidden selection:bg-[#2563EB] selection:text-white">
       {/* Dynamic Ambient Background Elements */}
-      <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-gradient-to-tr from-indigo-600/15 via-sky-500/10 to-transparent rounded-full blur-3xl pointer-events-none" />
-      <div className="absolute -bottom-20 -right-20 w-[450px] h-[450px] bg-purple-600/10 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-gradient-to-tr from-[#2563EB]/15 to-transparent rounded-full blur-3xl pointer-events-none" />
 
       {/* Main Container */}
       <div className="w-full max-w-md space-y-6 relative z-10 animate-in fade-in zoom-in-95 duration-500">
         
         {/* Brand Header */}
         <div className="text-center space-y-3">
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-tr from-sky-500 via-indigo-600 to-indigo-700 text-white shadow-xl shadow-indigo-600/30 ring-1 ring-white/20 mb-1">
-            <Globe size={28} className="animate-pulse" />
+          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-[#2563EB] text-white shadow-xl shadow-[#2563EB]/30 ring-1 ring-white/20 mb-1">
+            <Globe size={28} />
           </div>
 
           <div className="flex items-center justify-center gap-2">
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-indigo-500/20 text-indigo-300 text-xs font-bold uppercase tracking-wider border border-indigo-400/30 backdrop-blur-md">
-              <Shield size={12} className="text-indigo-400" />
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#2563EB]/20 text-[#60A5FA] text-xs font-bold uppercase tracking-wider border border-[#2563EB]/30 backdrop-blur-md">
+              <Shield size={12} className="text-[#60A5FA]" />
               <span>SeyalPro Command Center</span>
             </div>
-            <div className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-500/15 text-emerald-300 text-xs font-semibold border border-emerald-500/30">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
+            <div className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-slate-800 text-slate-300 text-xs font-semibold border border-slate-700">
+              <span className="w-1.5 h-1.5 rounded-full bg-[#2563EB] animate-ping" />
               <span>2FA Secured</span>
             </div>
           </div>
@@ -258,7 +257,7 @@ export default function SuperAdminLoginPage() {
         <Card className="border border-slate-800 bg-slate-900/90 backdrop-blur-2xl shadow-2xl shadow-black/50 rounded-3xl overflow-hidden ring-1 ring-slate-700/50">
           <CardHeader className="bg-slate-950/60 border-b border-slate-800/80 px-6 py-4 flex items-center justify-between">
             <div className="flex items-center gap-2 text-xs font-bold text-slate-300 uppercase tracking-wider">
-              <Lock size={14} className="text-indigo-400" />
+              <Lock size={14} className="text-[#2563EB]" />
               <span>
                 {step === "credentials" ? "Step 1: Identity Verification" : "Step 2: Two-Factor Security Check"}
               </span>
@@ -276,7 +275,7 @@ export default function SuperAdminLoginPage() {
                 <div className="space-y-2">
                   <label className="text-xs font-bold text-slate-300 ml-1 uppercase tracking-wider flex items-center justify-between">
                     <span>Master Admin Email</span>
-                    <span className="text-[11px] text-indigo-400 normal-case font-medium">admin@seyalpro.com</span>
+                    <span className="text-[11px] text-[#60A5FA] normal-case font-medium">admin@seyalpro.com</span>
                   </label>
                   <Input
                     type="email"
@@ -284,7 +283,7 @@ export default function SuperAdminLoginPage() {
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     required
-                    className="h-11 bg-slate-950/70 border-slate-700 text-white placeholder:text-slate-600 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-xl transition-all"
+                    className="h-11 bg-slate-950/70 border-slate-700 text-white placeholder:text-slate-600 focus:border-[#2563EB] focus:ring-1 focus:ring-[#2563EB] rounded-xl transition-all"
                   />
                 </div>
 
@@ -298,7 +297,7 @@ export default function SuperAdminLoginPage() {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     required
-                    className="h-11 bg-slate-950/70 border-slate-700 text-white placeholder:text-slate-600 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-xl transition-all font-mono"
+                    className="h-11 bg-slate-950/70 border-slate-700 text-white placeholder:text-slate-600 focus:border-[#2563EB] focus:ring-1 focus:ring-[#2563EB] rounded-xl transition-all font-mono"
                   />
                 </div>
 
@@ -313,7 +312,7 @@ export default function SuperAdminLoginPage() {
                   type="submit"
                   block
                   disabled={loading}
-                  className="h-11 bg-gradient-to-r from-sky-500 via-indigo-600 to-indigo-700 hover:from-sky-400 hover:to-indigo-600 text-white font-bold text-sm shadow-lg shadow-indigo-600/30 rounded-xl transition-all active:scale-[0.98] flex items-center justify-center gap-2"
+                  className="h-11 bg-[#2563EB] hover:bg-[#1D4ED8] text-white font-bold text-sm shadow-md shadow-black/40 rounded-xl transition-all active:scale-[0.98] flex items-center justify-center gap-2"
                 >
                   {loading ? (
                     <Loader2 className="animate-spin" size={18} />
@@ -331,7 +330,7 @@ export default function SuperAdminLoginPage() {
             {step === "mfa_challenge" && (
               <div className="space-y-6 animate-in fade-in duration-300">
                 <div className="flex items-center justify-center">
-                  <div className="w-16 h-16 rounded-2xl bg-indigo-500/10 border border-indigo-500/30 flex items-center justify-center text-indigo-400 shadow-inner">
+                  <div className="w-16 h-16 rounded-2xl bg-[#2563EB]/15 border border-[#2563EB]/30 flex items-center justify-center text-[#60A5FA] shadow-inner">
                     <Smartphone size={32} className="animate-bounce" />
                   </div>
                 </div>
@@ -360,13 +359,13 @@ export default function SuperAdminLoginPage() {
                       value={digit}
                       onChange={(e) => handleOtpChange(idx, e.target.value)}
                       onKeyDown={(e) => handleOtpKeyDown(idx, e)}
-                      className="w-11 h-13 sm:w-12 sm:h-14 text-center text-xl sm:text-2xl font-black font-mono bg-slate-950/80 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all shadow-inner"
+                      className="w-11 h-13 sm:w-12 sm:h-14 text-center text-xl sm:text-2xl font-black font-mono bg-slate-950/80 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-[#2563EB] focus:border-transparent transition-all shadow-inner"
                     />
                   ))}
                 </div>
 
                 {error && (
-                  <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs font-medium flex items-start gap-2.5">
+                  <div className="p-3.5 rounded-xl bg-slate-800/80 border border-slate-700 text-rose-300 text-xs font-medium flex items-start gap-2.5">
                     <AlertTriangle size={16} className="text-rose-400 shrink-0 mt-0.5" />
                     <span className="leading-relaxed">{error}</span>
                   </div>
@@ -377,7 +376,7 @@ export default function SuperAdminLoginPage() {
                     onClick={() => submitOtp()}
                     block
                     disabled={loading || otpCode.join("").length !== 6}
-                    className="h-11 bg-gradient-to-r from-emerald-500 to-indigo-600 hover:from-emerald-400 hover:to-indigo-500 text-white font-bold text-sm shadow-lg shadow-emerald-500/20 rounded-xl transition-all active:scale-[0.98] flex items-center justify-center gap-2"
+                    className="h-11 bg-[#2563EB] hover:bg-[#1D4ED8] text-white font-bold text-sm shadow-lg shadow-[#2563EB]/20 rounded-xl transition-all active:scale-[0.98] flex items-center justify-center gap-2"
                   >
                     {loading ? <Loader2 className="animate-spin" size={18} /> : <span>Verify & Access Command Center</span>}
                   </Button>
@@ -400,8 +399,8 @@ export default function SuperAdminLoginPage() {
             {/* STEP 2B: FIRST TIME 2FA ENROLLMENT */}
             {step === "mfa_enroll" && (
               <div className="space-y-5 animate-in fade-in duration-300">
-                <div className="p-4 rounded-2xl bg-indigo-950/40 border border-indigo-500/30 text-center space-y-3">
-                  <p className="text-xs font-bold text-indigo-300 uppercase tracking-wider">
+                <div className="p-4 rounded-2xl bg-slate-900 border border-slate-700 text-center space-y-3">
+                  <p className="text-xs font-bold text-[#60A5FA] uppercase tracking-wider">
                     First-Time 2FA Activation Required
                   </p>
 
@@ -420,7 +419,7 @@ export default function SuperAdminLoginPage() {
                   {secretKey && (
                     <div className="space-y-1">
                       <p className="text-[11px] text-slate-400">Can't scan? Enter key manually:</p>
-                      <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-xs font-mono text-indigo-300 max-w-full truncate">
+                      <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-950 border border-slate-800 text-xs font-mono text-[#60A5FA] max-w-full truncate">
                         <span className="truncate">{secretKey}</span>
                         <button
                           type="button"
@@ -428,7 +427,7 @@ export default function SuperAdminLoginPage() {
                           className="hover:text-white transition-colors p-1"
                           title="Copy Secret Key"
                         >
-                          {copiedKey ? <Check size={14} className="text-emerald-400" /> : <Copy size={14} />}
+                          {copiedKey ? <Check size={14} className="text-[#60A5FA]" /> : <Copy size={14} />}
                         </button>
                       </div>
                     </div>
@@ -453,14 +452,14 @@ export default function SuperAdminLoginPage() {
                         value={digit}
                         onChange={(e) => handleOtpChange(idx, e.target.value)}
                         onKeyDown={(e) => handleOtpKeyDown(idx, e)}
-                        className="w-10 h-12 text-center text-xl font-bold font-mono bg-slate-950 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        className="w-10 h-12 text-center text-xl font-bold font-mono bg-slate-950 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
                       />
                     ))}
                   </div>
                 </div>
 
                 {error && (
-                  <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs font-medium">
+                  <div className="p-3 rounded-xl bg-slate-800 border border-slate-700 text-rose-300 text-xs font-medium">
                     {error}
                   </div>
                 )}
@@ -469,7 +468,7 @@ export default function SuperAdminLoginPage() {
                   onClick={() => submitOtp()}
                   block
                   disabled={loading || otpCode.join("").length !== 6}
-                  className="h-11 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-sm rounded-xl shadow-lg shadow-indigo-600/30"
+                  className="h-11 bg-[#2563EB] hover:bg-[#1D4ED8] text-white font-bold text-sm rounded-xl shadow-lg shadow-[#2563EB]/20"
                 >
                   {loading ? <Loader2 className="animate-spin" size={18} /> : "Activate 2FA & Enter Portal"}
                 </Button>

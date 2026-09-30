@@ -121,7 +121,7 @@ export function ExpenseAIAgent({
                 </div>
 
                 {/* Potential Monthly Savings */}
-                <div className="bg-gradient-to-br from-emerald-500/10 via-teal-500/5 to-white rounded-2xl p-5 border border-emerald-200/70 shadow-sm flex flex-col justify-between">
+                <div className="bg-gradient-to-br from-emerald-500/10 via-emerald-500/5 to-white rounded-2xl p-5 border border-emerald-200/70 shadow-sm flex flex-col justify-between">
                     <div className="flex items-center justify-between">
                         <span className="text-xs font-semibold text-emerald-700 uppercase tracking-wider">Identified Savings</span>
                         <TrendingDown className="w-5 h-5 text-emerald-600" />

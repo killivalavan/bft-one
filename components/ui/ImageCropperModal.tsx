@@ -245,17 +245,17 @@ export function ImageCropperModal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs animate-in fade-in">
-      <div className="bg-white rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl border border-zinc-200 flex flex-col max-h-[95vh]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/75 backdrop-blur-xs animate-in fade-in">
+      <div className="bg-white rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl border border-slate-200 flex flex-col max-h-[95vh]">
         {/* Modal Header */}
-        <div className="bg-gradient-to-r from-zinc-900 to-zinc-800 p-4 text-white flex items-center justify-between shrink-0">
+        <div className="bg-slate-900 p-4 text-white flex items-center justify-between shrink-0">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-xl bg-white/15 flex items-center justify-center">
-              <Crop className="w-4 h-4 text-emerald-400" />
+            <div className="w-8 h-8 rounded-xl bg-white/10 flex items-center justify-center">
+              <Crop className="w-4 h-4 text-blue-400" />
             </div>
             <div>
               <h3 className="text-sm font-bold text-white">{title}</h3>
-              <p className="text-[11px] text-zinc-400">
+              <p className="text-[11px] text-slate-400">
                 {cropType === "logo"
                   ? "Square (1:1) fixed crop. Drag and resize box to frame your logo."
                   : "Landscape (2.5:1) fixed crop. Drag and resize box to frame signature."}
@@ -264,7 +264,7 @@ export function ImageCropperModal({
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 text-zinc-400 hover:text-white rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
+            className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
@@ -313,7 +313,7 @@ export function ImageCropperModal({
                   width: `${crop.width}px`,
                   height: `${crop.height}px`,
                 }}
-                className={`absolute border-2 border-emerald-400 shadow-2xl cursor-move ${
+                className={`absolute border-2 border-[#2563EB] shadow-2xl cursor-move ${
                   cropType === "logo" ? "rounded-lg" : "rounded-md"
                 }`}
               >
@@ -326,34 +326,34 @@ export function ImageCropperModal({
                 {/* NW Handle */}
                 <div
                   onPointerDown={(e) => handlePointerDownResize(e, "nw")}
-                  className="absolute -left-2 -top-2 w-4 h-4 bg-white border-2 border-emerald-500 rounded-full cursor-nwse-resize shadow-md"
+                  className="absolute -left-2 -top-2 w-4 h-4 bg-white border-2 border-[#2563EB] rounded-full cursor-nwse-resize shadow-md"
                 />
                 {/* NE Handle */}
                 <div
                   onPointerDown={(e) => handlePointerDownResize(e, "ne")}
-                  className="absolute -right-2 -top-2 w-4 h-4 bg-white border-2 border-emerald-500 rounded-full cursor-nesw-resize shadow-md"
+                  className="absolute -right-2 -top-2 w-4 h-4 bg-white border-2 border-[#2563EB] rounded-full cursor-nesw-resize shadow-md"
                 />
                 {/* SW Handle */}
                 <div
                   onPointerDown={(e) => handlePointerDownResize(e, "sw")}
-                  className="absolute -left-2 -bottom-2 w-4 h-4 bg-white border-2 border-emerald-500 rounded-full cursor-nesw-resize shadow-md"
+                  className="absolute -left-2 -bottom-2 w-4 h-4 bg-white border-2 border-[#2563EB] rounded-full cursor-nesw-resize shadow-md"
                 />
                 {/* SE Handle */}
                 <div
                   onPointerDown={(e) => handlePointerDownResize(e, "se")}
-                  className="absolute -right-2 -bottom-2 w-4 h-4 bg-white border-2 border-emerald-500 rounded-full cursor-nwse-resize shadow-md"
+                  className="absolute -right-2 -bottom-2 w-4 h-4 bg-white border-2 border-[#2563EB] rounded-full cursor-nwse-resize shadow-md"
                 />
 
                 {/* Grid Overlay inside crop box */}
-                <div className="absolute inset-0 grid grid-cols-3 grid-rows-3 pointer-events-none border border-emerald-400/20">
-                  <div className="border-r border-b border-emerald-400/20" />
-                  <div className="border-r border-b border-emerald-400/20" />
-                  <div className="border-b border-emerald-400/20" />
-                  <div className="border-r border-b border-emerald-400/20" />
-                  <div className="border-r border-b border-emerald-400/20" />
-                  <div className="border-b border-emerald-400/20" />
-                  <div className="border-r border-emerald-400/20" />
-                  <div className="border-r border-emerald-400/20" />
+                <div className="absolute inset-0 grid grid-cols-3 grid-rows-3 pointer-events-none border border-[#2563EB]/20">
+                  <div className="border-r border-b border-[#2563EB]/20" />
+                  <div className="border-r border-b border-[#2563EB]/20" />
+                  <div className="border-b border-[#2563EB]/20" />
+                  <div className="border-r border-b border-[#2563EB]/20" />
+                  <div className="border-r border-b border-[#2563EB]/20" />
+                  <div className="border-b border-[#2563EB]/20" />
+                  <div className="border-r border-[#2563EB]/20" />
+                  <div className="border-r border-[#2563EB]/20" />
                   <div />
                 </div>
               </div>
@@ -366,26 +366,26 @@ export function ImageCropperModal({
         </div>
 
         {/* Quick Instructions & Dimension Badge */}
-        <div className="px-5 py-2.5 bg-zinc-50 border-t border-zinc-200 flex items-center justify-between text-xs text-zinc-600">
+        <div className="px-5 py-2.5 bg-slate-50 border-t border-slate-200 flex items-center justify-between text-xs text-slate-600">
           <div className="flex items-center gap-1.5 font-medium">
-            <span className="w-2 h-2 rounded-full bg-emerald-500" />
+            <span className="w-2 h-2 rounded-full bg-[#2563EB]" />
             <span>
               {cropType === "logo"
                 ? "Locked 1:1 Aspect Ratio (Square)"
                 : "Locked 2.5:1 Aspect Ratio (Landscape)"}
             </span>
           </div>
-          <span className="font-mono text-[11px] text-zinc-400">
+          <span className="font-mono text-[11px] text-slate-400">
             {Math.round(crop.width)} × {Math.round(crop.height)} px
           </span>
         </div>
 
         {/* Modal Actions */}
-        <div className="p-4 border-t border-zinc-200 bg-white flex items-center justify-end gap-2.5 shrink-0">
+        <div className="p-4 border-t border-slate-200 bg-white flex items-center justify-end gap-2.5 shrink-0">
           <Button
             variant="outline"
             onClick={onClose}
-            className="text-xs font-bold rounded-xl"
+            className="text-xs font-semibold rounded-xl"
           >
             Cancel
           </Button>
@@ -393,7 +393,7 @@ export function ImageCropperModal({
           <Button
             onClick={handleApplyCrop}
             disabled={!imageLoaded}
-            className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-md flex items-center gap-1.5 cursor-pointer"
+            className="px-5 py-2.5 bg-[#2563EB] hover:bg-[#1D4ED8] text-white font-semibold text-xs rounded-xl shadow-xs flex items-center gap-1.5 cursor-pointer"
           >
             <Check className="w-4 h-4" />
             <span>Crop &amp; Apply Image</span>

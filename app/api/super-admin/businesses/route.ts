@@ -128,6 +128,7 @@ export async function POST(request: Request) {
       geofenceEnabled = true,
       enabledModules = {
         billing: true,
+        invoices: true,
         sales: true,
         expenses: true,
         timesheet: true,
