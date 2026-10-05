@@ -124,9 +124,11 @@ body {
   box-shadow: inset 0 0 0 2px rgba(255,255,255,0.6);
 }
 
-/* Utility: hide scrollbar on category chips */
-.no-scrollbar::-webkit-scrollbar { display: none; }
-.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+/* Utility: hide scrollbars */
+.no-scrollbar::-webkit-scrollbar,
+.scrollbar-none::-webkit-scrollbar { display: none; }
+.no-scrollbar,
+.scrollbar-none { -ms-overflow-style: none; scrollbar-width: none; }
 
 /* Tiny pop animation for counters */
 @keyframes pop {
@@ -147,3 +149,10 @@ input[type="number"] {
 }
 
 .animate-pop { animation: pop 180ms ease-out; }
+
+/* Toast countdown progress bar */
+@keyframes toast-progress {
+  from { width: 100%; }
+  to { width: 0%; }
+}
+

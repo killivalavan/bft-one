@@ -9,12 +9,14 @@ import { HomeHeader } from "@/components/home/HomeHeader";
 import { DashboardGrid, DashboardItem } from "@/components/home/DashboardGrid";
 import {
   CalendarCheck2, Coffee, Shield,
-  CalendarDays, Wallet, Boxes, Bell, Contact, Banknote, CalendarPlus, TrendingDown, Receipt, FileText
+  CalendarDays, Wallet, Boxes, Bell, Contact, Banknote, CalendarPlus, TrendingDown, Receipt, FileText, TrendingUp
 } from "lucide-react";
+
+import { AdminDashboardView } from "@/components/admin-dashboard/AdminDashboardView";
 
 export default function Home() {
   const { user } = useUser();
-  const { flags } = useProfile();
+  const { flags, loading: profileLoading } = useProfile();
   const { isModuleEnabled } = useTenant();
   const [userEmail, setUserEmail] = useState<string | null>(null);
 
@@ -70,11 +72,20 @@ export default function Home() {
     }] : []),
     {
       label: "Daily Sales",
+      href: "/daily-sales",
+      icon: TrendingUp,
+      category: "Finance",
+      badge: "Itemized",
+      colorTheme: "green" as const,
+      description: "Itemized sales, units sold, peak velocity & billing analytics."
+    },
+    {
+      label: "Cash Settlement",
       href: "/sales",
       icon: Banknote,
       category: "Finance",
-      colorTheme: "green" as const,
-      description: "Record daily cash & UPI sales settlements."
+      colorTheme: "cyan" as const,
+      description: "Record daily drawer cash & UPI closing settlements."
     },
     {
       label: "Daily Expense",
@@ -124,13 +135,6 @@ export default function Home() {
       badge: "BOM & POs",
       colorTheme: "blue" as const,
       description: "Raw items master, recipe formulas, procurement & audits."
-    }, {
-      label: "Stock Manager",
-      href: "/stock",
-      icon: Boxes,
-      category: "Operations",
-      colorTheme: "purple" as const,
-      description: "Quick POS finished goods counter & alerts."
     }] : []),
     {
       label: "Billing / POS",
@@ -152,6 +156,16 @@ export default function Home() {
     }
   ];
 
+  // If Admin Logged In: Render PetPooja-inspired Executive Store Command Center with left slide navbar
+  if (flags?.isAdmin) {
+    return (
+      <div className="min-h-screen">
+        <AdminDashboardView baseItems={baseItems} />
+      </div>
+    );
+  }
+
+  // Standard Staff View
   return (
     <div className="min-h-screen pb-20 space-y-6">
       <HomeHeader name={userEmail} />

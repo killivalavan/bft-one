@@ -8,6 +8,14 @@ import { useToast } from "@/components/ui/Toast";
 import { Input } from "@/components/ui/Input";
 import { ChevronLeft, Phone, ShieldAlert, User, Store, Search } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
+import { useTenant } from "@/lib/context/TenantContext";
+import { SyncStatusBadge } from "@/components/offline/SyncStatusBadge";
+import {
+    STORES,
+    getItemsByTenant,
+    bulkPutItems,
+    LocalCustomer,
+} from "@/lib/offline/db";
 
 type Employee = {
     id: string;
@@ -27,6 +35,7 @@ type ExternalContact = {
 
 export default function ContactsPage() {
     const { user } = useUser();
+    const { business } = useTenant();
     const { toast } = useToast();
 
     const [employees, setEmployees] = useState<Employee[]>([]);
@@ -39,28 +48,51 @@ export default function ContactsPage() {
 
     useEffect(() => {
         if (user) loadData();
-    }, [user]);
+    }, [user, business?.id]);
 
     async function loadData() {
         setLoading(true);
+        const bizId = business?.id || "default";
+
+        // 1. Instant Warm Start from IndexedDB
+        try {
+            const localContacts = await getItemsByTenant<LocalCustomer>(STORES.customers, bizId);
+            if (localContacts.length > 0) {
+                const manualEmps = localContacts.filter(c => (c.role || "").trim().toLowerCase() === 'employee');
+                const emergency = localContacts.filter(c => (c.role || "").trim().toLowerCase() === 'emergency');
+                const otherContacts = localContacts.filter(c =>
+                    (c.role || "").trim().toLowerCase() !== 'employee' &&
+                    (c.role || "").trim().toLowerCase() !== 'owner' &&
+                    (c.role || "").trim().toLowerCase() !== 'emergency'
+                );
+
+                setOthers(otherContacts.map(c => ({ id: c.id, name: c.name, role: c.role || "Vendor", phone: c.phone || "" })));
+                setEmergencyContacts(emergency.map(c => ({ id: c.id, name: c.name, role: c.role || "Emergency", phone: c.phone || "" })));
+            }
+        } catch {}
+
         try {
             // 1. Fetch System Employees (Profiles)
-            const { data: empData, error: empError } = await supabaseClient
+            let empQuery = supabaseClient
                 .from("profiles")
                 .select("id, email, full_name, contact_number, is_admin")
                 .order("email");
+            if (business?.id) empQuery = empQuery.eq("business_id", business.id);
 
+            const { data: empData, error: empError } = await empQuery;
             if (empError) throw empError;
 
             // Filter out admins from the system employee list
             const systemEmps = ((empData || []) as Employee[]).filter(e => !e.is_admin && !e.email?.toLowerCase().includes('admin'));
 
             // 2. Fetch External Contacts
-            const { data: extData, error: extError } = await supabaseClient
+            let extQuery = supabaseClient
                 .from("external_contacts")
                 .select("*")
                 .order("role", { ascending: true });
+            if (business?.id) extQuery = extQuery.eq("business_id", business.id);
 
+            const { data: extData, error: extError } = await extQuery;
             if (extError) {
                 console.warn("Could not fetch external contacts", extError);
             }
@@ -68,12 +100,12 @@ export default function ContactsPage() {
             const allExt = extData || [];
 
             // Separate External Contacts
-            const manualEmps = allExt.filter(c => c.role.trim().toLowerCase() === 'employee');
-            const emergency = allExt.filter(c => c.role.trim().toLowerCase() === 'emergency');
+            const manualEmps = allExt.filter(c => c.role?.trim().toLowerCase() === 'employee');
+            const emergency = allExt.filter(c => c.role?.trim().toLowerCase() === 'emergency');
             const otherContacts = allExt.filter(c =>
-                c.role.trim().toLowerCase() !== 'employee' &&
-                c.role.trim().toLowerCase() !== 'owner' &&
-                c.role.trim().toLowerCase() !== 'emergency'
+                c.role?.trim().toLowerCase() !== 'employee' &&
+                c.role?.trim().toLowerCase() !== 'owner' &&
+                c.role?.trim().toLowerCase() !== 'emergency'
             );
 
             // Merge System + Manual Employees
@@ -81,11 +113,11 @@ export default function ContactsPage() {
                 ...systemEmps,
                 ...manualEmps.map(me => ({
                     id: me.id,
-                    email: "Manual Entry", // Placeholder or hidden
+                    email: "Manual Entry",
                     full_name: me.name,
                     contact_number: me.phone,
                     is_admin: false,
-                    is_manual: true // Flag to distinguish if needed
+                    is_manual: true
                 }))
             ];
 
@@ -93,8 +125,23 @@ export default function ContactsPage() {
             setOthers(otherContacts);
             setEmergencyContacts(emergency);
 
+            // Save to IndexedDB
+            const localCusts: LocalCustomer[] = allExt.map(c => ({
+                id: c.id,
+                business_id: bizId,
+                name: c.name,
+                phone: c.phone,
+                role: c.role,
+                updated_at: c.updated_at,
+            }));
+            bulkPutItems(STORES.customers, localCusts).catch(() => {});
+
         } catch (e: any) {
-            toast({ title: "Error loading contacts", description: e.message, variant: "error" });
+            if (typeof navigator !== "undefined" && !navigator.onLine) {
+                // Keep local cached contacts when offline
+            } else {
+                toast({ title: "Error loading contacts", description: e.message, variant: "error" });
+            }
         } finally {
             setLoading(false);
         }
@@ -150,7 +197,10 @@ export default function ContactsPage() {
                 </div>
 
                 <div className="space-y-4">
-                    <h1 className="text-2xl font-bold text-[#0F172A] tracking-tight">Contacts Directory</h1>
+                    <div className="flex items-center gap-3">
+                        <h1 className="text-2xl font-bold text-[#0F172A] tracking-tight">Contacts Directory</h1>
+                        <SyncStatusBadge />
+                    </div>
 
                     {/* --- Owner Contacts (Static Section) --- */}
                     <div className="space-y-3">

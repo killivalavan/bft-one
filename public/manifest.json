@@ -1,22 +1,17 @@
 {
-    "name": "SeyalPro",
-    "short_name": "SeyalPro",
-    "description": "ShopOps Management System",
-    "start_url": "/",
-    "display": "standalone",
-    "background_color": "#fafafa",
-    "theme_color": "#0284c7",
-    "orientation": "portrait",
-    "icons": [
-        {
-            "src": "/icon-192.png",
-            "sizes": "192x192",
-            "type": "image/png"
-        },
-        {
-            "src": "/icon-512.png",
-            "sizes": "512x512",
-            "type": "image/png"
-        }
-    ]
+  "name": "SeyalPro - Retail & Cafe POS",
+  "short_name": "SeyalPro",
+  "description": "Offline-First Point of Sale, Multi-Tenant Inventory & Business Operations Platform",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#F8FAFC",
+  "theme_color": "#2563EB",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "64x64 32x32 24x24 16x16",
+      "type": "image/x-icon"
+    }
+  ]
 }

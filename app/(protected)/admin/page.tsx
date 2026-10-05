@@ -364,7 +364,7 @@ export default function AdminPage() {
       const baseSalary = prof.base_salary_cents || 0;
       const netPay = baseSalary + totalAdditions - totalDeductions;
 
-      await generatePayslipPdf({
+      const result = await generatePayslipPdf({
         userEmail: prof.email,
         monthLabel,
         baseSalary,
@@ -377,9 +377,11 @@ export default function AdminPage() {
         logoUrl: business?.logo_url || "/logo_payslip.jpg",
       });
       toast({ title: `Payslip downloaded for ${prof.email}`, variant: "success" });
+      return result;
     } catch (e: any) {
       console.error(e);
       toast({ title: "Payslip failed", description: e.message, variant: "error" });
+      return null;
     }
   }
 

@@ -5,15 +5,31 @@ import { supabaseClient } from "@/lib/supabaseClient";
 import { useCart, totalCents, CartItem } from "@/store/cart";
 import { useToast } from "@/components/ui/Toast";
 import { cn } from "@/lib/utils/cn";
-import { useTenant } from "@/lib/context/TenantContext";
+import { useTenant, DEFAULT_BUSINESS } from "@/lib/context/TenantContext";
+import Link from "next/link";
+import { useProfile } from "@/lib/hooks/useProfile";
 import {
   Search, X, Plus, Minus, Trash2, ShoppingBag, Receipt,
   CreditCard, QrCode, Banknote, Printer, Download, FileText,
-  Grid, List, ArrowRight,
-  Hash, Coffee, Zap, CheckCircle2, Phone, MessageCircle, Copy, Check, ExternalLink
+  Grid, List, ArrowRight, ArrowLeft,
+  Hash, Coffee, Zap, CheckCircle2, Phone, MessageCircle, Copy, Check, ExternalLink,
+  Boxes
 } from "lucide-react";
 import { generateBillPdf } from "@/lib/utils/billPdf";
 import { InvoiceDetailsModal } from "@/components/billing/InvoiceDetailsModal";
+import { SyncStatusBadge } from "@/components/offline/SyncStatusBadge";
+import {
+  STORES,
+  getItemsByTenant,
+  bulkPutItems,
+  putItem,
+  LocalProduct,
+  LocalCategory,
+  LocalProductStock,
+  LocalOrder,
+  LocalOrderItem,
+} from "@/lib/offline/db";
+import { enqueueSyncOperation } from "@/lib/offline/syncEngine";
 
 // ==========================================
 // Types
@@ -247,6 +263,7 @@ const DUMMY_PRODUCTS: Product[] = [
 export default function BillingPage() {
   const { toast } = useToast();
   const { business } = useTenant();
+  const { flags } = useProfile();
 
   // State
   const [categories, setCategories] = useState<Category[]>([]);
@@ -255,6 +272,7 @@ export default function BillingPage() {
   const [activeCat, setActiveCat] = useState<string>("cat-all");
   const [searchQuery, setSearchQuery] = useState("");
   const [viewMode, setViewMode] = useState<"grid" | "compact">("grid");
+  const [enforceInventory, setEnforceInventory] = useState<boolean>(false);
 
   // Cart & Order State
   const items = useCart(s => s.items);
@@ -283,10 +301,59 @@ export default function BillingPage() {
 
   const searchInputRef = useRef<HTMLInputElement>(null);
 
-  // 1. Fetch DB data or fallback to mock data
+  // 1. Fetch data: First load instantly from local IndexedDB, then refresh from cloud if online
   useEffect(() => {
     let isMounted = true;
+    const bizId = business?.id || "default";
+
     (async () => {
+      // Step A: Instant Local IndexedDB Warm Start
+      try {
+        const [localCats, localProds, localStocks] = await Promise.all([
+          getItemsByTenant<LocalCategory>(STORES.categories, bizId),
+          getItemsByTenant<LocalProduct>(STORES.products, bizId),
+          getItemsByTenant<LocalProductStock>(STORES.product_stocks, bizId),
+        ]);
+
+        if (isMounted && localProds.length > 0) {
+          const formattedCats: Category[] = [
+            { id: "cat-all", name: "All Items", icon_emoji: "✨" },
+            ...localCats.map((c: any) => ({
+              id: c.id,
+              name: c.name,
+              icon_url: c.icon_url,
+              icon_emoji: c.icon_emoji || "📦",
+            })),
+          ];
+          setCategories(formattedCats);
+          setProducts(
+            localProds.map((p) => ({
+              id: p.id,
+              name: p.name,
+              price_cents: p.price_cents,
+              image_url: p.image_url ?? null,
+              category_id: p.category_id,
+              unit_label: p.unit_label ?? null,
+              subtitle: p.subtitle ?? null,
+            }))
+          );
+
+          const stockMap: Record<string, Stock> = {};
+          localStocks.forEach((s) => {
+            stockMap[s.product_id] = {
+              product_id: s.product_id,
+              max_qty: s.max_qty,
+              available_qty: s.available_qty,
+              notify_at_count: s.notify_at_count,
+            };
+          });
+          setStocks(stockMap);
+        }
+      } catch (idbErr) {
+        console.warn("[Billing] Local IDB warm start notice:", idbErr);
+      }
+
+      // Step B: Cloud Refresh (if online)
       try {
         let catsQuery = supabaseClient.from("categories").select("*").order("name");
         if (business?.id) catsQuery = catsQuery.eq("business_id", business.id);
@@ -297,16 +364,13 @@ export default function BillingPage() {
         let stkQuery = supabaseClient.from("product_stocks").select("product_id,max_qty,available_qty,notify_at_count");
         if (business?.id) stkQuery = stkQuery.eq("business_id", business.id);
 
-        const [catsRes, prodsRes, stkRes] = await Promise.all([
-          catsQuery,
-          prodsQuery,
-          stkQuery
-        ]);
+        const [catsRes, prodsRes, stkRes] = await Promise.all([catsQuery, prodsQuery, stkQuery]);
 
         if (!isMounted) return;
 
         const dbCats = catsRes.data || [];
         const dbProds = prodsRes.data || [];
+        const dbStocks = stkRes.data || [];
 
         if (dbProds.length > 0) {
           const formattedCats: Category[] = [
@@ -315,26 +379,62 @@ export default function BillingPage() {
               id: c.id,
               name: c.name,
               icon_url: c.icon_url,
-              icon_emoji: "📦"
-            }))
+              icon_emoji: c.icon_emoji || "📦",
+            })),
           ];
           setCategories(formattedCats);
           setProducts(dbProds);
+
+          // Save to local IndexedDB for future offline usage
+          const idbCats: LocalCategory[] = dbCats.map((c: any) => ({
+            id: c.id,
+            business_id: bizId,
+            name: c.name,
+            icon_url: c.icon_url,
+            icon_emoji: c.icon_emoji || "📦",
+            updated_at: c.updated_at,
+          }));
+          const idbProds: LocalProduct[] = dbProds.map((p: any) => ({
+            id: p.id,
+            business_id: bizId,
+            name: p.name,
+            price_cents: p.price_cents,
+            category_id: p.category_id,
+            unit_label: p.unit_label,
+            subtitle: p.subtitle,
+            image_url: p.image_url,
+            active: p.active !== false,
+            updated_at: p.updated_at,
+          }));
+          const idbStocks: LocalProductStock[] = dbStocks.map((s: any) => ({
+            product_id: s.product_id,
+            business_id: bizId,
+            available_qty: Number(s.available_qty) || 0,
+            max_qty: Number(s.max_qty) || 0,
+            notify_at_count: s.notify_at_count,
+            updated_at: s.updated_at,
+          }));
+
+          bulkPutItems(STORES.categories, idbCats).catch(() => {});
+          bulkPutItems(STORES.products, idbProds).catch(() => {});
+          bulkPutItems(STORES.product_stocks, idbStocks).catch(() => {});
         } else {
           setCategories(DUMMY_CATEGORIES);
           setProducts(DUMMY_PRODUCTS);
         }
 
         const map: Record<string, Stock> = {};
-        (stkRes.data || []).forEach((s: any) => { map[s.product_id] = s; });
+        dbStocks.forEach((s: any) => {
+          map[s.product_id] = s;
+        });
 
-        DUMMY_PRODUCTS.forEach(p => {
+        DUMMY_PRODUCTS.forEach((p) => {
           if (!map[p.id]) {
             map[p.id] = {
               product_id: p.id,
               max_qty: 100,
               available_qty: p.id === "demo-t4" ? 3 : 50,
-              notify_at_count: 5
+              notify_at_count: 5,
             };
           }
         });
@@ -342,12 +442,15 @@ export default function BillingPage() {
         setStocks(map);
       } catch (e: any) {
         if (!isMounted) return;
-        setCategories(DUMMY_CATEGORIES);
-        setProducts(DUMMY_PRODUCTS);
+        // If DB query fails and we didn't already have local products, fallback to demo products
+        setProducts((prev) => (prev.length > 0 ? prev : DUMMY_PRODUCTS));
+        setCategories((prev) => (prev.length > 0 ? prev : DUMMY_CATEGORIES));
       }
     })();
 
-    return () => { isMounted = false; };
+    return () => {
+      isMounted = false;
+    };
   }, [business?.id]);
 
   // Keyboard shortcut listener ('/' to search, 'Escape' to clear search)
@@ -366,8 +469,36 @@ export default function BillingPage() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
+  // Load Inventory enforcement preference from localStorage
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("bftone_enforce_inventory");
+      if (saved !== null) {
+        setEnforceInventory(saved === "true");
+      }
+    } catch { }
+  }, []);
+
+  function toggleInventoryEnforcement() {
+    const nextVal = !enforceInventory;
+    setEnforceInventory(nextVal);
+    try {
+      localStorage.setItem("bftone_enforce_inventory", String(nextVal));
+    } catch { }
+    toast({
+      title: nextVal ? "Inventory Stock Enforced 📦" : "Fast Billing Mode (Stock Off) ⚡",
+      description: nextVal
+        ? "Items with zero stock will be marked as Sold Out and prevented from being added."
+        : "Unrestricted billing enabled. You can bill any item regardless of stock counts.",
+      variant: nextVal ? "info" : "success"
+    });
+  }
+
   // Stock status helper
   function statusFor(pid: string) {
+    if (!enforceInventory) {
+      return { low: false, oos: false, available: 999 };
+    }
     const s = stocks[pid];
     if (!s) return { low: false, oos: false, available: 99 };
     const low = (s.notify_at_count ?? 0) > 0 && s.available_qty <= (s.notify_at_count as number) && s.available_qty > 0;
@@ -469,7 +600,7 @@ ${order.taxCents > 0 ? `🏛️ *GST (5%):* ₹${(order.taxCents / 100).toFixed(
     });
   }
 
-  // Submit and Complete Order Directly
+  // Submit and Complete Order (Offline-First: saves locally, updates stock immediately, enqueues sync)
   async function submitOrder() {
     if (cartList.length === 0) {
       toast({ title: "Cart is empty", description: "Add products before checkout", variant: "error" });
@@ -478,45 +609,106 @@ ${order.taxCents > 0 ? `🏛️ *GST (5%):* ₹${(order.taxCents / 100).toFixed(
 
     setIsSubmitting(true);
     try {
-      const { data: { user } } = await supabaseClient.auth.getUser();
+      const { data: { user } } = await supabaseClient.auth.getUser().catch(() => ({ data: { user: null } }));
+      const bizId = (business?.id && business.id !== "default") ? business.id : DEFAULT_BUSINESS.id;
+      const orderRecordId = crypto.randomUUID();
+      const displayOrderId = "ORD-" + orderRecordId.slice(0, 8).toUpperCase();
 
-      let orderRecordId = "ORD-" + Math.floor(100000 + Math.random() * 900000);
+      const orderPayload: LocalOrder = {
+        id: orderRecordId,
+        user_id: user?.id || null,
+        total_cents: finalTotalCents,
+        subtotal_cents: rawSubtotalCents,
+        tax_cents: taxCents,
+        status: "completed",
+        business_id: bizId,
+        payment_mode: (paymentMode || "cash").toLowerCase(),
+        customer_name: customerName?.trim() || "Walk-in Guest",
+        customer_phone: customerPhone?.trim() || null,
+        table_number: tableNumber?.trim() || null,
+        created_at: new Date().toISOString(),
+        is_offline: typeof navigator !== "undefined" ? !navigator.onLine : false,
+      };
 
-      if (user && business?.id) {
-        const { data: order, error } = await supabaseClient.from("orders")
-          .insert({
-            user_id: user.id,
-            total_cents: finalTotalCents,
-            status: "completed",
-            business_id: business.id
-          })
-          .select("*").single();
+      const rows: LocalOrderItem[] = cartList.map((i) => ({
+        id: crypto.randomUUID(),
+        order_id: orderRecordId,
+        product_id: i.product_id,
+        qty: i.qty,
+        price_cents: i.price_cents,
+        business_id: bizId,
+      }));
 
-        if (!error && order?.id) {
-          orderRecordId = order.id;
-          const rows = cartList.map(i => ({
-            order_id: order.id,
-            product_id: i.product_id,
-            qty: i.qty,
-            price_cents: i.price_cents,
-            business_id: business.id
-          }));
-          await supabaseClient.from("order_items").insert(rows);
+      // 1. Save locally to IndexedDB immediately
+      await putItem<LocalOrder>(STORES.orders, orderPayload);
+      await bulkPutItems<LocalOrderItem>(STORES.order_items, rows);
 
-          // Stock adjustment
-          try {
-            await fetch('/api/stock/adjust', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ items: rows })
-            });
-          } catch { }
-        }
+      // 2. Adjust local stocks immediately in IndexedDB & React state
+      const updatedStockMap = { ...stocks };
+      for (const item of cartList) {
+        const cur = updatedStockMap[item.product_id] || {
+          product_id: item.product_id,
+          max_qty: 100,
+          available_qty: 100,
+        };
+        const nextAvailable = Math.max(0, (cur.available_qty || 0) - item.qty);
+        const updatedStock: LocalProductStock = {
+          product_id: item.product_id,
+          business_id: bizId,
+          available_qty: nextAvailable,
+          max_qty: cur.max_qty || 100,
+          notify_at_count: cur.notify_at_count,
+          updated_at: new Date().toISOString(),
+        };
+        updatedStockMap[item.product_id] = updatedStock;
+        await putItem<LocalProductStock>(STORES.product_stocks, updatedStock).catch(() => {});
       }
+      setStocks(updatedStockMap);
+
+      // 3. Enqueue idempotent synchronization mutations
+      await enqueueSyncOperation({
+        businessId: bizId,
+        tableName: "orders",
+        action: "INSERT",
+        payload: {
+          id: orderPayload.id,
+          user_id: orderPayload.user_id,
+          total_cents: orderPayload.total_cents,
+          subtotal_cents: orderPayload.subtotal_cents,
+          tax_cents: orderPayload.tax_cents,
+          status: orderPayload.status,
+          business_id: orderPayload.business_id,
+          payment_mode: orderPayload.payment_mode,
+          customer_name: orderPayload.customer_name,
+          customer_phone: orderPayload.customer_phone,
+          table_number: orderPayload.table_number,
+          created_at: orderPayload.created_at,
+        },
+        customId: orderRecordId,
+      });
+
+      await enqueueSyncOperation({
+        businessId: bizId,
+        tableName: "order_items",
+        action: "INSERT",
+        payload: rows,
+      });
+
+      await enqueueSyncOperation({
+        businessId: bizId,
+        tableName: "stock_adjust",
+        action: "RPC",
+        payload: {
+          items: rows.map((r) => ({
+            product_id: r.product_id,
+            qty: r.qty,
+          })),
+        },
+      });
 
       // Prepare completed receipt
       const receiptData: CompletedOrder = {
-        orderId: orderRecordId.slice(0, 10).toUpperCase(),
+        orderId: displayOrderId,
         items: [...cartList],
         subtotalCents: rawSubtotalCents,
         taxCents,
@@ -525,7 +717,7 @@ ${order.taxCents > 0 ? `🏛️ *GST (5%):* ₹${(order.taxCents / 100).toFixed(
         customerName: customerName || "Walk-in Guest",
         customerPhone: customerPhone || "",
         tableNumber: tableNumber || "",
-        date: new Date().toLocaleString()
+        date: new Date().toLocaleString(),
       };
 
       setCompletedOrder(receiptData);
@@ -539,37 +731,49 @@ ${order.taxCents > 0 ? `🏛️ *GST (5%):* ₹${(order.taxCents / 100).toFixed(
       setCashTendered("");
       setShowMobileCartSheet(false);
 
-      toast({ title: "Order Completed! 🎉", description: `Paid ₹${(finalTotalCents / 100).toFixed(2)} via ${paymentMode.toUpperCase()}`, variant: "success" });
+      toast({
+        title: "Order Completed! 🎉",
+        description: `Paid ₹${(finalTotalCents / 100).toFixed(2)} via ${paymentMode.toUpperCase()} (Saved locally & queued for sync)`,
+        variant: "success",
+      });
     } catch (e: any) {
-      toast({ title: "Checkout Error", description: e?.message || "Failed to process order", variant: "error" });
+      toast({
+        title: "Checkout Error",
+        description: e?.message || "Failed to process order",
+        variant: "error",
+      });
     } finally {
       setIsSubmitting(false);
     }
   }
 
   return (
-    <div className="-mx-3 sm:-mx-6 lg:-mx-8 -my-2 sm:-my-4 min-h-[calc(100vh-5rem)] bg-[#F8FAFC] flex flex-col">
+    <div className="h-full w-full max-h-screen bg-[#F8FAFC] flex flex-col overflow-hidden select-none">
       {/* ======================================================== */}
       {/* 1. TOP RESPONSIVE POS HEADER BAR                         */}
       {/* ======================================================== */}
-      <header className="bg-white border-b border-slate-200 sticky top-0 z-30 px-3 sm:px-6 py-2.5 shadow-xs">
+      <header className="bg-white border-b border-slate-200/90 shrink-0 z-30 px-3 sm:px-6 py-3 shadow-2xs">
         <div className="flex items-center justify-between gap-3">
-          {/* Left: Terminal & Business Badge */}
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-10 h-10 rounded-xl bg-[#EFF6FF] text-[#2563EB] border border-[#2563EB]/20 flex items-center justify-center font-bold shadow-xs shrink-0">
-              <Zap className="w-5 h-5" />
+          {/* Left: Exit/Back button + Terminal & Business Badge */}
+          <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
+            <Link
+              href={flags?.isAdmin ? "/admin" : "/"}
+              className="flex items-center justify-center w-9 h-9 rounded-xl bg-slate-100 hover:bg-slate-200 active:bg-slate-300 text-slate-700 transition-colors shrink-0"
+              title={flags?.isAdmin ? "Exit POS to Admin Dashboard" : "Exit POS to Home"}
+            >
+              <ArrowLeft className="w-4 h-4" />
+            </Link>
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-[#EFF6FF] text-[#2563EB] border border-[#2563EB]/20 flex items-center justify-center font-bold shadow-xs shrink-0">
+              <Zap className="w-4 h-4 sm:w-5 sm:h-5" />
             </div>
             <div className="min-w-0">
               <div className="flex items-center gap-2">
-                <h1 className="text-base sm:text-lg font-bold text-slate-900 leading-tight truncate">
+                <h1 className="text-sm sm:text-base font-bold text-slate-900 leading-tight truncate">
                   {business?.name || "SeyalPro POS Terminal"}
                 </h1>
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                  Live Sync
-                </span>
+                <SyncStatusBadge />
               </div>
-              <p className="text-xs text-slate-500 hidden sm:block">
+              <p className="text-[11px] text-slate-500 hidden sm:block">
                 Express Billing Counter • Currency: ₹ (INR)
               </p>
             </div>
@@ -600,6 +804,36 @@ ${order.taxCents > 0 ? `🏛️ *GST (5%):* ₹${(order.taxCents / 100).toFixed(
 
           {/* Right: Quick Actions */}
           <div className="flex items-center gap-1.5 sm:gap-2">
+            {/* Inventory Enforcement Toggle */}
+            <button
+              onClick={toggleInventoryEnforcement}
+              className={cn(
+                "flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-bold border transition-all cursor-pointer shadow-xs active:scale-95 select-none",
+                enforceInventory
+                  ? "bg-amber-50 text-amber-900 border-amber-300 hover:bg-amber-100"
+                  : "bg-emerald-50 text-emerald-900 border-emerald-300 hover:bg-emerald-100"
+              )}
+              title={
+                enforceInventory
+                  ? "Stock Enforced: Zero-stock items cannot be billed"
+                  : "Fast Billing: Bill freely without stock restrictions"
+              }
+            >
+              {enforceInventory ? (
+                <>
+                  <Boxes className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                  <span className="hidden sm:inline text-amber-700 font-semibold">Stock:</span>
+                  <span className="text-amber-800 font-bold">Enforced</span>
+                </>
+              ) : (
+                <>
+                  <Zap className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                  <span className="hidden sm:inline text-emerald-700 font-semibold">Stock:</span>
+                  <span className="text-emerald-800 font-bold">Fast (Off)</span>
+                </>
+              )}
+            </button>
+
             {/* View Mode Toggle */}
             <div className="hidden lg:flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200">
               <button
@@ -666,13 +900,13 @@ ${order.taxCents > 0 ? `🏛️ *GST (5%):* ₹${(order.taxCents / 100).toFixed(
       {/* ======================================================== */}
       {/* 2. MAIN FULL-WIDTH TWO-COLUMN POS WORKSPACE              */}
       {/* ======================================================== */}
-      <div className="flex-1 flex flex-col lg:flex-row min-w-0">
+      <div className="flex-1 min-h-0 flex flex-col lg:flex-row min-w-0 overflow-hidden">
         {/* ========================================== */}
         {/* LEFT COLUMN: Catalog & Categories         */}
         {/* ========================================== */}
-        <main className="flex-1 min-w-0 p-3 sm:p-5 flex flex-col gap-3.5">
+        <main className="flex-1 min-w-0 min-h-0 p-3 sm:p-5 flex flex-col gap-3.5 overflow-hidden">
           {/* Categories Horizontal Carousel */}
-          <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1 pt-0.5">
+          <div className="shrink-0 flex items-center gap-2 overflow-x-auto no-scrollbar pb-1 pt-0.5">
             {categories.map(cat => {
               const active = activeCat === cat.id;
               const count = cat.id === "cat-all"
@@ -706,8 +940,9 @@ ${order.taxCents > 0 ? `🏛️ *GST (5%):* ₹${(order.taxCents / 100).toFixed(
           </div>
 
           {/* ========================================== */}
-          {/* PRODUCT CARDS GRID                        */}
+          {/* PRODUCT CARDS SCROLL REGION               */}
           {/* ========================================== */}
+          <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain no-scrollbar sm:pr-1 pb-24 lg:pb-4">
           {filteredProducts.length === 0 ? (
             <div className="flex-1 flex flex-col items-center justify-center p-12 bg-white rounded-2xl border border-zinc-200 text-center">
               <div className="w-14 h-14 rounded-full bg-zinc-100 flex items-center justify-center text-zinc-400 mb-3">
@@ -937,37 +1172,43 @@ ${order.taxCents > 0 ? `🏛️ *GST (5%):* ₹${(order.taxCents / 100).toFixed(
               })}
             </div>
           )}
+          </div>
         </main>
 
         {/* ======================================================== */}
-        {/* RIGHT COLUMN: DESKTOP CHECKOUT & BILLING TERMINAL PANEL  */}
+        {/* RIGHT COLUMN: STICKY CHECKOUT & BILLING TERMINAL PANEL  */}
         {/* ======================================================== */}
-        <aside className="hidden lg:flex w-[380px] xl:w-[420px] 2xl:w-[460px] bg-white border-l border-slate-200 flex-col shrink-0 shadow-sm">
-          {/* Terminal Header */}
-          <div className="p-4 border-b border-slate-200 bg-slate-50/70 space-y-2">
+        <aside className="hidden lg:flex w-[390px] xl:w-[430px] 2xl:w-[470px] bg-white border-l border-slate-200/90 flex-col shrink-0 h-full overflow-hidden shadow-sm">
+          {/* Terminal Header with generous spacing below search navbar */}
+          <div className="shrink-0 px-5 pt-6 pb-4 border-b border-slate-200/80 bg-slate-50/80 space-y-3.5">
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Receipt className="w-5 h-5 text-[#2563EB]" />
-                <h2 className="text-base font-bold text-slate-900">Current Order</h2>
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-[#EFF6FF] text-[#2563EB] flex items-center justify-center border border-[#2563EB]/20 shadow-2xs shrink-0">
+                  <Receipt className="w-4 h-4 text-[#2563EB]" />
+                </div>
+                <div>
+                  <h2 className="text-base font-bold text-slate-900 leading-tight">Current Order</h2>
+                  <p className="text-[11px] text-slate-500 font-medium">Live Bill &amp; Checkout</p>
+                </div>
               </div>
               <div className="flex items-center gap-1.5">
                 {cartCount > 0 && (
                   <button
                     onClick={clear}
-                    className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors text-xs font-semibold flex items-center gap-1 cursor-pointer"
+                    className="px-2 py-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors text-xs font-semibold flex items-center gap-1 cursor-pointer"
                     title="Clear All Items"
                   >
                     <Trash2 className="w-3.5 h-3.5" /> Clear
                   </button>
                 )}
-                <span className="px-2 py-0.5 rounded-md bg-[#EFF6FF] text-[#2563EB] border border-[#2563EB]/20 text-xs font-bold">
+                <span className="px-2.5 py-1 rounded-lg bg-[#EFF6FF] text-[#2563EB] border border-[#2563EB]/20 text-xs font-bold shadow-2xs">
                   {cartCount} {cartCount === 1 ? "item" : "items"}
                 </span>
               </div>
             </div>
 
             {/* Quick Customer & Table Selectors */}
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-2 gap-2 pt-0.5">
               <div className="relative">
                 <Hash className="w-3.5 h-3.5 text-zinc-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
                 <input
@@ -1003,7 +1244,7 @@ ${order.taxCents > 0 ? `🏛️ *GST (5%):* ₹${(order.taxCents / 100).toFixed(
           </div>
 
           {/* Cart Items Scrollable List */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-2.5 max-h-[calc(100vh-25rem)]">
+          <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-4 space-y-2.5">
             {cartList.length === 0 ? (
               <div className="h-full flex flex-col items-center justify-center text-center p-8 text-zinc-400">
                 <div className="w-16 h-16 rounded-full bg-zinc-100 flex items-center justify-center text-zinc-300 mb-3">
@@ -1077,7 +1318,7 @@ ${order.taxCents > 0 ? `🏛️ *GST (5%):* ₹${(order.taxCents / 100).toFixed(
           </div>
 
           {/* Terminal Bottom Controls & Payment */}
-          <div className="p-4 border-t border-zinc-200 bg-zinc-50/50 space-y-3">
+          <div className="shrink-0 p-4 border-t border-zinc-200 bg-zinc-50/50 space-y-3">
             {/* Payment Method Selector */}
             <div>
               <div className="flex items-center justify-between text-xs text-zinc-500 font-semibold mb-1.5">

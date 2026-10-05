@@ -12,6 +12,15 @@ import { PresentStaffModal } from "@/components/timesheet/PresentStaffModal";
 import { Button } from "@/components/ui/Button";
 import { Users } from "lucide-react";
 import { useTenant } from "@/lib/context/TenantContext";
+import { SyncStatusBadge } from "@/components/offline/SyncStatusBadge";
+import {
+  STORES,
+  getItemsByTenant,
+  putItem,
+  LocalTimesheet,
+  LocalLeave,
+} from "@/lib/offline/db";
+import { enqueueSyncOperation } from "@/lib/offline/syncEngine";
 
 export default function TimesheetPage() {
   const { toast } = useToast();
@@ -58,18 +67,24 @@ export default function TimesheetPage() {
   }, [today]);
 
   async function submitTimesheet() {
-    const { data: { user } } = await supabaseClient.auth.getUser();
+    const { data: { user } } = await supabaseClient.auth.getUser().catch(() => ({ data: { user: null } }));
     if (!user) return;
     const twoDaysAgo = addDays(startOfDay(new Date()), -2);
-    // Use the derived date from choice, not selectedDate unless visually picked (but logic says choice governs)
     const targetDate = dateChoice === 'today' ? new Date() : addDays(new Date(), -1);
 
     if (isBefore(targetDate, twoDaysAgo)) { toast({ title: "Only Today/Yesterday allowed", variant: "error" }); return; }
-    // Prefer profiles.in_time (HH:MM) if set; fallback to shifts.start_time
-    const [{ data: prof }, { data: shift }] = await Promise.all([
-      supabaseClient.from("profiles").select("in_time").eq("id", user.id).maybeSingle(),
-      supabaseClient.from("shifts").select("start_time").eq("user_id", user.id).maybeSingle(),
-    ]);
+
+    let prof: any = null;
+    let shift: any = null;
+    try {
+      const [profRes, shiftRes] = await Promise.all([
+        supabaseClient.from("profiles").select("in_time").eq("id", user.id).maybeSingle(),
+        supabaseClient.from("shifts").select("start_time").eq("user_id", user.id).maybeSingle(),
+      ]);
+      prof = profRes.data;
+      shift = shiftRes.data;
+    } catch {}
+
     const check_in = new Date();
     let minutes_late = 0;
     const inTime = prof?.in_time || shift?.start_time;
@@ -80,55 +95,81 @@ export default function TimesheetPage() {
       minutes_late = Math.max(0, diff);
     }
     const dateKey = format(targetDate, "yyyy-MM-dd");
-    const { error } = await supabaseClient.from("timesheets").insert({
-      user_id: user.id, work_date: dateKey, check_in: check_in.toISOString(), minutes_late, business_id: business?.id
-    });
-    if (error) { toast({ title: "Submit failed", description: error.message, variant: "error" }); return; }
-    // Auto late deduction... (logic unchanged)
-    try {
-      if (minutes_late >= 15) {
-        // Determine tier: 120+ => 300rs, 60+ => 200rs, 30+ => 100rs, 15+ => 50rs
-        const desired = minutes_late >= 120 ? 30000 : minutes_late >= 60 ? 20000 : minutes_late >= 30 ? 10000 : 5000;
-        const { data: existing } = await supabaseClient.from('salary_entries')
-          .select('id,amount_cents').eq('user_id', user.id).eq('entry_date', dateKey).eq('reason', 'late').maybeSingle();
-        if (!existing) {
-          const { error: insErr } = await supabaseClient.from('salary_entries').insert({
-            user_id: user.id, entry_date: dateKey, amount_cents: desired, reason: 'late', kind: 'deduction', business_id: business?.id
-          });
-          if (!insErr) toast({ title: `Late deduction applied (₹ ${(desired / 100).toFixed(2)})`, variant: 'success' });
-        } else if ((existing as any).amount_cents < desired) {
-          await supabaseClient.from('salary_entries').update({ amount_cents: desired }).eq('id', (existing as any).id);
-          toast({ title: `Late deduction upgraded`, variant: 'success' });
-        }
-      }
-    } catch { }
+    const bizId = business?.id || "default";
+    const tsId = crypto.randomUUID();
 
-    setFilledDates(prev => { const next = new Set(prev); next.add(dateKey); return next; });
-    toast({ title: "Timesheet submitted", variant: "success" });
+    const localTs: LocalTimesheet = {
+      id: tsId,
+      business_id: bizId,
+      user_id: user.id,
+      work_date: dateKey,
+      check_in: check_in.toISOString(),
+      minutes_late,
+      created_at: new Date().toISOString(),
+    };
+
+    // 1. Save to IndexedDB
+    await putItem<LocalTimesheet>(STORES.timesheets, localTs);
+    setFilledDates((prev) => { const next = new Set(prev); next.add(dateKey); return next; });
+
+    // 2. Enqueue sync mutation
+    await enqueueSyncOperation({
+      businessId: bizId,
+      tableName: "timesheets",
+      action: "INSERT",
+      payload: {
+        id: localTs.id,
+        user_id: localTs.user_id,
+        work_date: localTs.work_date,
+        check_in: localTs.check_in,
+        minutes_late: localTs.minutes_late,
+        business_id: localTs.business_id,
+      },
+      customId: tsId,
+    });
+
+    toast({ title: "Timesheet recorded! ⏱️", description: "Saved locally and queued for sync", variant: "success" });
   }
 
   async function submitLeave() {
     const d = new Date(leaveDate);
     const max = addMonths(new Date(), 5);
     if (isAfter(d, max)) { toast({ title: "Max 5 months ahead", variant: "error" }); return; }
-    const { data: { user } } = await supabaseClient.auth.getUser(); if (!user) return;
+    const { data: { user } } = await supabaseClient.auth.getUser().catch(() => ({ data: { user: null } }));
+    if (!user) return;
     const leaveKey = format(d, "yyyy-MM-dd");
-    const { error } = await supabaseClient.from("leaves").insert({
-      user_id: user.id, leave_date: leaveKey, reason, business_id: business?.id
+    const bizId = business?.id || "default";
+    const lvId = crypto.randomUUID();
+
+    const localLv: LocalLeave = {
+      id: lvId,
+      business_id: bizId,
+      user_id: user.id,
+      leave_date: leaveKey,
+      reason,
+      created_at: new Date().toISOString(),
+    };
+
+    // 1. Save to IndexedDB
+    await putItem<LocalLeave>(STORES.leaves, localLv);
+    setLeaveDates((prev) => { const next = new Set(prev); next.add(leaveKey); return next; });
+
+    // 2. Enqueue sync mutation
+    await enqueueSyncOperation({
+      businessId: bizId,
+      tableName: "leaves",
+      action: "INSERT",
+      payload: {
+        id: localLv.id,
+        user_id: localLv.user_id,
+        leave_date: localLv.leave_date,
+        reason: localLv.reason,
+        business_id: localLv.business_id,
+      },
+      customId: lvId,
     });
-    if (error) { toast({ title: "Leave failed", description: error.message, variant: "error" }); return; }
-    // Auto leave deduction logic...
-    try {
-      const { data: prof } = await supabaseClient.from('profiles').select('per_day_salary_cents').eq('id', user.id).maybeSingle();
-      const perDay = prof?.per_day_salary_cents || 0;
-      if (perDay > 0) {
-        await supabaseClient.from('salary_entries').insert({
-          user_id: user.id, entry_date: leaveKey, amount_cents: perDay, reason: 'Leave deduction', kind: 'deduction', business_id: business?.id
-        });
-      }
-    } catch { }
-    setLeaveDates(prev => { const next = new Set(prev); next.add(leaveKey); return next; });
-    toast({ title: "Leave applied", variant: "success" });
+
+    toast({ title: "Leave applied! 🌴", description: "Saved locally and queued for sync", variant: "success" });
   }
 
   return (
@@ -141,7 +182,10 @@ export default function TimesheetPage() {
               <ChevronLeft size={16} />
               Back Home
             </Link>
-            <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Timesheet</h1>
+            <div className="flex items-center gap-2">
+              <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Timesheet</h1>
+              <SyncStatusBadge />
+            </div>
           </div>
           {isAdmin && (
             <Button size="sm" variant="outline" onClick={() => setShowPresentModal(true)} className="gap-2 bg-white border-slate-200 text-slate-700 hover:bg-slate-50 shadow-2xs">

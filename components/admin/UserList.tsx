@@ -1,12 +1,12 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { supabaseClient } from "@/lib/supabaseClient";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import {
   UserPlus, UserX, Shield, Briefcase, Key, Clock, CreditCard, Phone, Heart, Save,
-  Calendar, Search, ChevronDown, ChevronUp, FileText, Check, X, ShieldAlert, Mail,
+  Calendar, Search, ChevronDown, ChevronUp, FileText, Check, CheckCircle, X, ShieldAlert, Mail,
   UserCheck, AlertCircle, Settings, User
 } from "lucide-react";
 import SalaryManager from "@/app/(protected)/admin/SalaryManager";
@@ -37,7 +37,7 @@ interface UserListProps {
   onToggleStockManager: (id: string, current: boolean) => Promise<void>;
   onUpdateMeta?: (id: string, field: string, val: any) => Promise<void>;
   onUpdateFullProfile: (id: string, updates: any) => Promise<void>;
-  onDownloadPayslip: (userId: string, date: Date) => Promise<void>;
+  onDownloadPayslip: (userId: string, date: Date) => Promise<any>;
 }
 
 function calculateAge(dob: string) {
@@ -173,6 +173,9 @@ function UserAccordionRow({
   onToggleStockManager,
   onUpdateFullProfile,
   onDownloadPayslip,
+  isPrevMonthPaid,
+  prevMonthLabel,
+  onSettlementChange,
 }: {
   user: Profile;
   isExpanded: boolean;
@@ -181,7 +184,10 @@ function UserAccordionRow({
   onUpdatePass: (email: string, pass: string) => Promise<void>;
   onToggleStockManager: (id: string, current: boolean) => Promise<void>;
   onUpdateFullProfile: (id: string, updates: any) => Promise<void>;
-  onDownloadPayslip: (userId: string, date: Date) => Promise<void>;
+  onDownloadPayslip: (userId: string, date: Date) => Promise<any>;
+  isPrevMonthPaid?: boolean;
+  prevMonthLabel?: { short: string; long: string };
+  onSettlementChange?: (monthKey: string, isSettled: boolean) => void;
 }) {
   if (user.is_admin) {
     return <AdminUserCard user={user} onUpdatePass={onUpdatePass} />;
@@ -312,13 +318,25 @@ function UserAccordionRow({
                 </span>
               )}
               {user.is_stock_manager && (
-                <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase bg-amber-100 text-amber-800 border border-amber-200 px-1.5 py-0.5 rounded-md">
-                  <Briefcase size={10} /> Stock Mgr
+                <span className="inline-flex items-center gap-1 text-[10px] font-medium bg-amber-50 text-amber-800 border border-amber-200/80 px-1.5 py-0.5 rounded-md shrink-0">
+                  <Briefcase size={9.5} className="shrink-0 text-amber-600" />
+                  <span>Stock Mgr</span>
                 </span>
               )}
               {!user.is_admin && !user.is_stock_manager && (
                 <span className="inline-flex items-center text-[10px] font-medium text-zinc-500 bg-zinc-100 px-1.5 py-0.5 rounded-md">
                   Staff
+                </span>
+              )}
+
+              {/* Previous Month Salary Settlement Status Chip (Shown only when paid) */}
+              {!user.is_admin && isPrevMonthPaid && (
+                <span
+                  title={`Salary for ${prevMonthLabel?.long || "Previous Month"}: Settled & Paid`}
+                  className="inline-flex items-center gap-1 text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200/90 px-1.5 py-0.5 rounded-md shrink-0 shadow-2xs"
+                >
+                  <CheckCircle size={10} className="text-emerald-600 shrink-0" />
+                  <span>{prevMonthLabel?.short || "Prev"} Paid</span>
                 </span>
               )}
             </div>
@@ -554,8 +572,15 @@ function UserAccordionRow({
               <SalaryManager
                 key={salaryRefreshKey}
                 userId={user.id}
+                userEmail={user.email}
+                contactNumber={formData.contact_number || user.contact_number}
                 perDaySalary={parseFloat(formData.per_day_salary_cents || "0") * 100}
                 onDownloadPayslip={onDownloadPayslip}
+                onUpdateContactNumber={async (newPhone: string) => {
+                  setFormData((prev) => ({ ...prev, contact_number: newPhone }));
+                  await onUpdateFullProfile(user.id, { contact_number: newPhone });
+                }}
+                onSettlementChange={onSettlementChange}
               />
             </div>
           )}
@@ -690,9 +715,67 @@ export function UserList({
   // Accordion State: Track expanded row ID (allows smooth 1-at-a-time or multi)
   const [expandedUserId, setExpandedUserId] = useState<string | null>(null);
 
-  const policy = validatePasswordPolicy(password, isAdminRole ? "admin" : "staff");
+  // Previous Month Settlement State: Track settled status per user
+  const [settledMap, setSettledMap] = useState<Record<string, boolean>>({});
+
+  const prevMonthInfo = useMemo(() => {
+    const d = new Date();
+    d.setDate(1);
+    d.setMonth(d.getMonth() - 1);
+    const year = d.getFullYear();
+    const monthNum = String(d.getMonth() + 1).padStart(2, "0");
+    const monthKey = `${year}-${monthNum}`;
+    const short = d.toLocaleString("en-US", { month: "short" });
+    const long = d.toLocaleString("en-US", { month: "long", year: "numeric" });
+    return { monthKey, short, long };
+  }, []);
 
   const isAdminUser = (u: Profile) => !!u.is_admin || u.email?.toLowerCase().startsWith("admin") || u.email?.toLowerCase().includes("admin@");
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    async function loadPrevMonthSettlements() {
+      const staffIds = users
+        .filter((u) => !isAdminUser(u))
+        .map((u) => u.id);
+
+      if (staffIds.length === 0) return;
+
+      const { data, error } = await supabaseClient
+        .from("salary_settlements")
+        .select("user_id, is_settled")
+        .in("user_id", staffIds)
+        .eq("month_key", prevMonthInfo.monthKey);
+
+      if (!isCancelled && !error && data) {
+        const map: Record<string, boolean> = {};
+        data.forEach((row: any) => {
+          if (row.is_settled) {
+            map[row.user_id] = true;
+          }
+        });
+        setSettledMap(map);
+      }
+    }
+
+    loadPrevMonthSettlements();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [users, prevMonthInfo.monthKey]);
+
+  function handleSettlementChange(userId: string, monthKey: string, isSettled: boolean) {
+    if (monthKey === prevMonthInfo.monthKey) {
+      setSettledMap((prev) => ({
+        ...prev,
+        [userId]: isSettled,
+      }));
+    }
+  }
+
+  const policy = validatePasswordPolicy(password, isAdminRole ? "admin" : "staff");
 
   // Keep strictly the first primary store admin
   const primaryAdmin = useMemo(() => {
@@ -979,6 +1062,9 @@ export function UserList({
               onToggleStockManager={onToggleStockManager}
               onUpdateFullProfile={onUpdateFullProfile}
               onDownloadPayslip={onDownloadPayslip}
+              isPrevMonthPaid={!!settledMap[u.id]}
+              prevMonthLabel={{ short: prevMonthInfo.short, long: prevMonthInfo.long }}
+              onSettlementChange={(monthKey, isSettled) => handleSettlementChange(u.id, monthKey, isSettled)}
             />
           ))}
         </div>

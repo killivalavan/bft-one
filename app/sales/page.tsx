@@ -294,15 +294,25 @@ export default function SalesPage() {
             <div className="max-w-md mx-auto p-4 space-y-6">
                 {/* Header */}
                 <div className="space-y-4">
-                    <Link href="/" className="inline-flex items-center gap-2 text-slate-500 hover:text-[#2563EB] transition-colors text-sm font-medium">
-                        <ChevronLeft size={16} />
-                        Back Home
-                    </Link>
+                    <div className="flex items-center justify-between">
+                        <Link href="/" className="inline-flex items-center gap-2 text-slate-500 hover:text-[#2563EB] transition-colors text-sm font-medium">
+                            <ChevronLeft size={16} />
+                            Back Home
+                        </Link>
+
+                        <Link
+                            href="/daily-sales"
+                            className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 hover:bg-emerald-100 text-xs font-bold transition shadow-xs"
+                        >
+                            <span>Itemized Sales</span>
+                            <ChevronRight size={14} />
+                        </Link>
+                    </div>
 
                     <div className="flex items-center justify-between gap-4">
                         <div>
-                            <h1 className="text-2xl font-bold text-[#0F172A] tracking-tight">Daily Sales Entry</h1>
-                            <p className="text-[#64748B] text-sm">Log sales data</p>
+                            <h1 className="text-2xl font-bold text-[#0F172A] tracking-tight">Cash & UPI Settlement</h1>
+                            <p className="text-[#64748B] text-sm">Record physical drawer cash & UPI closing numbers</p>
                         </div>
 
                         {/* Display the date user is entering for (non-admin only) */}

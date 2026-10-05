@@ -259,12 +259,25 @@ export async function generateBillPdf(data: BillPdfData) {
 
   let currentY = 16;
 
+  // Background Watermark: "Powered by SeyalPro"
+  const drawBackgroundWatermark = () => {
+    doc.setFont(fontName, "bold");
+    doc.setFontSize(32);
+    doc.setTextColor(242, 246, 253); // Very faint subtle tint
+    doc.text("Powered by SeyalPro", pageWidth / 2, pageHeight / 2 + 10, {
+      align: "center",
+      angle: 28,
+    });
+  };
+
+  drawBackgroundWatermark();
+
   // ========================================================
   // 1. TOP HEADER: INVOICE TITLE + METADATA & RIGHT LOGO
   // ========================================================
   doc.setFont(fontName, "bold");
   doc.setFontSize(22);
-  doc.setTextColor(79, 70, 229); // #4F46E5 Violet / Indigo
+  doc.setTextColor(37, 99, 235); // #2563EB Brand Blue (Matches UI)
   doc.text(titleText, leftMargin, currentY);
 
   currentY += 8;
@@ -324,22 +337,26 @@ export async function generateBillPdf(data: BillPdfData) {
   currentY += 12;
 
   // ========================================================
-  // 2. BILLED BY & BILLED TO (Two Rounded Lavender Cards)
+  // 2. BILLED BY & BILLED TO (Same Soft Blue Background, No Border)
   // ========================================================
   const cardGap = 8;
   const cardWidth = (contentWidth - cardGap) / 2;
   const cardHeight = 36;
   const cardY = currentY;
 
-  // --- Left Card: Billed By ---
-  doc.setFillColor(245, 243, 255); // #F5F3FF Lavender
-  doc.setDrawColor(237, 233, 254);
-  doc.roundedRect(leftMargin, cardY, cardWidth, cardHeight, 3, 3, "FD");
+  // --- Left Card: Billed By (Soft Blue, No Border) ---
+  doc.setFillColor(239, 246, 255); // #EFF6FF Soft Blue
+  doc.roundedRect(leftMargin, cardY, cardWidth, cardHeight, 2.5, 2.5, "F");
 
   doc.setFont(fontName, "bold");
-  doc.setFontSize(10);
-  doc.setTextColor(109, 40, 217); // #6D28D9 Violet
-  doc.text("Billed By", leftMargin + 4, cardY + 6);
+  doc.setFontSize(9.5);
+  doc.setTextColor(37, 99, 235); // #2563EB Brand Blue
+  doc.text("Billed By", leftMargin + 4, cardY + 5.5);
+
+  doc.setFont(fontName, "normal");
+  doc.setFontSize(6.5);
+  doc.setTextColor(100, 116, 139);
+  doc.text("STORE / MERCHANT", leftMargin + 21, cardY + 5.5);
 
   doc.setFontSize(8.5);
   doc.setFont(fontName, "bold");
@@ -351,18 +368,22 @@ export async function generateBillPdf(data: BillPdfData) {
   doc.setTextColor(71, 85, 105);
   const bizAddrText = businessAddress + (businessPhone ? `\nPhone: ${businessPhone}` : "") + (businessGstin ? `\nGSTIN: ${businessGstin}` : "");
   const bizAddrLines = doc.splitTextToSize(bizAddrText, cardWidth - 8);
-  doc.text(bizAddrLines, leftMargin + 4, cardY + 16);
+  doc.text(bizAddrLines, leftMargin + 4, cardY + 15.5);
 
-  // --- Right Card: Billed To ---
+  // --- Right Card: Billed To (Same Soft Blue, No Border) ---
   const rightCardX = leftMargin + cardWidth + cardGap;
-  doc.setFillColor(245, 243, 255);
-  doc.setDrawColor(237, 233, 254);
-  doc.roundedRect(rightCardX, cardY, cardWidth, cardHeight, 3, 3, "FD");
+  doc.setFillColor(239, 246, 255); // #EFF6FF Same Soft Blue as Billed By
+  doc.roundedRect(rightCardX, cardY, cardWidth, cardHeight, 2.5, 2.5, "F");
 
   doc.setFont(fontName, "bold");
-  doc.setFontSize(10);
-  doc.setTextColor(109, 40, 217);
-  doc.text("Billed To", rightCardX + 4, cardY + 6);
+  doc.setFontSize(9.5);
+  doc.setTextColor(37, 99, 235); // #2563EB Brand Blue
+  doc.text("Billed To", rightCardX + 4, cardY + 5.5);
+
+  doc.setFont(fontName, "normal");
+  doc.setFontSize(6.5);
+  doc.setTextColor(100, 116, 139);
+  doc.text("CLIENT / RECIPIENT", rightCardX + 21, cardY + 5.5);
 
   doc.setFontSize(8.5);
   doc.setFont(fontName, "bold");
@@ -374,7 +395,7 @@ export async function generateBillPdf(data: BillPdfData) {
   doc.setTextColor(71, 85, 105);
   const custAddrFormatted = customerAddress + (customerPhone ? `\nPhone: ${customerPhone}` : "") + (customerGstin ? `\nGSTIN: ${customerGstin}` : "");
   const custAddrLines = doc.splitTextToSize(custAddrFormatted, cardWidth - 8);
-  doc.text(custAddrLines, rightCardX + 4, cardY + 16);
+  doc.text(custAddrLines, rightCardX + 4, cardY + 15.5);
 
   currentY = cardY + cardHeight + 8;
 
@@ -395,31 +416,35 @@ export async function generateBillPdf(data: BillPdfData) {
 
   autoTable(doc, {
     startY: currentY,
-    head: [[`Item`, `Quantity`, `Rate (${sym})`, `Amount (${sym})`]],
+    head: [[
+      { content: "Item", styles: { halign: "left" } },
+      { content: "Quantity", styles: { halign: "center" } },
+      { content: `Rate (${sym})`, styles: { halign: "center" } },
+      { content: `Amount (${sym})`, styles: { halign: "center" } },
+    ]],
     body: tableBody,
     margin: { left: leftMargin, right: rightMargin },
     tableWidth: contentWidth,
     theme: "striped",
     headStyles: {
-      fillColor: [91, 77, 245], // #5B4DF5 Brand Purple
-      textColor: [255, 255, 255],
+      fillColor: [37, 99, 235], // #2563EB Theme Blue
+      textColor: [255, 255, 255], // White
       font: fontName,
       fontStyle: "bold",
-      fontSize: 9,
-      halign: "left",
+      fontSize: 8.5,
       cellPadding: 4,
+      lineWidth: 0,
     },
     styles: {
       font: fontName,
       fontSize: 8.5,
-      cellPadding: 3.5,
-      textColor: [30, 41, 59],
-      lineColor: [241, 245, 249],
-      lineWidth: 0.2,
+      cellPadding: 4,
+      textColor: [15, 23, 42],
+      lineWidth: 0,
       overflow: "linebreak",
     },
     alternateRowStyles: {
-      fillColor: [248, 250, 252],
+      fillColor: [239, 246, 255], // #EFF6FF (Same soft blue as Billed By & Billed To)
     },
     columnStyles: {
       0: { cellWidth: contentWidth - 28 - 38 - 42, halign: "left" },
@@ -435,6 +460,7 @@ export async function generateBillPdf(data: BillPdfData) {
   // Prevent page break collision
   if (currentY > pageHeight - 75) {
     doc.addPage();
+    drawBackgroundWatermark();
     currentY = 18;
   }
 
@@ -462,13 +488,14 @@ export async function generateBillPdf(data: BillPdfData) {
   // Bank / UPI details box under words if available
   let leftBottomY = totalsY + 12 + wordsLines.length * 4;
   if (bankDetails?.bankName || upiDetails?.upiId) {
-    doc.setFillColor(248, 250, 252);
-    doc.setDrawColor(226, 232, 240);
+    doc.setFillColor(239, 246, 255); // #EFF6FF
+    doc.setDrawColor(219, 234, 254); // #DBEAFE
+    doc.setLineWidth(0.35);
     doc.roundedRect(leftMargin, leftBottomY, wordsWidth - 4, 22, 2, 2, "FD");
 
     doc.setFont(fontName, "bold");
     doc.setFontSize(7.5);
-    doc.setTextColor(79, 70, 229);
+    doc.setTextColor(37, 99, 235); // #2563EB Brand Blue (matches UI)
     doc.text("Payment Information", leftMargin + 3, leftBottomY + 4.5);
 
     doc.setFont(fontName, "normal");
@@ -534,11 +561,12 @@ export async function generateBillPdf(data: BillPdfData) {
   doc.line(summaryX, rightCalcY, summaryValX, rightCalcY);
   rightCalcY += 6;
 
-  // Total Amount
+  // Total Amount (Bold Black)
   doc.setFont(fontName, "bold");
-  doc.setFontSize(11.5);
-  doc.setTextColor(15, 23, 42);
+  doc.setFontSize(11);
+  doc.setTextColor(0, 0, 0); // Bold Black
   doc.text("Total Amount", summaryX, rightCalcY);
+  doc.setFontSize(11.5);
   doc.text(`${sym}${rawTotal.toLocaleString("en-IN", { minimumFractionDigits: 2 })}`, summaryValX, rightCalcY, { align: "right" });
 
   // Bottom underline
@@ -550,10 +578,10 @@ export async function generateBillPdf(data: BillPdfData) {
   // 5. SIGNATURE & AUTHORISED SIGNATORY (Crisp & Tight Spacing)
   // ========================================================
   const signatureY = rightCalcY + 4;
-  const signatureMaxW = 65; 
-  const signatureMaxH = 26; 
-  const sigCenterX = summaryValX - signatureMaxW / 2;
-  let actualSigHeight = 20; // default height if image fails
+  const signatureMaxW = 56; 
+  const signatureMaxH = 32; 
+  const sigCenterX = summaryValX - (signatureMaxW / 2);
+  let actualSigHeight = 24; // default height if image fails
 
   try {
     const sigData = await loadImageData(signatureUrl || "/default-signature.svg");
@@ -573,10 +601,20 @@ export async function generateBillPdf(data: BillPdfData) {
   }
 
   // Authorised Signatory Text positioned right below signature image
-  doc.setFont(fontName, "normal");
-  doc.setFontSize(8.5);
-  doc.setTextColor(30, 41, 59);
-  doc.text("Authorised Signatory", sigCenterX, signatureY + actualSigHeight + 3.5, { align: "center" });
+  doc.setFont(fontName, "bold");
+  doc.setFontSize(7.5);
+  doc.setTextColor(100, 116, 139); // #64748B (matches UI uppercase signatory)
+  doc.text("AUTHORISED SIGNATORY", sigCenterX, signatureY + actualSigHeight + 4, { align: "center" });
+
+  // --- Watermark & Branding Footer: "Powered by SeyalPro" ---
+  const totalPages = (doc as any).internal.getNumberOfPages();
+  for (let i = 1; i <= totalPages; i++) {
+    doc.setPage(i);
+    doc.setFont(fontName, "bold");
+    doc.setFontSize(7.5);
+    doc.setTextColor(148, 163, 184); // #94A3B8 Subtle slate
+    doc.text("Powered by SeyalPro", pageWidth / 2, pageHeight - 7, { align: "center" });
+  }
 
   // Download PDF file with kebab-case filename (e.g. invoice-a00018-brown-fening-tea-protechsoft-technologies-pvt-ltd.pdf)
   const finalFileName = getInvoicePdfFilename(orderId, businessName, customerName);

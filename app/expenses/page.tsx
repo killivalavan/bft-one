@@ -30,6 +30,16 @@ import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import html2canvas from "html2canvas-pro";
 import { useTenant } from "@/lib/context/TenantContext";
+import { SyncStatusBadge } from "@/components/offline/SyncStatusBadge";
+import {
+    STORES,
+    getItemsByTenant,
+    putItem,
+    bulkPutItems,
+    deleteItem as idbDeleteItem,
+    LocalDailyExpense,
+} from "@/lib/offline/db";
+import { enqueueSyncOperation } from "@/lib/offline/syncEngine";
 
 interface ExpenseRow {
     id: string;
@@ -296,37 +306,95 @@ export default function ExpensesPage() {
     async function fetchExpenses() {
         setListLoading(true);
         const dateStr = format(date, "yyyy-MM-dd");
-        let query = supabaseClient
-            .from("daily_expenses")
-            .select("*")
-            .eq("expense_date", dateStr);
-        if (business?.id) query = query.eq("business_id", business.id);
-        const { data, error } = await query.order("created_at", { ascending: true });
+        const bizId = business?.id || "default";
 
-        if (error) {
-            toast({ title: "Failed to load expenses", description: error.message, variant: "error" });
-            setExpenses([]);
-        } else {
-            const rows = (data || []) as ExpenseRow[];
-            setExpenses(rows);
-            if (isAdmin) loadNames(rows);
+        // 1. Instant Warm Start from IndexedDB
+        try {
+            const localExpenses = await getItemsByTenant<LocalDailyExpense>(STORES.daily_expenses, bizId);
+            const dateFiltered = localExpenses.filter((e) => e.expense_date === dateStr);
+            if (dateFiltered.length > 0) {
+                setExpenses(dateFiltered as ExpenseRow[]);
+                if (isAdmin) loadNames(dateFiltered as ExpenseRow[]);
+            }
+        } catch {}
+
+        // 2. Cloud Refresh if online
+        try {
+            let query = supabaseClient
+                .from("daily_expenses")
+                .select("*")
+                .eq("expense_date", dateStr);
+            if (business?.id) query = query.eq("business_id", business.id);
+            const { data, error } = await query.order("created_at", { ascending: true });
+
+            if (error) {
+                if (typeof navigator !== "undefined" && !navigator.onLine) {
+                    // Silent fallback when offline
+                } else {
+                    toast({ title: "Failed to load expenses", description: error.message, variant: "error" });
+                }
+            } else {
+                const rows = (data || []) as ExpenseRow[];
+                setExpenses(rows);
+                if (isAdmin) loadNames(rows);
+
+                // Save to local IndexedDB
+                const localRows: LocalDailyExpense[] = rows.map((r) => ({
+                    id: r.id,
+                    business_id: bizId,
+                    expense_date: r.expense_date,
+                    item_name: r.item_name,
+                    quantity: r.quantity,
+                    price_cents: r.price_cents,
+                    submitted_by: r.submitted_by,
+                    created_at: r.created_at,
+                }));
+                bulkPutItems(STORES.daily_expenses, localRows).catch(() => {});
+            }
+        } catch {
+            // Offline fallback
+        } finally {
+            setListLoading(false);
         }
-        setListLoading(false);
     }
 
     async function fetchAllExpenses() {
         if (!isAdmin) return; // overview/price-watch data is admin-only
-        let query = supabaseClient
-            .from("daily_expenses")
-            .select("*");
-        if (business?.id) query = query.eq("business_id", business.id);
-        const { data, error } = await query.order("expense_date", { ascending: true });
+        const bizId = business?.id || "default";
 
-        if (!error) {
-            const rows = (data || []) as ExpenseRow[];
-            setAllExpenses(rows);
-            if (isAdmin) loadNames(rows);
-        }
+        try {
+            const localExpenses = await getItemsByTenant<LocalDailyExpense>(STORES.daily_expenses, bizId);
+            if (localExpenses.length > 0) {
+                setAllExpenses(localExpenses as ExpenseRow[]);
+                if (isAdmin) loadNames(localExpenses as ExpenseRow[]);
+            }
+        } catch {}
+
+        try {
+            let query = supabaseClient
+                .from("daily_expenses")
+                .select("*");
+            if (business?.id) query = query.eq("business_id", business.id);
+            const { data, error } = await query.order("expense_date", { ascending: true });
+
+            if (!error) {
+                const rows = (data || []) as ExpenseRow[];
+                setAllExpenses(rows);
+                if (isAdmin) loadNames(rows);
+
+                const localRows: LocalDailyExpense[] = rows.map((r) => ({
+                    id: r.id,
+                    business_id: bizId,
+                    expense_date: r.expense_date,
+                    item_name: r.item_name,
+                    quantity: r.quantity,
+                    price_cents: r.price_cents,
+                    submitted_by: r.submitted_by,
+                    created_at: r.created_at,
+                }));
+                bulkPutItems(STORES.daily_expenses, localRows).catch(() => {});
+            }
+        } catch {}
     }
 
     // Fixed Monthly Expenses (recurring master list, applies across all months)
@@ -698,25 +766,49 @@ export default function ExpensesPage() {
         }
 
         setSaving(true);
-        const { error } = await supabaseClient.from("daily_expenses").insert({
-            expense_date: format(date, "yyyy-MM-dd"),
+        const bizId = business?.id || "default";
+        const newExpenseId = crypto.randomUUID();
+        const dateStr = format(date, "yyyy-MM-dd");
+
+        const localExp: LocalDailyExpense = {
+            id: newExpenseId,
+            business_id: bizId,
+            expense_date: dateStr,
             item_name: finalName,
             quantity: qtyNum,
             price_cents: finalPriceCents,
             submitted_by: userId,
-            business_id: business?.id,
+            created_at: new Date().toISOString(),
+        };
+
+        // 1. Save locally to IndexedDB immediately
+        await putItem<LocalDailyExpense>(STORES.daily_expenses, localExp);
+
+        // 2. Optimistic UI update
+        setExpenses((prev) => [...prev, localExp as ExpenseRow]);
+        setAllExpenses((prev) => [...prev, localExp as ExpenseRow]);
+
+        // 3. Enqueue idempotent synchronization operation
+        await enqueueSyncOperation({
+            businessId: bizId,
+            tableName: "daily_expenses",
+            action: "INSERT",
+            payload: {
+                id: localExp.id,
+                expense_date: localExp.expense_date,
+                item_name: localExp.item_name,
+                quantity: localExp.quantity,
+                price_cents: localExp.price_cents,
+                submitted_by: localExp.submitted_by,
+                business_id: localExp.business_id,
+                created_at: localExp.created_at,
+            },
+            customId: newExpenseId,
         });
+
         setSaving(false);
-
-        if (error) {
-            toast({ title: "Failed to add expense", description: error.message, variant: "error" });
-            return;
-        }
-
-        toast({ title: "Expense added", variant: "success" });
+        toast({ title: "Expense saved! 💰", description: "Saved locally and queued for automatic sync", variant: "success" });
         resetForm();
-        fetchExpenses();
-        fetchAllExpenses();
     }
 
     function startEdit(row: ExpenseRow) {
@@ -739,37 +831,67 @@ export default function ExpensesPage() {
             return;
         }
 
-        const { error } = await supabaseClient.from("daily_expenses").update({
+        const bizId = business?.id || "default";
+        const updatedExp: LocalDailyExpense = {
+            id: row.id,
+            business_id: bizId,
+            expense_date: row.expense_date,
             item_name: trimmedName,
             quantity: qtyNum,
             price_cents: Math.round(priceNum * 100),
-            updated_by: userId,
-            updated_at: new Date().toISOString(),
-        }).eq("id", row.id);
+            submitted_by: row.submitted_by,
+            created_at: row.created_at,
+        };
 
-        if (error) {
-            toast({ title: "Failed to update", description: error.message, variant: "error" });
-            return;
-        }
+        // 1. Update IndexedDB immediately
+        await putItem<LocalDailyExpense>(STORES.daily_expenses, updatedExp);
+
+        // 2. Optimistic UI update
+        setExpenses((prev) => prev.map((e) => (e.id === row.id ? (updatedExp as ExpenseRow) : e)));
+        setAllExpenses((prev) => prev.map((e) => (e.id === row.id ? (updatedExp as ExpenseRow) : e)));
+
+        // 3. Enqueue sync update
+        await enqueueSyncOperation({
+            businessId: bizId,
+            tableName: "daily_expenses",
+            action: "UPDATE",
+            payload: {
+                id: updatedExp.id,
+                item_name: updatedExp.item_name,
+                quantity: updatedExp.quantity,
+                price_cents: updatedExp.price_cents,
+                updated_by: userId,
+                updated_at: new Date().toISOString(),
+            },
+            customId: `update-${updatedExp.id}-${Date.now()}`,
+        });
 
         toast({ title: "Expense updated", variant: "success" });
         setEditingId(null);
-        fetchExpenses();
-        fetchAllExpenses();
     }
 
     async function deleteExpense(row: ExpenseRow) {
         if (!confirm(`Delete "${row.item_name}"?`)) return;
 
-        const { error } = await supabaseClient.from("daily_expenses").delete().eq("id", row.id);
-        if (error) {
-            toast({ title: "Failed to delete", description: error.message, variant: "error" });
-            return;
-        }
+        const bizId = business?.id || "default";
+
+        // 1. Delete from IndexedDB immediately
+        await idbDeleteItem(STORES.daily_expenses, row.id);
+
+        // 2. Optimistic UI update
+        setExpenses((prev) => prev.filter((e) => e.id !== row.id));
+        setAllExpenses((prev) => prev.filter((e) => e.id !== row.id));
+
+        // 3. Enqueue sync delete
+        await enqueueSyncOperation({
+            businessId: bizId,
+            tableName: "daily_expenses",
+            action: "DELETE",
+            payload: { id: row.id },
+            customId: `delete-${row.id}-${Date.now()}`,
+        });
 
         toast({ title: "Expense deleted", variant: "success" });
-        fetchExpenses();
-        fetchAllExpenses();
     }
 
     if (loading) return <div className="min-h-screen flex items-center justify-center"><Loader2 className="animate-spin text-zinc-400" /></div>;
@@ -1201,10 +1323,13 @@ export default function ExpensesPage() {
 
                     <div className="flex items-center justify-between gap-4">
                         <div>
-                            <h1 className="text-2xl font-bold text-zinc-900 tracking-tight flex items-center gap-2">
-                                <Receipt size={22} className="text-cyan-600" />
-                                Expenses
-                            </h1>
+                            <div className="flex items-center gap-2">
+                                <h1 className="text-2xl font-bold text-zinc-900 tracking-tight flex items-center gap-2">
+                                    <Receipt size={22} className="text-cyan-600" />
+                                    Expenses
+                                </h1>
+                                <SyncStatusBadge />
+                            </div>
                             <p className="text-zinc-500 text-sm">Track daily &amp; monthly expenses, analyze trends &amp; optimize costs</p>
                         </div>
 

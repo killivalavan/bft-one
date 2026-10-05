@@ -27,6 +27,17 @@ import {
   Check,
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
+import { SyncStatusBadge } from "@/components/offline/SyncStatusBadge";
+import {
+  STORES,
+  getItemsByTenant,
+  bulkPutItems,
+  putItem,
+  LocalInventoryItem,
+  LocalSupplier,
+  LocalPurchaseOrder,
+} from "@/lib/offline/db";
+import { enqueueSyncOperation } from "@/lib/offline/syncEngine";
 
 // Types
 type InventoryItem = {
@@ -305,13 +316,64 @@ export default function InventoryHubPage() {
 
   // Fetch from DB if available, otherwise seamlessly keep mock dataset
   async function loadAllData() {
+    const bizId = business?.id || "default";
+
+    // 1. Instant Warm Start from IndexedDB
+    try {
+      const [localItems, localSupps] = await Promise.all([
+        getItemsByTenant<LocalInventoryItem>(STORES.inventory_items, bizId),
+        getItemsByTenant<LocalSupplier>(STORES.suppliers, bizId),
+      ]);
+
+      if (localItems.length > 0) {
+        setItems(
+          localItems.map((i) => ({
+            id: i.id,
+            name: i.name,
+            sku: i.sku || null,
+            category: i.category,
+            unit: i.unit,
+            cost_per_unit: i.cost_per_unit,
+            current_stock: i.current_stock,
+            min_reorder_level: i.min_reorder_level || 5,
+            optimal_stock_level: i.optimal_stock_level || 20,
+            notify_at: i.notify_at || null,
+            is_active: i.is_active !== false,
+          }))
+        );
+      }
+      if (localSupps.length > 0) {
+        setSuppliers(
+          localSupps.map((s) => ({
+            id: s.id,
+            name: s.name,
+            contact_person: s.contact_person || null,
+            phone: s.phone || null,
+            email: s.email || null,
+            payment_terms: s.payment_terms || null,
+            lead_time_days: s.lead_time_days || 2,
+          }))
+        );
+      }
+    } catch {}
+
+    // 2. Cloud Refresh if online
     try {
       setRefreshing(true);
 
+      let itemsQ = supabaseClient.from("inventory_items").select("*").eq("is_active", true).order("name");
+      if (business?.id) itemsQ = itemsQ.eq("business_id", business.id);
+
+      let prodsQ = supabaseClient.from("products").select("id, name, price, image_url").order("name");
+      if (business?.id) prodsQ = prodsQ.eq("business_id", business.id);
+
+      let suppQ = supabaseClient.from("suppliers").select("*").eq("is_active", true).order("name");
+      if (business?.id) suppQ = suppQ.eq("business_id", business.id);
+
       const [itemsRes, prodsRes, suppliersRes, posRes, wasteRes, ledgerRes] = await Promise.all([
-        supabaseClient.from("inventory_items").select("*").eq("is_active", true).order("name"),
-        supabaseClient.from("products").select("id, name, price, image_url").order("name"),
-        supabaseClient.from("suppliers").select("*").eq("is_active", true).order("name"),
+        itemsQ,
+        prodsQ,
+        suppQ,
         supabaseClient.from("purchase_orders").select(`
           id, po_number, supplier_id, status, total_amount, expected_delivery_date, received_at, created_at,
           suppliers (id, name, phone, payment_terms),
@@ -332,6 +394,22 @@ export default function InventoryHubPage() {
 
       if (itemsRes.data && itemsRes.data.length > 0) {
         setItems(itemsRes.data);
+        const idbItems: LocalInventoryItem[] = itemsRes.data.map((i: any) => ({
+          id: i.id,
+          business_id: bizId,
+          name: i.name,
+          sku: i.sku,
+          category: i.category,
+          unit: i.unit,
+          cost_per_unit: Number(i.cost_per_unit) || 0,
+          current_stock: Number(i.current_stock) || 0,
+          min_reorder_level: Number(i.min_reorder_level) || 5,
+          optimal_stock_level: Number(i.optimal_stock_level) || 20,
+          notify_at: i.notify_at,
+          is_active: i.is_active !== false,
+          updated_at: i.updated_at,
+        }));
+        bulkPutItems(STORES.inventory_items, idbItems).catch(() => {});
       }
       if (prodsRes.data && prodsRes.data.length > 0) {
         setProducts(prodsRes.data);
@@ -341,6 +419,19 @@ export default function InventoryHubPage() {
       }
       if (suppliersRes.data && suppliersRes.data.length > 0) {
         setSuppliers(suppliersRes.data);
+        const idbSupps: LocalSupplier[] = suppliersRes.data.map((s: any) => ({
+          id: s.id,
+          business_id: bizId,
+          name: s.name,
+          contact_person: s.contact_person,
+          phone: s.phone,
+          email: s.email,
+          payment_terms: s.payment_terms,
+          lead_time_days: s.lead_time_days,
+          is_active: s.is_active !== false,
+          updated_at: s.updated_at,
+        }));
+        bulkPutItems(STORES.suppliers, idbSupps).catch(() => {});
       }
       if (posRes.data && posRes.data.length > 0) {
         setPurchaseOrders(posRes.data as any);
@@ -352,7 +443,7 @@ export default function InventoryHubPage() {
         setLedgerEntries(ledgerRes.data as any);
       }
     } catch (err) {
-      console.error("DB Load fallback to mock:", err);
+      console.warn("DB Load notice:", err);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -461,8 +552,11 @@ export default function InventoryHubPage() {
 
   // Actions
   async function handleSaveItem(formData: Partial<InventoryItem>) {
+    const bizId = business?.id || "default";
+    const itemId = editingItem?.id || crypto.randomUUID();
+
     const newItem: InventoryItem = {
-      id: editingItem?.id || `item-${Date.now()}`,
+      id: itemId,
       name: formData.name || "New Item",
       sku: formData.sku || null,
       category: formData.category || "Raw Material",
@@ -481,13 +575,35 @@ export default function InventoryHubPage() {
       setItems((prev) => [newItem, ...prev]);
     }
 
-    try {
-      if (editingItem) {
-        await supabaseClient.from("inventory_items").update(newItem).eq("id", editingItem.id);
-      } else {
-        await supabaseClient.from("inventory_items").insert(newItem);
-      }
-    } catch { }
+    // 1. Save to local IndexedDB
+    const localItem: LocalInventoryItem = {
+      ...newItem,
+      business_id: bizId,
+      updated_at: new Date().toISOString(),
+    };
+    await putItem<LocalInventoryItem>(STORES.inventory_items, localItem);
+
+    // 2. Enqueue sync mutation
+    await enqueueSyncOperation({
+      businessId: bizId,
+      tableName: "inventory_items",
+      action: editingItem ? "UPDATE" : "INSERT",
+      payload: {
+        id: localItem.id,
+        business_id: bizId,
+        name: localItem.name,
+        sku: localItem.sku,
+        category: localItem.category,
+        unit: localItem.unit,
+        cost_per_unit: localItem.cost_per_unit,
+        current_stock: localItem.current_stock,
+        min_reorder_level: localItem.min_reorder_level,
+        optimal_stock_level: localItem.optimal_stock_level,
+        notify_at: localItem.notify_at,
+        is_active: localItem.is_active,
+      },
+      customId: localItem.id,
+    });
 
     setItemModalOpen(false);
     setEditingItem(null);
@@ -499,6 +615,7 @@ export default function InventoryHubPage() {
 
   async function handleAdjustStock() {
     if (!adjustingItem) return;
+    const bizId = business?.id || "default";
     const target = adjustData.target_stock;
     const delta = target - adjustingItem.current_stock;
 
@@ -506,20 +623,60 @@ export default function InventoryHubPage() {
       prev.map((it) => (it.id === adjustingItem.id ? { ...it, current_stock: target } : it))
     );
 
-    setLedgerEntries((prev) => [
-      {
-        id: `led-${Date.now()}`,
+    const ledgerId = crypto.randomUUID();
+    const ledgerEntry = {
+      id: ledgerId,
+      business_id: bizId,
+      inventory_item_id: adjustingItem.id,
+      transaction_type: "MANUAL_ADJUSTMENT",
+      quantity_delta: delta,
+      balance_after: target,
+      unit_cost: adjustingItem.cost_per_unit,
+      reason: adjustData.reason,
+      created_at: new Date().toISOString(),
+      inventory_items: { name: adjustingItem.name, unit: adjustingItem.unit },
+    };
+
+    setLedgerEntries((prev) => [ledgerEntry as any, ...prev]);
+
+    // Update item stock in local IndexedDB
+    const updatedItem: LocalInventoryItem = {
+      ...adjustingItem,
+      business_id: bizId,
+      current_stock: target,
+      updated_at: new Date().toISOString(),
+    };
+    await putItem<LocalInventoryItem>(STORES.inventory_items, updatedItem);
+
+    // Enqueue sync mutation
+    await enqueueSyncOperation({
+      businessId: bizId,
+      tableName: "stock_ledger",
+      action: "INSERT",
+      payload: {
+        id: ledgerId,
+        business_id: bizId,
         inventory_item_id: adjustingItem.id,
         transaction_type: "MANUAL_ADJUSTMENT",
         quantity_delta: delta,
         balance_after: target,
         unit_cost: adjustingItem.cost_per_unit,
         reason: adjustData.reason,
-        created_at: new Date().toISOString(),
-        inventory_items: { name: adjustingItem.name, unit: adjustingItem.unit },
       },
-      ...prev,
-    ]);
+      customId: ledgerId,
+    });
+
+    await enqueueSyncOperation({
+      businessId: bizId,
+      tableName: "inventory_items",
+      action: "UPDATE",
+      payload: {
+        id: adjustingItem.id,
+        current_stock: target,
+        updated_at: new Date().toISOString(),
+      },
+      customId: `stock-upd-${adjustingItem.id}-${Date.now()}`,
+    });
 
     setAdjustModalOpen(false);
     setAdjustingItem(null);
@@ -529,6 +686,7 @@ export default function InventoryHubPage() {
     const item = items.find((i) => i.id === wasteForm.item_id);
     if (!item) return;
 
+    const bizId = business?.id || "default";
     const wasteCost = wasteForm.quantity * item.cost_per_unit;
     const newStock = Math.max(0, item.current_stock - wasteForm.quantity);
 
@@ -536,29 +694,72 @@ export default function InventoryHubPage() {
       prev.map((i) => (i.id === item.id ? { ...i, current_stock: newStock } : i))
     );
 
-    setWasteLogs((prev) => [
-      {
-        id: `w-${Date.now()}`,
+    const wasteId = crypto.randomUUID();
+    const wasteEntry = {
+      id: wasteId,
+      business_id: bizId,
+      inventory_item_id: item.id,
+      quantity: wasteForm.quantity,
+      unit: item.unit,
+      cost_loss: wasteCost,
+      reason: wasteForm.reason,
+      notes: wasteForm.notes || null,
+      created_at: new Date().toISOString(),
+      inventory_items: { name: item.name, category: item.category, cost_per_unit: item.cost_per_unit },
+    };
+
+    setWasteLogs((prev) => [wasteEntry as any, ...prev]);
+
+    // Update item stock in local IndexedDB
+    const updatedItem: LocalInventoryItem = {
+      ...item,
+      business_id: bizId,
+      current_stock: newStock,
+      updated_at: new Date().toISOString(),
+    };
+    await putItem<LocalInventoryItem>(STORES.inventory_items, updatedItem);
+
+    // Enqueue sync mutation
+    await enqueueSyncOperation({
+      businessId: bizId,
+      tableName: "waste_logs",
+      action: "INSERT",
+      payload: {
+        id: wasteId,
+        business_id: bizId,
         inventory_item_id: item.id,
         quantity: wasteForm.quantity,
         unit: item.unit,
         cost_loss: wasteCost,
         reason: wasteForm.reason,
         notes: wasteForm.notes || null,
-        created_at: new Date().toISOString(),
-        inventory_items: { name: item.name, category: item.category, cost_per_unit: item.cost_per_unit },
       },
-      ...prev,
-    ]);
+      customId: wasteId,
+    });
 
     setWasteModalOpen(false);
     setWasteForm({ item_id: "", quantity: 1, reason: "Expired", notes: "" });
   }
 
   async function handleReceivePO(po: PurchaseOrder) {
+    const bizId = business?.id || "default";
     setPurchaseOrders((prev) =>
       prev.map((p) => (p.id === po.id ? { ...p, status: "RECEIVED", received_at: new Date().toISOString() } : p))
     );
+
+    // Enqueue PO update
+    await enqueueSyncOperation({
+      businessId: bizId,
+      tableName: "purchase_orders",
+      action: "UPDATE",
+      payload: {
+        id: po.id,
+        status: "RECEIVED",
+        received_at: new Date().toISOString(),
+      },
+      customId: `po-recv-${po.id}-${Date.now()}`,
+    });
+
     alert(`PO #${po.po_number} received! Goods inwarded to stock ledger.`);
   }
 
@@ -586,7 +787,10 @@ export default function InventoryHubPage() {
               <Boxes size={22} />
             </div>
             <div>
-              <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Inventory & Recipe Engine</h1>
+              <div className="flex items-center gap-2">
+                <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Inventory & Recipe Engine</h1>
+                <SyncStatusBadge />
+              </div>
               <p className="text-xs text-slate-500">
                 Multi-tenant ingredients master, recipe BOM auto-deduction, procurement & stock audits.
               </p>

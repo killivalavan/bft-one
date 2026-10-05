@@ -4,17 +4,32 @@ import { supabaseClient } from "@/lib/supabaseClient";
 import { useTenant } from "@/lib/context/TenantContext";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
-import { Download, CheckCircle, Circle } from "lucide-react";
+import { Download, CheckCircle, Circle, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
+import { useToast } from "@/components/ui/Toast";
+import { WhatsAppPayslipModal, WhatsAppIcon, formatWhatsAppPhone } from "@/components/admin/WhatsAppPayslipModal";
 
 interface SalaryManagerProps {
   userId: string;
+  userEmail?: string;
+  contactNumber?: string | null;
   perDaySalary?: number | null;
-  onDownloadPayslip: (userId: string, date: Date) => Promise<void>;
+  onDownloadPayslip: (userId: string, date: Date) => Promise<any>;
+  onUpdateContactNumber?: (newPhone: string) => Promise<void>;
+  onSettlementChange?: (monthKey: string, isSettled: boolean) => void;
 }
 
-export default function SalaryManager({ userId, perDaySalary, onDownloadPayslip }: SalaryManagerProps) {
+export default function SalaryManager({
+  userId,
+  userEmail,
+  contactNumber,
+  perDaySalary,
+  onDownloadPayslip,
+  onUpdateContactNumber,
+  onSettlementChange,
+}: SalaryManagerProps) {
   const { business } = useTenant();
+  const { toast } = useToast();
   const [month, setMonth] = useState<Date>(() => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1); });
   const [rows, setRows] = useState<any[]>([]);
   const [form, setForm] = useState<{ date: string; reason: string; amount: string; kind: string }>({
@@ -30,6 +45,8 @@ export default function SalaryManager({ userId, perDaySalary, onDownloadPayslip 
   const [base, setBase] = useState<number>(0);
   const [fixedAllowance, setFixedAllowance] = useState<number>(0);
   const [isSettled, setIsSettled] = useState(false);
+  const [isSharingWhatsApp, setIsSharingWhatsApp] = useState(false);
+  const [isPhoneModalOpen, setIsPhoneModalOpen] = useState(false);
 
   // Auto-fill amount for 'Leave' based on per-day salary
   useEffect(() => {
@@ -64,7 +81,9 @@ export default function SalaryManager({ userId, perDaySalary, onDownloadPayslip 
     setRows(data || []);
     setBase(prof?.base_salary_cents || 0);
     setFixedAllowance(prof?.fixed_allowance_cents || 0);
-    setIsSettled(settlement?.is_settled || false);
+    const settled = settlement?.is_settled || false;
+    setIsSettled(settled);
+    onSettlementChange?.(range.monthKey, settled);
   }
   useEffect(() => { load(); }, [userId, range.startStr, range.endStr]);
 
@@ -80,6 +99,7 @@ export default function SalaryManager({ userId, perDaySalary, onDownloadPayslip 
   async function toggleSettled() {
     const newVal = !isSettled;
     setIsSettled(newVal); // Optimistic
+    onSettlementChange?.(range.monthKey, newVal);
 
     let error;
     if (newVal) {
@@ -93,10 +113,109 @@ export default function SalaryManager({ userId, perDaySalary, onDownloadPayslip 
     if (error) {
       console.error("Settlement update failed", error);
       setIsSettled(!newVal); // Revert
+      onSettlementChange?.(range.monthKey, !newVal);
       alert("Failed to update status. Please check database permissions.");
     } else {
       await load();
     }
+  }
+
+  async function proceedShareToWhatsAppWeb(targetPhone: string) {
+    const cleanPhone = formatWhatsAppPhone(targetPhone);
+    if (!cleanPhone) {
+      toast({
+        title: "Phone Number Required",
+        description: "Please enter a valid WhatsApp number.",
+        variant: "error",
+      });
+      return;
+    }
+
+    setIsSharingWhatsApp(true);
+    try {
+      // 1. Generate and download the PDF payslip
+      const pdfResult = await onDownloadPayslip(userId, month);
+
+      let publicPdfUrl = "";
+
+      // 2. Upload to Supabase Storage to get public shareable link
+      if (pdfResult && pdfResult.blob) {
+        try {
+          const uploadData = new FormData();
+          uploadData.append("file", pdfResult.blob, pdfResult.fileName || "payslip.pdf");
+          uploadData.append("userId", userId);
+          uploadData.append("monthLabel", monthLabel);
+
+          const upRes = await fetch("/api/payslips/upload", {
+            method: "POST",
+            body: uploadData,
+          });
+
+          if (upRes.ok) {
+            const data = await upRes.json();
+            if (data.url) publicPdfUrl = data.url;
+          }
+        } catch (upErr) {
+          console.warn("Could not upload PDF to cloud storage:", upErr);
+        }
+      }
+
+      const cleanEmpName = (userEmail || "Employee")
+        .split("@")[0]
+        .replace(/[._-]/g, " ")
+        .replace(/\b\w/g, (c) => c.toUpperCase());
+
+      const netFormatted = (totals.net / 100).toFixed(2);
+      const statusStr = isSettled ? "Settled / Disbursed ✅" : "Pending Settlement ⏳";
+
+      const message = publicPdfUrl
+        ? `📄 *Official Payslip — ${monthLabel.toUpperCase()}*
+🏢 *${(business?.name || "SeyalPro").toUpperCase()}*
+━━━━━━━━━━━━━━━━━━━━
+👤 *Employee:* ${cleanEmpName}
+📅 *Period:* ${monthLabel}
+💵 *Net Pay:* ₹${netFormatted}
+📌 *Status:* ${statusStr}
+━━━━━━━━━━━━━━━━━━━━
+📥 *Download / View Payslip PDF:*
+${publicPdfUrl}
+━━━━━━━━━━━━━━━━━━━━
+_Generated via SeyalPro._`
+        : `📄 *Official Payslip — ${monthLabel.toUpperCase()}*
+🏢 *${(business?.name || "SeyalPro").toUpperCase()}*
+👤 *Employee:* ${cleanEmpName}
+💵 *Net Pay:* ₹${netFormatted} (${statusStr})
+(Payslip PDF document downloaded to device)`;
+
+      // 3. Open WhatsApp Web directly into employee's chat with message ready to send
+      const encodedMsg = encodeURIComponent(message);
+      const webUrl = `https://web.whatsapp.com/send?phone=${cleanPhone}&text=${encodedMsg}`;
+      window.open(webUrl, "_blank");
+
+      toast({
+        title: "WhatsApp Web Opened 💬",
+        description: "Payslip message with PDF link loaded in chat. Just press Send!",
+        variant: "success",
+      });
+    } catch (e: any) {
+      console.error("WhatsApp share failed:", e);
+      toast({
+        title: "Download Failed",
+        description: e?.message || "Could not generate payslip PDF.",
+        variant: "error",
+      });
+    } finally {
+      setIsSharingWhatsApp(false);
+    }
+  }
+
+  async function handleShareWhatsApp() {
+    const phone = (contactNumber || "").trim();
+    if (!phone) {
+      setIsPhoneModalOpen(true);
+      return;
+    }
+    await proceedShareToWhatsAppWeb(phone);
   }
 
   const monthLabel = month.toLocaleString(undefined, { month: 'long', year: 'numeric' });
@@ -181,24 +300,63 @@ export default function SalaryManager({ userId, perDaySalary, onDownloadPayslip 
           <option value="adjustment">Adjustment</option>
           <option value="addition">Addition</option>
         </select>
-        <div className="sm:col-span-4 flex items-center gap-2 flex-wrap">
-          <Button onClick={add}>Add entry</Button>
-          <div className="flex-1"></div>
-
-          <Button
-            variant={isSettled ? "secondary" : "outline"}
-            className={cn("gap-2", isSettled ? "bg-emerald-50 text-emerald-700 border-emerald-300 hover:bg-emerald-100" : "")}
-            onClick={toggleSettled}
-          >
-            {isSettled ? <CheckCircle size={16} /> : <Circle size={16} />}
-            {isSettled ? "Settled" : "Mark as Settled"}
+        <div className="sm:col-span-4 pt-3 mt-1 border-t border-slate-200/70 flex flex-col md:flex-row md:items-center justify-between gap-3">
+          <Button onClick={add} className="w-full md:w-auto h-10 font-semibold justify-center shadow-xs">
+            Add entry
           </Button>
 
-          <Button variant="outline" className="gap-2 text-[#2563EB] border-slate-200 hover:bg-[#EFF6FF]" onClick={() => onDownloadPayslip(userId, month)}>
-            <Download size={14} /> Download Payslip
-          </Button>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 w-full md:w-auto">
+            <Button
+              variant={isSettled ? "secondary" : "outline"}
+              className={cn(
+                "w-full justify-center gap-2 h-10 text-xs sm:text-sm font-semibold whitespace-nowrap",
+                isSettled
+                  ? "bg-emerald-50 text-emerald-700 border-emerald-300 hover:bg-emerald-100"
+                  : "border-slate-200 text-slate-700 hover:bg-slate-50"
+              )}
+              onClick={toggleSettled}
+            >
+              {isSettled ? <CheckCircle size={15} /> : <Circle size={15} />}
+              <span>{isSettled ? "Settled" : "Mark as Settled"}</span>
+            </Button>
+
+            <Button
+              variant="outline"
+              className="w-full justify-center gap-2 text-[#2563EB] border-slate-200 hover:bg-[#EFF6FF] font-semibold text-xs sm:text-sm h-10 whitespace-nowrap"
+              onClick={() => onDownloadPayslip(userId, month)}
+            >
+              <Download size={14} />
+              <span>Download Payslip</span>
+            </Button>
+
+            <Button
+              variant="outline"
+              disabled={isSharingWhatsApp}
+              className="w-full justify-center gap-2 text-emerald-700 border-emerald-300 hover:bg-emerald-50 hover:border-emerald-400 font-semibold text-xs sm:text-sm h-10 whitespace-nowrap"
+              onClick={handleShareWhatsApp}
+            >
+              {isSharingWhatsApp ? (
+                <Loader2 className="w-4 h-4 animate-spin text-emerald-600" />
+              ) : (
+                <WhatsAppIcon className="w-4 h-4 text-emerald-600 shrink-0" />
+              )}
+              <span>{isSharingWhatsApp ? "Opening..." : "Share on WhatsApp"}</span>
+            </Button>
+          </div>
         </div>
       </div>
+
+      <WhatsAppPayslipModal
+        open={isPhoneModalOpen}
+        onClose={() => setIsPhoneModalOpen(false)}
+        userId={userId}
+        employeeName={userEmail ? userEmail.split('@')[0] : 'Employee'}
+        contactNumber={contactNumber || ''}
+        monthLabel={monthLabel}
+        monthDate={month}
+        onDownloadPayslip={onDownloadPayslip}
+        onSavePhone={onUpdateContactNumber}
+      />
     </div>
   );
 }

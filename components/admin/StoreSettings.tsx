@@ -139,8 +139,8 @@ export function StoreSettings() {
           isOpen: true,
           imageSrc: src,
           cropType: "signature",
-          aspectRatio: 2.5,
-          title: "Crop Authorised Signature",
+          aspectRatio: 1,
+          title: "Crop Authorised Signature / Stamp (1:1 Square)",
           minSize: 80,
         });
       }
@@ -162,7 +162,7 @@ export function StoreSettings() {
       setSignatureUrl(croppedDataUrl);
       toast({
         title: "Signature Cropped! ✂️",
-        description: "Landscape signature crop applied. Click 'Save All Changes' to save.",
+        description: "Signature crop applied. Click 'Save All Changes' to save.",
         variant: "success",
       });
     }
@@ -311,7 +311,7 @@ export function StoreSettings() {
             {/* 2. Authorised Signature Section */}
             <div className="p-5 rounded-2xl bg-indigo-50/60 border border-indigo-100 flex flex-col sm:flex-row items-center gap-6">
               {/* Signature Preview */}
-              <div className="relative w-36 h-20 rounded-2xl bg-white border-2 border-dashed border-indigo-200 flex items-center justify-center overflow-hidden shadow-xs shrink-0 group">
+              <div className="relative w-28 h-28 rounded-2xl bg-white border-2 border-dashed border-indigo-200 flex items-center justify-center overflow-hidden shadow-xs shrink-0 group">
                 {signatureUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
@@ -333,7 +333,7 @@ export function StoreSettings() {
                   <h4 className="text-sm font-bold text-indigo-950 flex items-center gap-1.5 justify-center sm:justify-start">
                     <FileSignature className="w-4 h-4 text-indigo-600" />
                     <span>Authorised Signature / Stamp</span>
-                    <span className="text-[10px] bg-indigo-100 text-indigo-800 font-bold px-2 py-0.5 rounded-md">Fixed 2.5:1 Landscape Crop</span>
+                    <span className="text-[10px] bg-indigo-100 text-indigo-800 font-bold px-2 py-0.5 rounded-md">Square (1:1) / Rectangle Crop</span>
                   </h4>
                   <p className="text-xs text-zinc-500 mt-0.5">
                     Strict image format only (PNG, JPG, WEBP). Selecting an image opens the cropper to frame your signature.

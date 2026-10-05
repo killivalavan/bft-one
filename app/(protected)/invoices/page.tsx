@@ -10,13 +10,25 @@ import { numberToIndianRupeesWords } from "@/lib/utils/numberToWords";
 import { ImageCropperModal } from "@/components/ui/ImageCropperModal";
 import { useUser } from "@/lib/hooks/useUser";
 import { useProfile } from "@/lib/hooks/useProfile";
+import { DatePicker, parseFlexibleDate } from "@/components/ui/DatePicker";
+import { format, addDays, startOfMonth, endOfMonth } from "date-fns";
 import {
   FileText, Plus, Search, Download, Edit2, Copy, CheckCircle2,
-  Trash2, ArrowLeft, Building2, Store,
+  Trash2, ArrowLeft, Building2, Store, Phone,
   Percent, ShieldCheck, Check, X, Save, Upload, Crop,
   CreditCard, ChevronUp, ChevronDown, ShieldAlert, Loader2, UserCheck, Users,
   Tag, Receipt, PlusCircle, Sparkles
 } from "lucide-react";
+import { SyncStatusBadge } from "@/components/offline/SyncStatusBadge";
+import {
+  STORES,
+  getItemsByTenant,
+  putItem,
+  deleteItem as idbDeleteItem,
+  LocalInvoice,
+  LocalCustomer,
+} from "@/lib/offline/db";
+import { enqueueSyncOperation } from "@/lib/offline/syncEngine";
 
 export type InvoiceRow = {
   id: string;
@@ -128,8 +140,8 @@ export default function InvoicesPage() {
   const [invoiceTitle, setInvoiceTitle] = useState("INVOICE AUG 2026");
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [invoiceNumber, setInvoiceNumber] = useState("A00018");
-  const [invoiceDate, setInvoiceDate] = useState(new Date().toLocaleDateString("en-IN", { month: "short", day: "numeric", year: "numeric" }));
-  const [dueDate, setDueDate] = useState(new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toLocaleDateString("en-IN", { month: "short", day: "numeric", year: "numeric" }));
+  const [invoiceDate, setInvoiceDate] = useState(() => format(new Date(), "MMM dd, yyyy"));
+  const [dueDate, setDueDate] = useState(() => format(addDays(new Date(), 15), "MMM dd, yyyy"));
 
   // Billed By & Billed To
   const [billedByName, setBilledByName] = useState("Brown fening tea");
@@ -290,37 +302,130 @@ export default function InvoicesPage() {
     })();
   }, [business?.id]);
 
-  // Persist Invoices
+  // Persist Invoices (Offline-First IndexedDB + Sync Queue)
   function persistInvoices(updated: SavedInvoice[]) {
     setInvoices(updated);
     const bizId = business?.id || "default";
     try {
       localStorage.setItem(`bftone_invoices_${bizId}`, JSON.stringify(updated));
     } catch {}
+
+    // Save to IndexedDB & queue sync mutations
+    updated.forEach((inv) => {
+      const dbInv: LocalInvoice = {
+        id: inv.id,
+        business_id: bizId,
+        invoice_number: inv.invoiceNumber,
+        title: inv.title,
+        invoice_date: inv.date,
+        due_date: inv.dueDate,
+        customer_name: inv.customerName,
+        customer_phone: inv.customerPhone,
+        customer_address: inv.customerAddress,
+        customer_gstin: inv.customerGstin,
+        items: inv.items,
+        subtotal_cents: Math.round(inv.subtotal * 100),
+        tax_rate: inv.taxRate,
+        tax_cents: Math.round(inv.taxAmount * 100),
+        tds_cents: Math.round(inv.tdsAmount * 100),
+        discount_cents: Math.round(inv.discountAmount * 100),
+        additional_cents: Math.round(inv.additionalCharges * 100),
+        total_cents: Math.round(inv.totalAmount * 100),
+        status: inv.status,
+        payment_mode: inv.paymentMode,
+        notes: inv.notes,
+        bank_details: inv.bankDetails,
+        upi_details: inv.upiDetails,
+        created_at: inv.createdAt,
+      };
+
+      putItem<LocalInvoice>(STORES.invoices, dbInv).catch(() => {});
+
+      enqueueSyncOperation({
+        businessId: bizId,
+        tableName: "invoices",
+        action: "INSERT",
+        payload: {
+          id: dbInv.id,
+          business_id: dbInv.business_id,
+          invoice_number: dbInv.invoice_number,
+          title: dbInv.title,
+          invoice_date: dbInv.invoice_date,
+          due_date: dbInv.due_date,
+          customer_name: dbInv.customer_name,
+          customer_phone: dbInv.customer_phone,
+          customer_address: dbInv.customer_address,
+          customer_gstin: dbInv.customer_gstin,
+          items: dbInv.items,
+          subtotal_cents: dbInv.subtotal_cents,
+          tax_rate: dbInv.tax_rate,
+          tax_cents: dbInv.tax_cents,
+          tds_cents: dbInv.tds_cents,
+          discount_cents: dbInv.discount_cents,
+          additional_cents: dbInv.additional_cents,
+          total_cents: dbInv.total_cents,
+          status: dbInv.status,
+          payment_mode: dbInv.payment_mode,
+          notes: dbInv.notes,
+          bank_details: dbInv.bank_details,
+          upi_details: dbInv.upi_details,
+          created_at: dbInv.created_at,
+        },
+        customId: dbInv.id,
+      }).catch(() => {});
+    });
   }
 
-  // Persist & Save Customer
+  // Persist & Save Customer (Offline-First IndexedDB + Sync Queue)
   function saveCustomerToDirectory(name: string, address: string, phone: string, gstin: string) {
     if (!name.trim()) return;
     const bizId = business?.id || "default";
     const existingIndex = savedCustomers.findIndex(c => c.name.toLowerCase().trim() === name.toLowerCase().trim());
     let nextList: SavedCustomer[];
+    let targetCust: SavedCustomer;
+
     if (existingIndex >= 0) {
-      nextList = savedCustomers.map((c, i) => i === existingIndex ? { ...c, address, phone, gstin } : c);
+      targetCust = { ...savedCustomers[existingIndex], address, phone, gstin };
+      nextList = savedCustomers.map((c, i) => i === existingIndex ? targetCust : c);
     } else {
-      const newCust: SavedCustomer = {
+      targetCust = {
         id: `cust-${Date.now()}`,
         name: name.trim(),
         address: address.trim(),
         phone: phone.trim(),
         gstin: gstin.trim(),
       };
-      nextList = [newCust, ...savedCustomers];
+      nextList = [targetCust, ...savedCustomers];
     }
     setSavedCustomers(nextList);
     try {
       localStorage.setItem(`bftone_customers_${bizId}`, JSON.stringify(nextList));
     } catch {}
+
+    const localCust: LocalCustomer = {
+      id: targetCust.id,
+      business_id: bizId,
+      name: targetCust.name,
+      address: targetCust.address,
+      phone: targetCust.phone,
+      gstin: targetCust.gstin,
+      role: "Customer",
+      updated_at: new Date().toISOString(),
+    };
+    putItem<LocalCustomer>(STORES.customers, localCust).catch(() => {});
+    enqueueSyncOperation({
+      businessId: bizId,
+      tableName: "external_contacts",
+      action: "INSERT",
+      payload: {
+        id: localCust.id,
+        business_id: localCust.business_id,
+        name: localCust.name,
+        phone: localCust.phone,
+        role: localCust.role,
+      },
+      customId: localCust.id,
+    }).catch(() => {});
   }
 
   // Live Subtotal & Total Calculations
@@ -447,8 +552,8 @@ export default function InvoicesPage() {
     setCurrentInvoiceId(null);
     setInvoiceTitle(monthYear);
     setInvoiceNumber(nextNum);
-    setInvoiceDate(now.toLocaleDateString("en-IN", { month: "short", day: "numeric", year: "numeric" }));
-    setDueDate(new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toLocaleDateString("en-IN", { month: "short", day: "numeric", year: "numeric" }));
+    setInvoiceDate(format(now, "MMM dd, yyyy"));
+    setDueDate(format(addDays(now, 15), "MMM dd, yyyy"));
     
     // Auto-fill from first saved customer if available
     if (savedCustomers.length > 0) {
@@ -532,7 +637,7 @@ export default function InvoicesPage() {
       id: `inv-${Date.now()}`,
       invoiceNumber: nextNum,
       title: `${inv.title} (Copy)`,
-      date: new Date().toLocaleDateString("en-IN", { month: "short", day: "numeric", year: "numeric" }),
+      date: format(new Date(), "MMM dd, yyyy"),
       status: "unpaid",
       createdAt: new Date().toISOString(),
     };
@@ -721,7 +826,10 @@ export default function InvoicesPage() {
                     <FileText className="w-5 h-5" />
                   </div>
                   <div>
-                    <h1 className="text-2xl font-bold text-[#0F172A] tracking-tight">Invoice Generator &amp; History</h1>
+                    <div className="flex items-center gap-2">
+                      <h1 className="text-2xl font-bold text-[#0F172A] tracking-tight">Invoice Generator &amp; History</h1>
+                      <SyncStatusBadge />
+                    </div>
                     <p className="text-xs text-[#64748B] mt-0.5">Manage, create, and track tax invoices for {business?.name || "your store"}</p>
                   </div>
                 </div>
@@ -1027,35 +1135,38 @@ export default function InvoicesPage() {
                       />
                     </div>
 
-                    {/* Invoice Date Line Input */}
-                    <div className="space-y-1">
-                      <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                        Invoice Date <span className="text-slate-400">*</span>
-                      </label>
-                      <input
-                        type="text"
-                        value={invoiceDate}
-                        onChange={e => setInvoiceDate(e.target.value)}
-                        placeholder="e.g. Aug 31, 2026"
-                        className="w-full bg-transparent border-0 border-b border-slate-300 focus:border-[#2563EB] focus:ring-0 rounded-none px-0.5 py-1.5 text-xs font-semibold text-[#0F172A] transition-colors outline-none"
-                      />
-                    </div>
+                    {/* Invoice Date Calendar Picker */}
+                    <DatePicker
+                      label="Invoice Date"
+                      required
+                      value={invoiceDate}
+                      onChange={setInvoiceDate}
+                      placeholder="e.g. Aug 31, 2026"
+                      align="right"
+                      presets={[
+                        { label: "Today", getDate: () => new Date() },
+                        { label: "Yesterday", getDate: () => addDays(new Date(), -1) },
+                        { label: "1st of Month", getDate: () => startOfMonth(new Date()) },
+                      ]}
+                    />
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                    {/* Due Date Line Input */}
-                    <div className="space-y-1">
-                      <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                        Due Date
-                      </label>
-                      <input
-                        type="text"
-                        value={dueDate}
-                        onChange={e => setDueDate(e.target.value)}
-                        placeholder="e.g. Sep 15, 2026"
-                        className="w-full bg-transparent border-0 border-b border-slate-300 focus:border-[#2563EB] focus:ring-0 rounded-none px-0.5 py-1.5 text-xs font-semibold text-[#0F172A] transition-colors outline-none"
-                      />
-                    </div>
+                    {/* Due Date Calendar Picker */}
+                    <DatePicker
+                      label="Due Date"
+                      value={dueDate}
+                      onChange={setDueDate}
+                      placeholder="e.g. Sep 15, 2026"
+                      align="left"
+                      presets={[
+                        { label: "Same Day", getDate: () => parseFlexibleDate(invoiceDate) || new Date() },
+                        { label: "+7 Days", getDate: () => addDays(parseFlexibleDate(invoiceDate) || new Date(), 7) },
+                        { label: "+15 Days", getDate: () => addDays(parseFlexibleDate(invoiceDate) || new Date(), 15) },
+                        { label: "+30 Days", getDate: () => addDays(parseFlexibleDate(invoiceDate) || new Date(), 30) },
+                        { label: "End of Month", getDate: () => endOfMonth(parseFlexibleDate(invoiceDate) || new Date()) },
+                      ]}
+                    />
 
                     {/* Payment Status Dropdown (Matching Unit & Client Dropdown UI) */}
                     <div className="space-y-1">
@@ -1208,28 +1319,39 @@ export default function InvoicesPage() {
                 </div>
               </div>
 
-              {/* Billed By & Billed To Cards (Matches Screenshot Exactly with Grey Background) */}
+              {/* Billed By & Billed To Cards (Styled with Brand Color Code) */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* Card 1: Billed By */}
-                <div className="p-5 rounded-[12px] bg-slate-50 border border-[#E2E8F0] shadow-2xs space-y-3.5">
-                  <div>
-                    <span className="text-base sm:text-lg font-bold text-[#0F172A] border-b-2 border-dashed border-[#0F172A] pb-0.5 inline-block">
-                      Billed By
-                    </span>
-                    <span className="text-xs sm:text-sm text-[#64748B] font-medium ml-2.5">
-                      (Your Store Details)
+                {/* Card 1: Billed By (Brand Primary Blue Theme, No Border) */}
+                <div className="p-5 rounded-2xl bg-[#EFF6FF] shadow-xs space-y-4 relative overflow-hidden transition-all hover:shadow-sm">
+                  <div className="absolute -top-10 -right-10 w-28 h-28 bg-blue-500/10 rounded-full blur-2xl pointer-events-none" />
+
+                  {/* Header with Icon and Badge */}
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-xl bg-[#2563EB] text-white flex items-center justify-center shadow-xs">
+                        <Store className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <h3 className="text-sm sm:text-base font-bold text-[#0F172A] leading-tight">Billed By</h3>
+                        <p className="text-[11px] font-semibold text-[#2563EB]">Your Store Details</p>
+                      </div>
+                    </div>
+                    <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-blue-100/80 text-[#1E3A8A] border border-blue-200 tracking-wide uppercase">
+                      Issuer
                     </span>
                   </div>
 
                   {/* Separate Store Name Box */}
-                  <div className="w-full bg-white border border-[#E2E8F0] rounded-lg px-3.5 py-2.5 text-xs font-normal text-slate-700 flex items-center justify-between">
-                    <span className="truncate font-medium text-slate-800">{billedByName || "Brown fening tea"}</span>
-                    <Store className="w-4 h-4 text-slate-400 shrink-0" />
+                  <div className="w-full bg-white/95 border border-blue-100 rounded-xl px-3.5 py-2.5 text-xs font-semibold text-[#0F172A] flex items-center justify-between shadow-2xs">
+                    <span className="truncate">{billedByName || "Brown fening tea"}</span>
+                    <span className="px-2 py-0.5 rounded-md bg-blue-50 text-[10px] font-bold text-[#2563EB] border border-blue-100 shrink-0">
+                      Store Profile
+                    </span>
                   </div>
 
                   {/* Sub-Card */}
                   {!isEditingBilledBy ? (
-                    <div className="rounded-lg border border-[#E2E8F0] bg-white p-4 shadow-2xs min-h-[130px] flex flex-col justify-between">
+                    <div className="rounded-xl border border-blue-100 bg-white/90 p-4 shadow-2xs min-h-[135px] flex flex-col justify-between space-y-3">
                       <div className="space-y-1.5">
                         <div className="flex items-center justify-between">
                           <h4 className="text-sm font-bold text-[#0F172A]">
@@ -1238,75 +1360,85 @@ export default function InvoicesPage() {
                           <button
                             type="button"
                             onClick={() => setIsEditingBilledBy(true)}
-                            className="text-[#2563EB] hover:text-[#1D4ED8] font-semibold text-xs inline-flex items-center gap-1 cursor-pointer transition-colors"
+                            className="text-[#2563EB] hover:text-[#1D4ED8] bg-blue-50 hover:bg-blue-100/80 px-2.5 py-1 rounded-lg font-bold text-xs inline-flex items-center gap-1 cursor-pointer transition-colors"
                           >
                             <Edit2 className="w-3.5 h-3.5" />
                             <span>Edit</span>
                           </button>
                         </div>
 
-                        <p className="text-xs text-[#64748B] leading-relaxed min-h-[44px] max-w-xl">
+                        <p className="text-xs text-slate-600 leading-relaxed min-h-[44px] max-w-xl">
                           {billedByAddress || "255, Rajiv Gandhi Salai (OMR), Navalur, Chennai, Tamil Nadu, India - 600130"}
                         </p>
                       </div>
 
-                      <div className="flex flex-wrap items-center gap-3 pt-2 text-[11px] text-[#64748B] border-t border-slate-100">
-                        {billedByPhone && <span>Phone: <strong className="text-[#0F172A]">{billedByPhone}</strong></span>}
-                        {billedByGstin && <span>GSTIN: <strong className="text-[#0F172A]">{billedByGstin}</strong></span>}
+                      <div className="flex flex-wrap items-center gap-2 pt-2 text-[11px] border-t border-slate-100">
+                        {billedByPhone && (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-blue-50/70 border border-blue-100 text-[#1E3A8A] font-semibold">
+                            <Phone className="w-3 h-3 text-[#2563EB]" />
+                            <span>{billedByPhone}</span>
+                          </span>
+                        )}
+                        {billedByGstin && (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-slate-50 border border-slate-200 text-slate-700 font-semibold">
+                            <Receipt className="w-3 h-3 text-slate-400" />
+                            <span>GSTIN: <strong>{billedByGstin}</strong></span>
+                          </span>
+                        )}
                       </div>
                     </div>
                   ) : (
-                    <div className="rounded-lg border border-[#E2E8F0] bg-white p-4 space-y-3 shadow-2xs">
-                      <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-                        <span className="text-xs font-bold text-[#0F172A]">Edit Store Details</span>
+                    <div className="rounded-xl border border-blue-200 bg-white p-4 space-y-3 shadow-2xs">
+                      <div className="flex items-center justify-between border-b border-blue-100 pb-2">
+                        <span className="text-xs font-bold text-[#1E3A8A]">Edit Store Details</span>
                         <button
                           type="button"
                           onClick={() => setIsEditingBilledBy(false)}
-                          className="px-3 py-1 bg-[#2563EB] hover:bg-[#1D4ED8] text-white rounded-md text-xs font-bold transition-colors cursor-pointer"
+                          className="px-3 py-1 bg-[#2563EB] hover:bg-[#1D4ED8] text-white rounded-lg text-xs font-bold transition-colors cursor-pointer"
                         >
                           Done
                         </button>
                       </div>
                       <div className="space-y-2">
                         <div>
-                          <label className="text-[10px] font-bold text-zinc-500 uppercase">Business / Store Name</label>
+                          <label className="text-[10px] font-bold text-[#1E3A8A] uppercase">Business / Store Name</label>
                           <input
                             type="text"
                             value={billedByName}
                             onChange={e => setBilledByName(e.target.value)}
                             placeholder="Store Name"
-                            className="w-full mt-0.5 px-3 py-1.5 bg-white rounded-[8px] border border-zinc-200 text-xs font-semibold text-zinc-900 focus:border-zinc-500 outline-none"
+                            className="w-full mt-0.5 px-3 py-1.5 bg-white rounded-lg border border-slate-200 focus:border-[#2563EB] focus:ring-1 focus:ring-blue-500/20 text-xs font-semibold text-slate-900 outline-none"
                           />
                         </div>
                         <div>
-                          <label className="text-[10px] font-bold text-zinc-500 uppercase">Official Address</label>
+                          <label className="text-[10px] font-bold text-[#1E3A8A] uppercase">Official Address</label>
                           <textarea
                             rows={3}
                             value={billedByAddress}
                             onChange={e => setBilledByAddress(e.target.value)}
                             placeholder="Official Address"
-                            className="w-full h-20 mt-0.5 px-3 py-2 bg-white rounded-[8px] border border-zinc-200 text-xs text-zinc-700 focus:border-zinc-500 outline-none resize-none"
+                            className="w-full h-20 mt-0.5 px-3 py-2 bg-white rounded-lg border border-slate-200 focus:border-[#2563EB] focus:ring-1 focus:ring-blue-500/20 text-xs text-slate-700 outline-none resize-none"
                           />
                         </div>
                         <div className="grid grid-cols-2 gap-2">
                           <div>
-                            <label className="text-[10px] font-bold text-zinc-500 uppercase">Phone Number</label>
+                            <label className="text-[10px] font-bold text-[#1E3A8A] uppercase">Phone Number</label>
                             <input
                               type="text"
                               value={billedByPhone}
                               onChange={e => handlePhoneChange(e.target.value, setBilledByPhone)}
                               placeholder="+91..."
-                              className="w-full mt-0.5 px-3 py-1.5 bg-white rounded-[8px] border border-zinc-200 text-xs text-zinc-700 focus:border-zinc-500 outline-none"
+                              className="w-full mt-0.5 px-3 py-1.5 bg-white rounded-lg border border-slate-200 focus:border-[#2563EB] focus:ring-1 focus:ring-blue-500/20 text-xs text-slate-700 outline-none"
                             />
                           </div>
                           <div>
-                            <label className="text-[10px] font-bold text-zinc-500 uppercase">GSTIN (Optional)</label>
+                            <label className="text-[10px] font-bold text-[#1E3A8A] uppercase">GSTIN (Optional)</label>
                             <input
                               type="text"
                               value={billedByGstin}
                               onChange={e => setBilledByGstin(e.target.value)}
                               placeholder="GSTIN"
-                              className="w-full mt-0.5 px-3 py-1.5 bg-white rounded-[8px] border border-zinc-200 text-xs text-zinc-700 focus:border-zinc-500 outline-none"
+                              className="w-full mt-0.5 px-3 py-1.5 bg-white rounded-lg border border-slate-200 focus:border-[#2563EB] focus:ring-1 focus:ring-blue-500/20 text-xs text-slate-700 outline-none"
                             />
                           </div>
                         </div>
@@ -1315,36 +1447,45 @@ export default function InvoicesPage() {
                   )}
                 </div>
 
-                {/* Card 2: Billed To (Exact Screenshot Match with Grey Background) */}
-                <div className="p-5 rounded-[12px] bg-zinc-50/80 border border-zinc-200/90 shadow-2xs space-y-3.5">
-                  <div>
-                    <span className="text-base sm:text-lg font-black text-zinc-900 border-b-2 border-dashed border-zinc-800 pb-0.5 inline-block">
-                      Billed To
-                    </span>
-                    <span className="text-xs sm:text-sm text-zinc-500 font-medium ml-2.5">
-                      (Client's Details)
+                {/* Card 2: Billed To (Same bg as Billed By, No Border) */}
+                <div className="p-5 rounded-2xl bg-[#EFF6FF] shadow-xs space-y-4 relative overflow-hidden transition-all hover:shadow-sm">
+                  <div className="absolute -top-10 -right-10 w-28 h-28 bg-blue-500/10 rounded-full blur-2xl pointer-events-none" />
+
+                  {/* Header with Icon and Badge */}
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-xl bg-[#2563EB] text-white flex items-center justify-center shadow-xs">
+                        <Building2 className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <h3 className="text-sm sm:text-base font-bold text-[#0F172A] leading-tight">Billed To</h3>
+                        <p className="text-[11px] font-semibold text-[#2563EB]">Client / Customer Details</p>
+                      </div>
+                    </div>
+                    <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-blue-100/80 text-[#1E3A8A] tracking-wide uppercase">
+                      Recipient
                     </span>
                   </div>
 
-                  {/* Clean Dropdown Selector (Matching Item Table Dropdown UI) */}
+                  {/* Clean Dropdown Selector */}
                   <div className="relative">
                     <button
                       type="button"
                       onClick={() => setOpenCustomerDropdown(!openCustomerDropdown)}
-                      className="w-full flex items-center justify-between px-3.5 py-2.5 bg-white hover:bg-zinc-50/90 rounded-[8px] border border-zinc-200 hover:border-zinc-300 focus:border-indigo-600 text-xs font-semibold text-zinc-800 transition-all shadow-2xs cursor-pointer"
+                      className="w-full flex items-center justify-between px-3.5 py-2.5 bg-white/95 hover:bg-blue-50/40 rounded-xl border border-blue-100 hover:border-blue-200 focus:border-[#2563EB] text-xs font-semibold text-slate-800 transition-all shadow-2xs cursor-pointer"
                     >
                       <div className="flex items-center gap-2 truncate">
-                        <Users className="w-4 h-4 text-zinc-400 shrink-0" />
+                        <Users className="w-4 h-4 text-blue-500 shrink-0" />
                         <span className="truncate">{billedToName || "Select client from directory..."}</span>
                       </div>
-                      <ChevronDown className={cn("w-4 h-4 text-zinc-400 shrink-0 ml-2 transition-transform duration-150", openCustomerDropdown && "rotate-180 text-indigo-600")} />
+                      <ChevronDown className={cn("w-4 h-4 text-blue-400 shrink-0 ml-2 transition-transform duration-150", openCustomerDropdown && "rotate-180 text-[#2563EB]")} />
                     </button>
 
                     {openCustomerDropdown && (
                       <>
                         <div className="fixed inset-0 z-40" onClick={() => setOpenCustomerDropdown(false)} />
-                        <div className="absolute left-0 top-full mt-1.5 w-full bg-white border border-zinc-200 shadow-xl rounded-[10px] p-1.5 z-50 animate-in fade-in zoom-in-95 max-h-60 overflow-y-auto divide-y divide-zinc-100 scrollbar-thin">
-                          <div className="p-1 text-[10px] font-bold text-zinc-400 uppercase tracking-wider">
+                        <div className="absolute left-0 top-full mt-1.5 w-full bg-white border border-blue-100 shadow-2xl rounded-xl p-1.5 z-50 animate-in fade-in zoom-in-95 max-h-60 overflow-y-auto divide-y divide-blue-50 scrollbar-thin">
+                          <div className="p-1 text-[10px] font-bold text-blue-500 uppercase tracking-wider">
                             Saved Client Directory
                           </div>
                           <div className="py-1 space-y-0.5">
@@ -1362,15 +1503,15 @@ export default function InvoicesPage() {
                                   setOpenCustomerDropdown(false);
                                 }}
                                 className={cn(
-                                  "w-full text-left px-3 py-2 rounded-[6px] text-xs font-medium flex items-center justify-between transition-colors cursor-pointer",
-                                  selectedCustomerId === cust.id ? "bg-indigo-50 text-indigo-700 font-bold" : "text-zinc-800 hover:bg-zinc-50"
+                                  "w-full text-left px-3 py-2 rounded-lg text-xs font-medium flex items-center justify-between transition-colors cursor-pointer",
+                                  selectedCustomerId === cust.id ? "bg-blue-50 text-[#1E3A8A] font-bold border-l-2 border-[#2563EB]" : "text-slate-800 hover:bg-blue-50/50"
                                 )}
                               >
                                 <div>
-                                  <div className="font-bold text-zinc-900">{cust.name}</div>
-                                  {cust.phone && <div className="text-[10px] text-zinc-400">{cust.phone}</div>}
+                                  <div className="font-bold text-[#0F172A]">{cust.name}</div>
+                                  {cust.phone && <div className="text-[10px] text-slate-400">{cust.phone}</div>}
                                 </div>
-                                {selectedCustomerId === cust.id && <Check className="w-3.5 h-3.5 text-indigo-600 shrink-0" />}
+                                {selectedCustomerId === cust.id && <Check className="w-3.5 h-3.5 text-[#2563EB] shrink-0" />}
                               </button>
                             ))}
                           </div>
@@ -1386,7 +1527,7 @@ export default function InvoicesPage() {
                                 setIsEditingBilledTo(true);
                                 setOpenCustomerDropdown(false);
                               }}
-                              className="w-full text-left px-3 py-2 rounded-[6px] text-xs font-bold text-indigo-600 hover:bg-indigo-50 flex items-center gap-1.5 transition-colors cursor-pointer"
+                              className="w-full text-left px-3 py-2 rounded-lg text-xs font-bold text-[#2563EB] hover:bg-blue-50 flex items-center gap-1.5 transition-colors cursor-pointer"
                             >
                               <Plus className="w-3.5 h-3.5" />
                               <span>+ Add New Client</span>
@@ -1399,39 +1540,49 @@ export default function InvoicesPage() {
 
                   {/* Sub-Card */}
                   {!isEditingBilledTo ? (
-                    <div className="rounded-[8px] border border-zinc-200 bg-white p-4 shadow-2xs min-h-[130px] flex flex-col justify-between">
+                    <div className="rounded-xl border border-blue-100 bg-white/90 p-4 shadow-2xs min-h-[135px] flex flex-col justify-between space-y-3">
                       <div className="space-y-1.5">
                         <div className="flex items-center justify-between">
-                          <h4 className="text-sm font-black text-zinc-900">
+                          <h4 className="text-sm font-bold text-[#0F172A]">
                             {billedToName || "No Client Selected"}
                           </h4>
                           <button
                             type="button"
                             onClick={() => setIsEditingBilledTo(true)}
-                            className="text-[#8B5CF6] hover:text-[#7C3AED] font-semibold text-xs inline-flex items-center gap-1 cursor-pointer transition-colors"
+                            className="text-[#2563EB] hover:text-[#1D4ED8] bg-blue-50 hover:bg-blue-100/80 px-2.5 py-1 rounded-lg font-bold text-xs inline-flex items-center gap-1 cursor-pointer transition-colors"
                           >
                             <Edit2 className="w-3.5 h-3.5" />
                             <span>Edit</span>
                           </button>
                         </div>
 
-                        <p className="text-xs text-zinc-600 leading-relaxed min-h-[44px] max-w-xl">
+                        <p className="text-xs text-slate-600 leading-relaxed min-h-[44px] max-w-xl">
                           {billedToAddress || "No address provided. Click Edit to add address."}
                         </p>
                       </div>
 
-                      <div className="flex flex-wrap items-center gap-3 pt-2 text-[11px] text-zinc-500 border-t border-zinc-100">
-                        {billedToPhone && <span>Phone: <strong className="text-zinc-700">{billedToPhone}</strong></span>}
-                        {billedToGstin && <span>GSTIN: <strong className="text-zinc-700">{billedToGstin}</strong></span>}
+                      <div className="flex flex-wrap items-center gap-2 pt-2 text-[11px] border-t border-slate-100">
+                        {billedToPhone && (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-blue-50/70 border border-blue-100 text-[#1E3A8A] font-semibold">
+                            <Phone className="w-3 h-3 text-[#2563EB]" />
+                            <span>{billedToPhone}</span>
+                          </span>
+                        )}
+                        {billedToGstin && (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-slate-50 border border-slate-200 text-slate-700 font-semibold">
+                            <Receipt className="w-3 h-3 text-slate-400" />
+                            <span>GSTIN: <strong>{billedToGstin}</strong></span>
+                          </span>
+                        )}
                         {!billedToPhone && !billedToGstin && (
-                          <span className="text-zinc-400 italic">No contact information added</span>
+                          <span className="text-slate-400 italic">No contact information added</span>
                         )}
                       </div>
                     </div>
                   ) : (
-                    <div className="rounded-[8px] border border-zinc-200 bg-white p-4 space-y-3 shadow-2xs">
-                      <div className="flex items-center justify-between border-b border-zinc-100 pb-2">
-                        <span className="text-xs font-bold text-zinc-800">Edit Client Details</span>
+                    <div className="rounded-xl border border-blue-200 bg-white p-4 space-y-3 shadow-2xs">
+                      <div className="flex items-center justify-between border-b border-blue-100 pb-2">
+                        <span className="text-xs font-bold text-[#1E3A8A]">Edit Client Details</span>
                         <button
                           type="button"
                           onClick={() => {
@@ -1440,14 +1591,14 @@ export default function InvoicesPage() {
                               saveCustomerToDirectory(billedToName, billedToAddress, billedToPhone, billedToGstin);
                             }
                           }}
-                          className="px-3 py-1 bg-[#8B5CF6] hover:bg-[#7C3AED] text-white rounded-[6px] text-xs font-bold transition-colors cursor-pointer"
+                          className="px-3 py-1 bg-[#2563EB] hover:bg-[#1D4ED8] text-white rounded-lg text-xs font-bold transition-colors cursor-pointer"
                         >
                           Done
                         </button>
                       </div>
                       <div className="space-y-2">
                         <div>
-                          <label className="text-[10px] font-bold text-zinc-500 uppercase">Client Name *</label>
+                          <label className="text-[10px] font-bold text-[#1E3A8A] uppercase">Client Name *</label>
                           <input
                             type="text"
                             value={billedToName}
@@ -1456,38 +1607,38 @@ export default function InvoicesPage() {
                               setSelectedCustomerId("__custom__");
                             }}
                             placeholder="Client / Company Name"
-                            className="w-full mt-0.5 px-3 py-1.5 bg-zinc-50/50 rounded-[8px] border border-zinc-200 text-xs font-semibold text-zinc-900 focus:border-zinc-500 outline-none"
+                            className="w-full mt-0.5 px-3 py-1.5 bg-white rounded-lg border border-slate-200 focus:border-[#2563EB] focus:ring-1 focus:ring-blue-500/20 text-xs font-semibold text-slate-900 outline-none"
                           />
                         </div>
                         <div>
-                          <label className="text-[10px] font-bold text-zinc-500 uppercase">Billing Address</label>
+                          <label className="text-[10px] font-bold text-[#1E3A8A] uppercase">Billing Address</label>
                           <textarea
                             rows={3}
                             value={billedToAddress}
                             onChange={e => setBilledToAddress(e.target.value)}
                             placeholder="Address..."
-                            className="w-full h-20 mt-0.5 px-3 py-2 bg-zinc-50/50 rounded-[8px] border border-zinc-200 text-xs text-zinc-700 focus:border-zinc-500 outline-none resize-none"
+                            className="w-full h-20 mt-0.5 px-3 py-2 bg-white rounded-lg border border-slate-200 focus:border-[#2563EB] focus:ring-1 focus:ring-blue-500/20 text-xs text-slate-700 outline-none resize-none"
                           />
                         </div>
                         <div className="grid grid-cols-2 gap-2">
                           <div>
-                            <label className="text-[10px] font-bold text-zinc-500 uppercase">Phone</label>
+                            <label className="text-[10px] font-bold text-[#1E3A8A] uppercase">Phone</label>
                             <input
                               type="text"
                               value={billedToPhone}
                               onChange={e => handlePhoneChange(e.target.value, setBilledToPhone)}
                               placeholder="+91..."
-                              className="w-full mt-0.5 px-3 py-1.5 bg-zinc-50/50 rounded-[8px] border border-zinc-200 text-xs text-zinc-700 focus:border-zinc-500 outline-none"
+                              className="w-full mt-0.5 px-3 py-1.5 bg-white rounded-lg border border-slate-200 focus:border-[#2563EB] focus:ring-1 focus:ring-blue-500/20 text-xs text-slate-700 outline-none"
                             />
                           </div>
                           <div>
-                            <label className="text-[10px] font-bold text-zinc-500 uppercase">GSTIN</label>
+                            <label className="text-[10px] font-bold text-[#1E3A8A] uppercase">GSTIN</label>
                             <input
                               type="text"
                               value={billedToGstin}
                               onChange={e => setBilledToGstin(e.target.value)}
                               placeholder="GSTIN"
-                              className="w-full mt-0.5 px-3 py-1.5 bg-zinc-50/50 rounded-[8px] border border-zinc-200 text-xs text-zinc-700 focus:border-zinc-500 outline-none"
+                              className="w-full mt-0.5 px-3 py-1.5 bg-white rounded-lg border border-slate-200 focus:border-[#2563EB] focus:ring-1 focus:ring-blue-500/20 text-xs text-slate-700 outline-none"
                             />
                           </div>
                         </div>
@@ -1498,89 +1649,96 @@ export default function InvoicesPage() {
               </div>
 
               {/* Dynamic Items Table (Refined @ui-ux-pro-max Responsive Styling) */}
-              <div className="rounded-xl border border-[#E2E8F0] bg-white overflow-hidden shadow-xs mt-1">
-                <div className="overflow-x-auto scrollbar-thin">
-                  <div className="w-full md:min-w-[700px]">
+              <div className="rounded-xl border border-[#E2E8F0] bg-white shadow-xs mt-1">
+                <div className="w-full">
+                  <div className="w-full">
                     {/* Desktop Table Header */}
-                    <div className="bg-[#EFF6FF] text-[#1E3A8A] border-b border-[#DBEAFE] px-4 py-3.5 min-h-[46px] text-xs font-bold uppercase tracking-wider hidden md:grid md:grid-cols-[1fr_80px_90px_100px_120px_80px] gap-3 items-center">
+                    <div className="bg-[#2563EB] text-white px-4 py-3.5 min-h-[46px] text-xs font-bold uppercase tracking-wider hidden md:grid md:grid-cols-[1fr_80px_90px_100px_120px_80px] gap-3 items-center rounded-t-xl shadow-xs">
                       <div className="text-left pl-2">Item</div>
                       <div className="text-center">Quantity</div>
                       <div className="text-center">Unit</div>
                       <div className="text-center">Rate (₹)</div>
-                      <div className="text-left pl-2">Amount (₹)</div>
+                      <div className="text-center">Amount (₹)</div>
                       <div className="text-center"></div>
                     </div>
 
                     {/* Mobile Only Header */}
-                    <div className="bg-[#EFF6FF] text-[#1E3A8A] border-b border-[#DBEAFE] px-4 py-3 min-h-[44px] text-xs font-bold uppercase tracking-wider flex md:hidden items-center justify-between">
+                    <div className="bg-[#2563EB] text-white px-4 py-3 min-h-[44px] text-xs font-bold uppercase tracking-wider flex md:hidden items-center justify-between rounded-t-xl shadow-xs">
                       <div className="pl-1">Item</div>
-                      <div className="text-[11px] font-semibold text-[#1E3A8A]/80">{items.length} {items.length === 1 ? "line item" : "line items"}</div>
+                      <div className="text-[11px] font-semibold text-white/90">{items.length} {items.length === 1 ? "line item" : "line items"}</div>
                     </div>
 
                     {/* Table Rows: Stacked on Mobile, Grid on Desktop */}
-                    <div className="divide-y divide-[#E2E8F0] p-2 space-y-2 md:space-y-1.5 bg-white">
-                      {items.map((row, idx) => (
-                        <div
-                          key={row.id}
-                          className="flex flex-col md:grid md:grid-cols-[1fr_80px_90px_100px_120px_80px] gap-2.5 md:gap-3 items-stretch md:items-center p-3 md:px-2 md:py-2 rounded-lg bg-slate-50/50 md:bg-transparent hover:bg-[#F8FAFC] border border-[#E2E8F0] md:border-transparent transition-colors"
-                        >
-                          {/* Item Name with Single Input & Autocomplete Dropdown */}
-                          <div className="relative min-w-0">
-                            <div className="flex items-center gap-2">
-                              <span className="font-bold text-[#2563EB] md:text-[#64748B] text-xs w-4 shrink-0 text-center">{idx + 1}.</span>
-                              <div className="relative flex-1 min-w-0">
-                                <input
-                                  type="text"
-                                  value={row.name}
-                                  onFocus={() => setOpenCatalogRowId(row.id)}
-                                  onChange={(e) => {
-                                    updateRow(row.id, "name", e.target.value);
-                                    setOpenCatalogRowId(row.id);
-                                  }}
-                                  placeholder="Type item name or search menu..."
-                                  className="w-full px-3 py-2 bg-white rounded-lg border border-[#E2E8F0] focus:border-[#2563EB] focus:ring-1 focus:ring-[#2563EB]/20 outline-none text-xs font-semibold text-[#0F172A] transition-all placeholder:text-[#94A3B8]"
-                                />
+                    <div className="p-2 space-y-2 md:space-y-1.5 bg-white">
+                      {items.map((row, idx) => {
+                        const isRowActive = openCatalogRowId === row.id || openUnitRowId === row.id;
+                        return (
+                          <div
+                            key={row.id}
+                            className={cn(
+                              "flex flex-col md:grid md:grid-cols-[1fr_80px_90px_100px_120px_80px] gap-2.5 md:gap-3 items-stretch md:items-center p-3 md:px-2 md:py-2 rounded-lg border border-[#E2E8F0] md:border-transparent transition-colors",
+                              idx % 2 === 1 ? "bg-[#EFF6FF]/70 hover:bg-[#EFF6FF]" : "bg-white hover:bg-[#EFF6FF]/30",
+                              isRowActive ? "relative z-30" : "relative z-0"
+                            )}
+                          >
+                            {/* Item Name with Single Input & Autocomplete Dropdown */}
+                            <div className="relative min-w-0">
+                              <div className="flex items-center gap-2">
+                                <span className="font-bold text-[#2563EB] md:text-[#64748B] text-xs w-4 shrink-0 text-center">{idx + 1}.</span>
+                                <div className="relative flex-1 min-w-0">
+                                  <input
+                                    type="text"
+                                    value={row.name}
+                                    onFocus={() => setOpenCatalogRowId(row.id)}
+                                    onClick={() => setOpenCatalogRowId(row.id)}
+                                    onChange={(e) => {
+                                      updateRow(row.id, "name", e.target.value);
+                                      setOpenCatalogRowId(row.id);
+                                    }}
+                                    placeholder="Type item name or search menu..."
+                                    className="w-full px-3 py-2 bg-white rounded-lg border border-[#E2E8F0] focus:border-[#2563EB] focus:ring-1 focus:ring-[#2563EB]/20 outline-none text-xs font-semibold text-[#0F172A] transition-all placeholder:text-[#94A3B8]"
+                                  />
 
-                                {/* Autocomplete Dropdown Suggestions Popover */}
-                                {openCatalogRowId === row.id && (
-                                  <>
-                                    <div
-                                      className="fixed inset-0 z-40"
-                                      onClick={() => setOpenCatalogRowId(null)}
-                                    />
-                                    <div className="absolute left-0 top-full mt-1.5 w-full max-h-56 overflow-y-auto bg-white border border-[#E2E8F0] shadow-xl z-50 rounded-lg divide-y divide-[#E2E8F0] animate-in fade-in zoom-in-95 scrollbar-thin">
-                                      <div className="px-3.5 py-1.5 bg-[#EFF6FF] text-[10px] font-bold text-[#1E3A8A] uppercase tracking-wider flex items-center justify-between border-b border-[#DBEAFE]">
-                                        <span>Select from Catalog</span>
-                                        <span>Rate</span>
-                                      </div>
-                                      {catalog
-                                        .filter(c => !row.name.trim() || c.name.toLowerCase().includes(row.name.toLowerCase()))
-                                        .map(c => (
-                                          <button
-                                            key={c.id}
-                                            type="button"
-                                            onMouseDown={(e) => {
-                                              e.preventDefault();
-                                              handleSelectCatalogItem(row.id, c.name, c.price);
-                                              setOpenCatalogRowId(null);
-                                            }}
-                                            className="w-full px-3.5 py-2.5 text-left hover:bg-[#EFF6FF]/60 flex items-center justify-between text-xs cursor-pointer group transition-colors"
-                                          >
-                                            <span className="font-bold text-[#0F172A] group-hover:text-[#2563EB]">{c.name}</span>
-                                            <span className="text-[11px] font-bold text-[#15803D] bg-[#F0FDF4] border border-[#BBF7D0] px-2 py-0.5 rounded-md">₹{c.price}</span>
-                                          </button>
-                                        ))}
-                                      {catalog.filter(c => !row.name.trim() || c.name.toLowerCase().includes(row.name.toLowerCase())).length === 0 && (
-                                        <div className="px-3.5 py-3 text-xs text-[#64748B] italic">
-                                          Custom item "{row.name}" (Press Tab to set rate)
+                                  {/* Autocomplete Dropdown Suggestions Popover */}
+                                  {openCatalogRowId === row.id && (
+                                    <>
+                                      <div
+                                        className="fixed inset-0 z-40"
+                                        onClick={() => setOpenCatalogRowId(null)}
+                                      />
+                                      <div className="absolute left-0 top-full mt-1.5 w-full min-w-[280px] max-h-60 overflow-y-auto bg-white border border-[#E2E8F0] shadow-2xl z-50 rounded-xl divide-y divide-[#E2E8F0] animate-in fade-in zoom-in-95 scrollbar-thin">
+                                        <div className="sticky top-0 bg-[#EFF6FF] text-[10px] font-bold text-[#1E3A8A] uppercase tracking-wider flex items-center justify-between border-b border-[#DBEAFE] px-3.5 py-1.5 z-10">
+                                          <span>Select from Catalog</span>
+                                          <span>Rate</span>
                                         </div>
-                                      )}
-                                    </div>
-                                  </>
-                                )}
+                                        {catalog
+                                          .filter(c => !row.name.trim() || c.name.toLowerCase().includes(row.name.toLowerCase()))
+                                          .map(c => (
+                                            <button
+                                              key={c.id}
+                                              type="button"
+                                              onMouseDown={(e) => {
+                                                e.preventDefault();
+                                                handleSelectCatalogItem(row.id, c.name, c.price);
+                                                setOpenCatalogRowId(null);
+                                              }}
+                                              className="w-full px-3.5 py-2.5 text-left hover:bg-[#EFF6FF]/60 flex items-center justify-between text-xs cursor-pointer group transition-colors"
+                                            >
+                                              <span className="font-bold text-[#0F172A] group-hover:text-[#2563EB]">{c.name}</span>
+                                              <span className="text-[11px] font-bold text-[#15803D] bg-[#F0FDF4] border border-[#BBF7D0] px-2 py-0.5 rounded-md">₹{c.price}</span>
+                                            </button>
+                                          ))}
+                                        {catalog.filter(c => !row.name.trim() || c.name.toLowerCase().includes(row.name.toLowerCase())).length === 0 && (
+                                          <div className="px-3.5 py-3 text-xs text-[#64748B] italic">
+                                            Custom item "{row.name}" (Press Tab to set rate)
+                                          </div>
+                                        )}
+                                      </div>
+                                    </>
+                                  )}
+                                </div>
                               </div>
                             </div>
-                          </div>
 
                           {/* Mobile Fields Container (Quantity, Unit, Rate) */}
                           <div className="grid grid-cols-3 gap-2 md:contents">
@@ -1612,7 +1770,7 @@ export default function InvoicesPage() {
                                 {openUnitRowId === row.id && (
                                   <>
                                     <div className="fixed inset-0 z-40" onClick={() => setOpenUnitRowId(null)} />
-                                    <div className="absolute left-0 top-full mt-1 w-28 bg-white border border-[#E2E8F0] shadow-xl rounded-lg p-1 z-50 animate-in fade-in zoom-in-95 space-y-0.5">
+                                    <div className="absolute left-0 top-full mt-1 w-28 bg-white border border-[#E2E8F0] shadow-2xl rounded-xl p-1 z-50 animate-in fade-in zoom-in-95 space-y-0.5">
                                       {DEFAULT_UNITS.map(u => (
                                         <button
                                           key={u}
@@ -1652,10 +1810,10 @@ export default function InvoicesPage() {
 
                           {/* Mobile Bottom Bar: Amount & Actions */}
                           <div className="flex items-center justify-between pt-2 border-t border-[#E2E8F0] md:border-0 md:pt-0 md:contents">
-                            {/* Amount (Left Aligned) */}
-                            <div className="text-left pl-0 md:pl-2 flex items-center gap-1.5 md:block">
+                            {/* Amount (Center Aligned to match header) */}
+                            <div className="text-center flex items-center justify-center gap-1.5 md:block">
                               <span className="text-[11px] font-bold text-[#64748B] uppercase md:hidden inline">Amount:</span>
-                              <span className="font-black text-xs sm:text-sm text-[#0F172A] inline md:block truncate">
+                              <span className="font-black text-xs sm:text-sm text-[#0F172A] inline md:block truncate text-center">
                                 ₹{row.amount.toLocaleString("en-IN", { minimumFractionDigits: 0 })}
                               </span>
                             </div>
@@ -1694,11 +1852,12 @@ export default function InvoicesPage() {
                             </div>
                           </div>
                         </div>
-                      ))}
+                        );
+                      })}
                     </div>
 
                     {/* Add New Line Button */}
-                    <div className="p-3 bg-[#F8FAFC] border-t border-[#E2E8F0]">
+                    <div className="p-3 bg-[#F8FAFC] border-t border-[#E2E8F0] rounded-b-xl">
                       <button
                         type="button"
                         onClick={addNewRow}
@@ -1974,9 +2133,9 @@ export default function InvoicesPage() {
                     </div>
 
                     {/* Grand Total */}
-                    <div className="pt-3 border-t-2 border-zinc-900 flex justify-between items-baseline text-sm font-black text-zinc-900">
+                    <div className="pt-3 border-t-2 border-black flex justify-between items-baseline text-sm font-black text-black">
                       <span>Total Amount</span>
-                      <span className="text-xl font-black text-zinc-900">
+                      <span className="text-xl font-black text-black">
                         ₹{calculatedGrandTotal.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
                       </span>
                     </div>
@@ -1991,7 +2150,7 @@ export default function InvoicesPage() {
                         </span>
                       </div>
                       <div className="flex items-center gap-2">
-                        <label className="cursor-pointer text-[11px] font-bold text-[#8B5CF6] hover:underline flex items-center gap-1">
+                        <label className="cursor-pointer text-[11px] font-bold text-[#2563EB] hover:underline flex items-center gap-1">
                           <Upload className="w-3 h-3" />
                           <span>Upload</span>
                           <input
@@ -2007,8 +2166,8 @@ export default function InvoicesPage() {
                                     isOpen: true,
                                     imageSrc: ev.target?.result as string,
                                     cropType: "signature",
-                                    aspectRatio: 2.5,
-                                    title: "Crop Authorised Signature",
+                                    aspectRatio: 1,
+                                    title: "Crop Authorised Signature (1:1 Square)",
                                     minSize: 80
                                   });
                                 };
@@ -2027,8 +2186,8 @@ export default function InvoicesPage() {
                       </div>
                     </div>
 
-                    {/* Compact Signature Container */}
-                    <div className="w-full h-24 bg-white rounded-[10px] border border-dashed border-zinc-300 flex items-center justify-center overflow-hidden p-2 shadow-2xs">
+                    {/* Square Signature Container */}
+                    <div className="w-32 h-32 mx-auto bg-white rounded-xl border border-dashed border-blue-200 hover:border-blue-400 transition-colors flex items-center justify-center overflow-hidden p-2 shadow-2xs">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
                         src={signatureUrl || "/default-signature.svg"}
@@ -2059,6 +2218,11 @@ export default function InvoicesPage() {
                       <span>Save Invoice</span>
                     </button>
                   </div>
+
+                  {/* Watermark / Branding Footer */}
+                  <p className="text-center text-[11px] font-bold text-slate-400 tracking-wider uppercase pt-2">
+                    Powered by SeyalPro
+                  </p>
                 </div>
               </div>
             </div>
