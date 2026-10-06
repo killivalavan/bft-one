@@ -238,8 +238,9 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
-  function normalizeBusiness(raw: Partial<Business> & Record<string, unknown>): Business {
-    const bizId = (raw.id as string) || DEFAULT_BUSINESS.id;
+  function normalizeBusiness(raw: Partial<Business> | Record<string, any>): Business {
+    const r = raw as any;
+    const bizId = (r.id as string) || DEFAULT_BUSINESS.id;
     let localExtra: any = {};
     try {
       if (typeof window !== "undefined") {

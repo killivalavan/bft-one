@@ -673,13 +673,13 @@ export function StoreSettings() {
                   </div>
                 </div>
 
-                {/* Detect GPS Button */}
-                <div className="flex items-center gap-2 shrink-0">
+                {/* Action Buttons: Detect GPS & Save Location */}
+                <div className="flex flex-wrap items-center gap-2 shrink-0">
                   <Button
                     type="button"
                     onClick={handleDetectShopLocation}
-                    disabled={detectingLocation}
-                    className="h-9 px-3.5 bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold rounded-xl shadow-xs flex items-center gap-1.5 cursor-pointer"
+                    disabled={detectingLocation || savingLocation}
+                    className="h-9 px-3.5 bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold rounded-xl shadow-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-60"
                   >
                     {detectingLocation ? (
                       <>
@@ -693,13 +693,73 @@ export function StoreSettings() {
                       </>
                     )}
                   </Button>
+
+                  <Button
+                    type="button"
+                    onClick={() => {
+                      const numLat = Number(geofenceLat);
+                      const numLng = Number(geofenceLng);
+                      if (isNaN(numLat) || isNaN(numLng)) {
+                        toast({
+                          title: "Invalid coordinates",
+                          description: "Please enter valid numeric latitude and longitude",
+                          variant: "error"
+                        });
+                        return;
+                      }
+                      saveLocationDirectly(numLat, numLng, Number(geofenceRadius) || 150, geofenceEnabled);
+                    }}
+                    disabled={savingLocation || detectingLocation}
+                    className="h-9 px-3.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-60"
+                  >
+                    {savingLocation ? (
+                      <>
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                        <span>Saving...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Save className="w-3.5 h-3.5" />
+                        <span>Save Location</span>
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </div>
+
+              {/* Quick Paste Bar for Google Maps URLs or Lat, Lng */}
+              <div className="p-3 bg-white/90 rounded-xl border border-sky-200/70 space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-[11px] font-bold text-slate-700 flex items-center gap-1.5">
+                    <ClipboardPaste className="w-3.5 h-3.5 text-sky-600" />
+                    <span>Quick Paste from Google Maps:</span>
+                  </label>
+                  <span className="text-[10px] text-slate-400">
+                    Paste &quot;lat, lng&quot; or Google Maps URL
+                  </span>
+                </div>
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="e.g. 12.8439, 80.2268 or https://maps.google.com/?q=12.8439,80.2268"
+                    value={quickPasteInput}
+                    onChange={(e) => setQuickPasteInput(e.target.value)}
+                    className="bg-slate-50 text-xs h-9 font-mono flex-1"
+                  />
+                  <Button
+                    type="button"
+                    onClick={handleApplyQuickPaste}
+                    disabled={!quickPasteInput.trim() || savingLocation}
+                    className="h-9 px-3 bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold rounded-lg shrink-0 cursor-pointer disabled:opacity-50"
+                  >
+                    <Check className="w-3.5 h-3.5 mr-1" /> Parse &amp; Save
+                  </Button>
                 </div>
               </div>
 
               {locationAccuracy !== null && (
                 <div className="text-[11px] bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-xl px-3.5 py-2 flex items-center justify-between">
                   <span>📍 GPS coordinates captured with high accuracy: <strong>±{locationAccuracy} meters</strong></span>
-                  <span className="text-[10px] text-emerald-600 font-bold">Remember to click &ldquo;Save All Changes&rdquo; below</span>
+                  <span className="text-[10px] text-emerald-600 font-bold">Saved to database &amp; active!</span>
                 </div>
               )}
 

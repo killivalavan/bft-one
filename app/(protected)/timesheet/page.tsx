@@ -76,6 +76,18 @@ export default function TimesheetPage() {
     })();
   }, [today, business]);
 
+  useEffect(() => {
+    function handleLocUpdate() {
+      if (!isAdmin && business?.geofence_enabled !== false) {
+        verifyLocation(true).catch(() => {});
+      }
+    }
+    if (typeof window !== "undefined") {
+      window.addEventListener("bftone_shop_location_updated", handleLocUpdate);
+      return () => window.removeEventListener("bftone_shop_location_updated", handleLocUpdate);
+    }
+  }, [isAdmin, business]);
+
   async function verifyLocation(silent = false): Promise<boolean> {
     if (isAdmin || business?.geofence_enabled === false) {
       setGeoStatus("inside");
