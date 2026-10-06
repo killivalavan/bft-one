@@ -4,6 +4,7 @@ export interface ShopGeofence {
   radius: number;
   enabled: boolean;
   name: string;
+  configured: boolean;
 }
 
 export function metersBetween(lat1: number, lon1: number, lat2: number, lon2: number) {
@@ -18,98 +19,119 @@ export function metersBetween(lat1: number, lon1: number, lat2: number, lon2: nu
 }
 
 /**
- * Resolves the shop's exact physical coordinates with full fallback cascade:
- * 1. Explicit admin configured shop location (bftone_shop_location in localStorage)
- * 2. Active tenant extra cache (bftone_tenant_extra_{id} or bftone_tenant_cache)
- * 3. In-memory business tenant profile
- * 4. Fallback defaults (12.8439, 80.2268)
+ * Resolves the shop's exact physical coordinates strictly scoped to the active tenant/business:
+ * 1. Primary Source of Truth: Active database profile for this business (`business.geofence_lat`, `business.geofence_lng`)
+ * 2. Tenant-scoped offline storage (`bftone_shop_location_${business.id}` or `bftone_tenant_extra_${business.id}`)
+ * 3. Default fallback only for root template business (Navalur)
  */
 export function getShopGeofence(business?: any): ShopGeofence {
+  const bizId = business?.id;
   let lat: number | null = null;
   let lng: number | null = null;
   let radius: number | null = null;
-  let enabled = true;
-  let name = business?.name || "Brown Fening Tea - Navalur";
+  let enabled = business?.geofence_enabled !== false;
+  let name = business?.name || "Store";
+  let configured = false;
 
-  if (typeof window !== "undefined") {
+  // 1. Direct from business record in DB (Primary source of truth)
+  if (
+    business?.geofence_lat !== null &&
+    business?.geofence_lat !== undefined &&
+    !isNaN(Number(business.geofence_lat))
+  ) {
+    lat = Number(business.geofence_lat);
+    configured = true;
+  }
+  if (
+    business?.geofence_lng !== null &&
+    business?.geofence_lng !== undefined &&
+    !isNaN(Number(business.geofence_lng))
+  ) {
+    lng = Number(business.geofence_lng);
+  }
+  if (
+    business?.geofence_radius_meters !== null &&
+    business?.geofence_radius_meters !== undefined &&
+    !isNaN(Number(business.geofence_radius_meters))
+  ) {
+    radius = Number(business.geofence_radius_meters);
+  }
+
+  // 2. Tenant-scoped local storage check if not yet loaded into business memory
+  if ((lat === null || lng === null) && typeof window !== "undefined" && bizId) {
     try {
-      // 1. Explicit shop location set in Admin Store Settings
-      const shopLocStr = localStorage.getItem("bftone_shop_location");
-      if (shopLocStr) {
-        const s = JSON.parse(shopLocStr);
-        if (s.lat !== null && s.lat !== undefined && !isNaN(Number(s.lat))) lat = Number(s.lat);
+      // Scoped shop location for this exact business
+      const scopedLocStr = localStorage.getItem(`bftone_shop_location_${bizId}`);
+      if (scopedLocStr) {
+        const s = JSON.parse(scopedLocStr);
+        if (s.lat !== null && s.lat !== undefined && !isNaN(Number(s.lat))) {
+          lat = Number(s.lat);
+          configured = true;
+        }
         if (s.lng !== null && s.lng !== undefined && !isNaN(Number(s.lng))) lng = Number(s.lng);
         if (s.radius && !isNaN(Number(s.radius))) radius = Number(s.radius);
         if (s.enabled !== undefined) enabled = !!s.enabled;
         if (s.name) name = s.name;
       }
 
-      // 2. Tenant extra storage
-      if ((lat === null || lng === null) && business?.id) {
-        const extraStr = localStorage.getItem(`bftone_tenant_extra_${business.id}`);
+      // Scoped tenant extra
+      if (lat === null || lng === null) {
+        const extraStr = localStorage.getItem(`bftone_tenant_extra_${bizId}`);
         if (extraStr) {
           const e = JSON.parse(extraStr);
-          if (lat === null && e.geofence_lat !== null && e.geofence_lat !== undefined && !isNaN(Number(e.geofence_lat))) {
+          if (e.geofence_lat !== null && e.geofence_lat !== undefined && !isNaN(Number(e.geofence_lat))) {
             lat = Number(e.geofence_lat);
+            configured = true;
           }
-          if (lng === null && e.geofence_lng !== null && e.geofence_lng !== undefined && !isNaN(Number(e.geofence_lng))) {
-            lng = Number(e.geofence_lng);
-          }
-          if (radius === null && e.geofence_radius_meters && !isNaN(Number(e.geofence_radius_meters))) {
-            radius = Number(e.geofence_radius_meters);
-          }
+          if (e.geofence_lng !== null && e.geofence_lng !== undefined && !isNaN(Number(e.geofence_lng))) lng = Number(e.geofence_lng);
+          if (e.geofence_radius_meters && !isNaN(Number(e.geofence_radius_meters))) radius = Number(e.geofence_radius_meters);
           if (e.geofence_enabled !== undefined) enabled = !!e.geofence_enabled;
           if (e.name) name = e.name;
         }
       }
 
-      // 3. Tenant cache storage
+      // Legacy global check ONLY if businessId explicitly matches this business
       if (lat === null || lng === null) {
-        const cacheStr = localStorage.getItem("bftone_tenant_cache");
-        if (cacheStr) {
-          const c = JSON.parse(cacheStr);
-          if (lat === null && c.geofence_lat !== null && c.geofence_lat !== undefined && !isNaN(Number(c.geofence_lat))) {
-            lat = Number(c.geofence_lat);
+        const legacyStr = localStorage.getItem("bftone_shop_location");
+        if (legacyStr) {
+          const l = JSON.parse(legacyStr);
+          if (l.businessId && l.businessId === bizId) {
+            if (l.lat !== null && l.lat !== undefined && !isNaN(Number(l.lat))) {
+              lat = Number(l.lat);
+              configured = true;
+            }
+            if (l.lng !== null && l.lng !== undefined && !isNaN(Number(l.lng))) lng = Number(l.lng);
+            if (l.radius && !isNaN(Number(l.radius))) radius = Number(l.radius);
+            if (l.enabled !== undefined) enabled = !!l.enabled;
+            if (l.name) name = l.name;
           }
-          if (lng === null && c.geofence_lng !== null && c.geofence_lng !== undefined && !isNaN(Number(c.geofence_lng))) {
-            lng = Number(c.geofence_lng);
-          }
-          if (radius === null && c.geofence_radius_meters && !isNaN(Number(c.geofence_radius_meters))) {
-            radius = Number(c.geofence_radius_meters);
-          }
-          if (c.geofence_enabled !== undefined) enabled = !!c.geofence_enabled;
-          if (c.name) name = c.name;
         }
       }
     } catch {}
   }
 
-  // 4. In-memory business object from context
-  if (lat === null && business?.geofence_lat !== null && business?.geofence_lat !== undefined && !isNaN(Number(business.geofence_lat))) {
-    lat = Number(business.geofence_lat);
-  }
-  if (lng === null && business?.geofence_lng !== null && business?.geofence_lng !== undefined && !isNaN(Number(business.geofence_lng))) {
-    lng = Number(business.geofence_lng);
-  }
-  if (radius === null && business?.geofence_radius_meters && !isNaN(Number(business.geofence_radius_meters))) {
-    radius = Number(business.geofence_radius_meters);
-  }
-  if (business?.geofence_enabled !== undefined) {
-    enabled = !!business.geofence_enabled;
-  }
+  // 3. Fallback resolution:
+  // Root BFT template business defaults to Navalur, Chennai (12.8439, 80.2268)
+  const isDefaultRootTenant = !bizId || bizId === "a0000000-0000-0000-0000-000000000001";
+  const hasValidCoords = lat !== null && !isNaN(lat) && lng !== null && !isNaN(lng);
 
-  // 5. Environmental fallback or default
+  const finalLat = hasValidCoords ? lat! : (isDefaultRootTenant ? 12.8439 : 0);
+  const finalLng = hasValidCoords ? lng! : (isDefaultRootTenant ? 80.2268 : 0);
+  const finalRadius = radius !== null && !isNaN(radius) ? radius : 150;
+  const isConfigured = hasValidCoords || (isDefaultRootTenant && configured);
+
   return {
-    lat: lat !== null && !isNaN(lat) ? lat : Number(process.env.NEXT_PUBLIC_GEOFENCE_LAT ?? 12.8439),
-    lng: lng !== null && !isNaN(lng) ? lng : Number(process.env.NEXT_PUBLIC_GEOFENCE_LNG ?? 80.2268),
-    radius: radius !== null && !isNaN(radius) ? radius : Number(process.env.NEXT_PUBLIC_GEOFENCE_RADIUS_METERS ?? 150),
+    lat: finalLat,
+    lng: finalLng,
+    radius: finalRadius,
     enabled,
     name,
+    configured: isConfigured,
   };
 }
 
 /**
- * Saves and broadcasts new shop coordinates across localStorage, tenant caches, and active views
+ * Saves and broadcasts new shop coordinates scoped to the specific business
  */
 export function saveShopGeofence(config: {
   lat: number;
@@ -127,14 +149,17 @@ export function saveShopGeofence(config: {
       lng: Number(config.lng),
       radius: config.radius ? Number(config.radius) : 150,
       enabled: config.enabled !== undefined ? Boolean(config.enabled) : true,
-      name: config.name || "Brown Fening Tea - Navalur",
+      name: config.name || "Store",
       address: config.address || "",
+      businessId: config.businessId,
       updatedAt: new Date().toISOString(),
     };
 
-    localStorage.setItem("bftone_shop_location", JSON.stringify(payload));
-
     if (config.businessId) {
+      // 1. Scoped to this business
+      localStorage.setItem(`bftone_shop_location_${config.businessId}`, JSON.stringify(payload));
+      localStorage.setItem("bftone_shop_location", JSON.stringify(payload));
+
       const extraKey = `bftone_tenant_extra_${config.businessId}`;
       const existing = localStorage.getItem(extraKey);
       const parsed = existing ? JSON.parse(existing) : {};
@@ -142,21 +167,6 @@ export function saveShopGeofence(config: {
         extraKey,
         JSON.stringify({
           ...parsed,
-          geofence_lat: payload.lat,
-          geofence_lng: payload.lng,
-          geofence_radius_meters: payload.radius,
-          geofence_enabled: payload.enabled,
-        })
-      );
-    }
-
-    const cache = localStorage.getItem("bftone_tenant_cache");
-    if (cache) {
-      const parsedCache = JSON.parse(cache);
-      localStorage.setItem(
-        "bftone_tenant_cache",
-        JSON.stringify({
-          ...parsedCache,
           geofence_lat: payload.lat,
           geofence_lng: payload.lng,
           geofence_radius_meters: payload.radius,

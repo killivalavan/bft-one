@@ -31,11 +31,16 @@ export function StoreSettings() {
   const [gstin, setGstin] = useState((business as any)?.gstin || "");
 
   // Store Geofence & Location state
+  const isInitialRoot = !business?.id || business?.id === "a0000000-0000-0000-0000-000000000001";
   const [geofenceLat, setGeofenceLat] = useState<string>(
-    business?.geofence_lat !== null && business?.geofence_lat !== undefined ? String(business.geofence_lat) : "12.8439"
+    business?.geofence_lat !== null && business?.geofence_lat !== undefined && !isNaN(Number(business.geofence_lat))
+      ? String(business.geofence_lat)
+      : (isInitialRoot ? "12.8439" : "")
   );
   const [geofenceLng, setGeofenceLng] = useState<string>(
-    business?.geofence_lng !== null && business?.geofence_lng !== undefined ? String(business.geofence_lng) : "80.2268"
+    business?.geofence_lng !== null && business?.geofence_lng !== undefined && !isNaN(Number(business.geofence_lng))
+      ? String(business.geofence_lng)
+      : (isInitialRoot ? "80.2268" : "")
   );
   const [geofenceRadius, setGeofenceRadius] = useState<number>(
     business?.geofence_radius_meters || 150
@@ -55,46 +60,58 @@ export function StoreSettings() {
     if (business) {
       const bizId = business.id;
       let localExtra: any = {};
-      try {
-        if (typeof window !== "undefined") {
-          const extraJson = localStorage.getItem(`bftone_tenant_extra_${bizId}`) || localStorage.getItem("bftone_tenant_cache");
-          if (extraJson) localExtra = JSON.parse(extraJson);
-        }
-      } catch { }
-
       let localShopLoc: any = {};
       try {
         if (typeof window !== "undefined") {
-          const shopLocStr = localStorage.getItem("bftone_shop_location");
-          if (shopLocStr) localShopLoc = JSON.parse(shopLocStr);
+          const extraJson = localStorage.getItem(`bftone_tenant_extra_${bizId}`);
+          if (extraJson) localExtra = JSON.parse(extraJson);
+
+          const scopedShopStr = localStorage.getItem(`bftone_shop_location_${bizId}`);
+          if (scopedShopStr) {
+            localShopLoc = JSON.parse(scopedShopStr);
+          } else {
+            const legacyStr = localStorage.getItem("bftone_shop_location");
+            if (legacyStr) {
+              const parsed = JSON.parse(legacyStr);
+              if (parsed.businessId === bizId) localShopLoc = parsed;
+            }
+          }
         }
       } catch { }
 
-      setName(business.name || localExtra.name || "Brown fening tea");
+      setName(business.name || localExtra.name || "Store");
       setLogoUrl(business.logo_url || localExtra.logo_url || "/dummy-logo.svg");
       setSignatureUrl((business as any).signature_url || localExtra.signature_url || "/default-signature.svg");
-      setAddress((business as any).address || localExtra.address || "255, Rajiv Gandhi Salai (OMR), Navalur,\nChennai,\nTamil Nadu, India - 600130");
-      setPhone((business as any).phone || localExtra.phone || "+91 98765 43210");
+      setAddress((business as any).address || localExtra.address || "");
+      setPhone((business as any).phone || localExtra.phone || "");
       setGstin((business as any).gstin || localExtra.gstin || "");
 
-      // Prioritize explicit shop location, then business from DB, then local extra
-      const bLat = (localShopLoc.lat !== undefined && localShopLoc.lat !== null && !isNaN(Number(localShopLoc.lat)))
-        ? String(localShopLoc.lat)
-        : ((business.geofence_lat !== null && business.geofence_lat !== undefined)
-          ? String(business.geofence_lat)
-          : (localExtra.geofence_lat !== undefined ? String(localExtra.geofence_lat) : "12.8439"));
+      // Prioritize active business record from database, then tenant-scoped cache
+      const isRootDefault = bizId === "a0000000-0000-0000-0000-000000000001";
+      const bLat = (business.geofence_lat !== null && business.geofence_lat !== undefined && !isNaN(Number(business.geofence_lat)))
+        ? String(business.geofence_lat)
+        : ((localShopLoc.lat !== undefined && localShopLoc.lat !== null && !isNaN(Number(localShopLoc.lat)))
+          ? String(localShopLoc.lat)
+          : (localExtra.geofence_lat !== undefined && localExtra.geofence_lat !== null && !isNaN(Number(localExtra.geofence_lat))
+            ? String(localExtra.geofence_lat)
+            : (isRootDefault ? "12.8439" : "")));
 
-      const bLng = (localShopLoc.lng !== undefined && localShopLoc.lng !== null && !isNaN(Number(localShopLoc.lng)))
-        ? String(localShopLoc.lng)
-        : ((business.geofence_lng !== null && business.geofence_lng !== undefined)
-          ? String(business.geofence_lng)
-          : (localExtra.geofence_lng !== undefined ? String(localExtra.geofence_lng) : "80.2268"));
+      const bLng = (business.geofence_lng !== null && business.geofence_lng !== undefined && !isNaN(Number(business.geofence_lng)))
+        ? String(business.geofence_lng)
+        : ((localShopLoc.lng !== undefined && localShopLoc.lng !== null && !isNaN(Number(localShopLoc.lng)))
+          ? String(localShopLoc.lng)
+          : (localExtra.geofence_lng !== undefined && localExtra.geofence_lng !== null && !isNaN(Number(localExtra.geofence_lng))
+            ? String(localExtra.geofence_lng)
+            : (isRootDefault ? "80.2268" : "")));
 
-      const bRadius = localShopLoc.radius || business.geofence_radius_meters || localExtra.geofence_radius_meters || 150;
-      const bEnabled = localShopLoc.enabled !== undefined
-        ? localShopLoc.enabled
-        : (business.geofence_enabled !== undefined
-          ? business.geofence_enabled
+      const bRadius = (business.geofence_radius_meters && !isNaN(Number(business.geofence_radius_meters)))
+        ? Number(business.geofence_radius_meters)
+        : (localShopLoc.radius || (localExtra.geofence_radius_meters ? Number(localExtra.geofence_radius_meters) : 150));
+
+      const bEnabled = business.geofence_enabled !== undefined
+        ? business.geofence_enabled
+        : (localShopLoc.enabled !== undefined
+          ? localShopLoc.enabled
           : (localExtra.geofence_enabled !== undefined ? localExtra.geofence_enabled : true));
 
       setGeofenceLat(bLat);
@@ -392,15 +409,18 @@ export function StoreSettings() {
           const cached = localStorage.getItem("bftone_tenant_cache");
           const parsed = cached ? JSON.parse(cached) : {};
           localStorage.setItem("bftone_tenant_cache", JSON.stringify({ ...parsed, ...updatedProfile }));
-          // Explicit shop location cache for instant retrieval across Timesheet and Geofence gate
-          localStorage.setItem("bftone_shop_location", JSON.stringify({
-            lat: numLat,
-            lng: numLng,
-            radius: numRadius,
-            enabled: Boolean(geofenceEnabled),
-            name: updatedProfile.name,
-            address: updatedProfile.address,
-          }));
+          // Scoped shop location cache for instant retrieval across Timesheet and Geofence gate
+          if (numLat !== null && numLng !== null) {
+            saveShopGeofence({
+              lat: numLat,
+              lng: numLng,
+              radius: numRadius,
+              enabled: Boolean(geofenceEnabled),
+              name: updatedProfile.name,
+              address: updatedProfile.address,
+              businessId: business.id,
+            });
+          }
         } catch (e) {
           console.warn("Local storage write error:", e);
         }

@@ -77,7 +77,10 @@ export default function TimesheetPage() {
   }, [today, business]);
 
   useEffect(() => {
-    function handleLocUpdate() {
+    function handleLocUpdate(e: any) {
+      if (e?.detail?.businessId && business?.id && e.detail.businessId !== business.id) {
+        return;
+      }
       if (!isAdmin && business?.geofence_enabled !== false) {
         verifyLocation(true).catch(() => {});
       }
@@ -90,6 +93,12 @@ export default function TimesheetPage() {
 
   async function verifyLocation(silent = false): Promise<boolean> {
     if (isAdmin || business?.geofence_enabled === false) {
+      setGeoStatus("inside");
+      return true;
+    }
+
+    const shop = getShopGeofence(business);
+    if (!shop.configured) {
       setGeoStatus("inside");
       return true;
     }

@@ -61,6 +61,13 @@ export default function GeofenceGate({ children }: { children: React.ReactNode }
       return;
     }
 
+    // If this shop/client has not configured coordinates yet, allow access
+    // so staff are not locked out by unconfigured or unrelated location pins
+    if (!currentShop.configured) {
+      setAllowed(true);
+      return;
+    }
+
     // Non-timesheet pages (profile, salary, notifications, etc.) are open everywhere
     if (pathname !== "/timesheet") {
       setAllowed(true);
@@ -136,9 +143,12 @@ export default function GeofenceGate({ children }: { children: React.ReactNode }
     evaluateAccess();
   }, [evaluateAccess]);
 
-  // Listen for shop location broadcasts from Store Settings or inline actions
+  // Listen for shop location broadcasts from Store Settings scoped to this business
   useEffect(() => {
-    function handleUpdate() {
+    function handleUpdate(e: any) {
+      if (e?.detail?.businessId && business?.id && e.detail.businessId !== business.id) {
+        return;
+      }
       const updated = getShopGeofence(business);
       setShopCoords(updated);
       evaluateAccess();

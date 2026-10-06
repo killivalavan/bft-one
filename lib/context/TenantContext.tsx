@@ -242,44 +242,55 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
     const r = raw as any;
     const bizId = (r.id as string) || DEFAULT_BUSINESS.id;
     let localExtra: any = {};
-    try {
-      if (typeof window !== "undefined") {
-        const extraJson = localStorage.getItem(`bftone_tenant_extra_${bizId}`) || localStorage.getItem("bftone_tenant_cache");
-        if (extraJson) localExtra = JSON.parse(extraJson);
-      }
-    } catch {}
-
     let localShopLoc: any = {};
     if (typeof window !== "undefined") {
       try {
-        const shopLocStr = localStorage.getItem("bftone_shop_location");
-        if (shopLocStr) localShopLoc = JSON.parse(shopLocStr);
+        const extraJson = localStorage.getItem(`bftone_tenant_extra_${bizId}`);
+        if (extraJson) localExtra = JSON.parse(extraJson);
+
+        const scopedShopStr = localStorage.getItem(`bftone_shop_location_${bizId}`);
+        if (scopedShopStr) {
+          localShopLoc = JSON.parse(scopedShopStr);
+        } else {
+          const legacyStr = localStorage.getItem("bftone_shop_location");
+          if (legacyStr) {
+            const parsed = JSON.parse(legacyStr);
+            if (parsed.businessId === bizId) {
+              localShopLoc = parsed;
+            }
+          }
+        }
       } catch {}
     }
 
-    const resolvedLat = (localShopLoc.lat !== undefined && localShopLoc.lat !== null && !isNaN(Number(localShopLoc.lat)))
-      ? Number(localShopLoc.lat)
-      : (raw.geofence_lat !== null && raw.geofence_lat !== undefined && !isNaN(Number(raw.geofence_lat))
-        ? Number(raw.geofence_lat)
+    // Database record for this business is the primary source of truth
+    const resolvedLat = (raw.geofence_lat !== null && raw.geofence_lat !== undefined && !isNaN(Number(raw.geofence_lat)))
+      ? Number(raw.geofence_lat)
+      : ((localShopLoc.lat !== undefined && localShopLoc.lat !== null && !isNaN(Number(localShopLoc.lat)))
+        ? Number(localShopLoc.lat)
         : ((localExtra.geofence_lat !== undefined && localExtra.geofence_lat !== null && !isNaN(Number(localExtra.geofence_lat)))
           ? Number(localExtra.geofence_lat)
-          : DEFAULT_BUSINESS.geofence_lat));
+          : (bizId === DEFAULT_BUSINESS.id ? DEFAULT_BUSINESS.geofence_lat : null)));
 
-    const resolvedLng = (localShopLoc.lng !== undefined && localShopLoc.lng !== null && !isNaN(Number(localShopLoc.lng)))
-      ? Number(localShopLoc.lng)
-      : (raw.geofence_lng !== null && raw.geofence_lng !== undefined && !isNaN(Number(raw.geofence_lng))
-        ? Number(raw.geofence_lng)
+    const resolvedLng = (raw.geofence_lng !== null && raw.geofence_lng !== undefined && !isNaN(Number(raw.geofence_lng)))
+      ? Number(raw.geofence_lng)
+      : ((localShopLoc.lng !== undefined && localShopLoc.lng !== null && !isNaN(Number(localShopLoc.lng)))
+        ? Number(localShopLoc.lng)
         : ((localExtra.geofence_lng !== undefined && localExtra.geofence_lng !== null && !isNaN(Number(localExtra.geofence_lng)))
           ? Number(localExtra.geofence_lng)
-          : DEFAULT_BUSINESS.geofence_lng));
+          : (bizId === DEFAULT_BUSINESS.id ? DEFAULT_BUSINESS.geofence_lng : null)));
 
-    const resolvedRadius = (localShopLoc.radius && !isNaN(Number(localShopLoc.radius)))
-      ? Number(localShopLoc.radius)
-      : (localExtra.geofence_radius_meters ? Number(localExtra.geofence_radius_meters) : (raw.geofence_radius_meters ? Number(raw.geofence_radius_meters) : 150));
+    const resolvedRadius = (raw.geofence_radius_meters && !isNaN(Number(raw.geofence_radius_meters)))
+      ? Number(raw.geofence_radius_meters)
+      : (localShopLoc.radius && !isNaN(Number(localShopLoc.radius))
+        ? Number(localShopLoc.radius)
+        : (localExtra.geofence_radius_meters ? Number(localExtra.geofence_radius_meters) : 150));
 
-    const resolvedEnabled = localShopLoc.enabled !== undefined
-      ? !!localShopLoc.enabled
-      : (localExtra.geofence_enabled !== undefined ? localExtra.geofence_enabled !== false : (raw.geofence_enabled !== undefined ? raw.geofence_enabled !== false : true));
+    const resolvedEnabled = raw.geofence_enabled !== undefined
+      ? raw.geofence_enabled !== false
+      : (localShopLoc.enabled !== undefined
+        ? !!localShopLoc.enabled
+        : (localExtra.geofence_enabled !== undefined ? localExtra.geofence_enabled !== false : true));
 
     return {
       id: bizId,
