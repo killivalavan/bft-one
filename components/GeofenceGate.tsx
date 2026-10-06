@@ -8,8 +8,6 @@ import {
   isWithinGeofence,
   metersBetween,
   getShopGeofence,
-  saveShopGeofence,
-  parseCoordinatesInput,
 } from "@/lib/geofence";
 import { useTenant } from "@/lib/context/TenantContext";
 import {
@@ -18,10 +16,8 @@ import {
   Navigation,
   Radio,
   RefreshCw,
-  ExternalLink,
   ArrowLeft,
   AlertTriangle,
-  ShieldAlert,
   HelpCircle,
   ChevronDown,
   ChevronUp,
@@ -29,12 +25,6 @@ import {
   CheckCircle2,
   Sparkles,
   Lock,
-  LocateFixed,
-  Edit3,
-  Save,
-  ClipboardPaste,
-  Check,
-  CheckCircle
 } from "lucide-react";
 
 export default function GeofenceGate({ children }: { children: React.ReactNode }) {
@@ -56,14 +46,6 @@ export default function GeofenceGate({ children }: { children: React.ReactNode }
   const targetLng = shopCoords.lng;
   const radius = shopCoords.radius;
   const storeName = shopCoords.name;
-
-  // Shop Pin Editor States
-  const [showCoordEditor, setShowCoordEditor] = useState(false);
-  const [editLat, setEditLat] = useState(() => String(shopCoords.lat));
-  const [editLng, setEditLng] = useState(() => String(shopCoords.lng));
-  const [pasteInput, setPasteInput] = useState("");
-  const [isSavingShopLoc, setIsSavingShopLoc] = useState(false);
-  const [saveSuccessMsg, setSaveSuccessMsg] = useState("");
 
   const evaluateAccess = useCallback(async () => {
     const currentShop = getShopGeofence(business);
@@ -159,8 +141,6 @@ export default function GeofenceGate({ children }: { children: React.ReactNode }
     function handleUpdate() {
       const updated = getShopGeofence(business);
       setShopCoords(updated);
-      setEditLat(String(updated.lat));
-      setEditLng(String(updated.lng));
       evaluateAccess();
     }
     if (typeof window !== "undefined") {
@@ -174,147 +154,6 @@ export default function GeofenceGate({ children }: { children: React.ReactNode }
     evaluateAccess();
   }
 
-  // Quickly set detected device GPS as the official shop location
-  async function handleSetCurrentAsShopLocation() {
-    if (!userCoords) return;
-    setIsSavingShopLoc(true);
-    try {
-      const newLat = userCoords.lat;
-      const newLng = userCoords.lng;
-
-      saveShopGeofence({
-        lat: newLat,
-        lng: newLng,
-        radius,
-        enabled: true,
-        name: storeName,
-        businessId: business?.id,
-      });
-
-      // Backend API sync
-      try {
-        const { data: { session } } = await supabaseClient.auth.getSession();
-        const token = session?.access_token;
-        await fetch("/api/business/profile", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            ...(token ? { Authorization: `Bearer ${token}` } : {})
-          },
-          body: JSON.stringify({
-            businessId: business?.id,
-            geofence_lat: newLat,
-            geofence_lng: newLng,
-            geofence_radius_meters: radius,
-            geofence_enabled: true,
-          })
-        });
-      } catch (apiErr) {
-        console.warn("API update failed:", apiErr);
-      }
-
-      // Best effort client update
-      if (business?.id) {
-        supabaseClient
-          .from("businesses")
-          .update({
-            geofence_lat: newLat,
-            geofence_lng: newLng,
-            geofence_radius_meters: radius,
-            geofence_enabled: true,
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", business.id)
-          .then(() => {});
-      }
-
-      setSaveSuccessMsg(`Shop location updated to your GPS (${newLat.toFixed(6)}, ${newLng.toFixed(6)})!`);
-      setTimeout(() => setSaveSuccessMsg(""), 6000);
-      evaluateAccess();
-    } catch (e) {
-      console.warn("Error setting current location:", e);
-    } finally {
-      setIsSavingShopLoc(false);
-    }
-  }
-
-  // Save custom coordinates entered into the editor
-  async function handleSaveCustomCoordinates() {
-    const numLat = Number(editLat);
-    const numLng = Number(editLng);
-    if (isNaN(numLat) || isNaN(numLng) || numLat < -90 || numLat > 90 || numLng < -180 || numLng > 180) {
-      alert("Please enter a valid latitude (-90 to 90) and longitude (-180 to 180).");
-      return;
-    }
-
-    setIsSavingShopLoc(true);
-    try {
-      saveShopGeofence({
-        lat: numLat,
-        lng: numLng,
-        radius,
-        enabled: true,
-        name: storeName,
-        businessId: business?.id,
-      });
-
-      try {
-        const { data: { session } } = await supabaseClient.auth.getSession();
-        const token = session?.access_token;
-        await fetch("/api/business/profile", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            ...(token ? { Authorization: `Bearer ${token}` } : {})
-          },
-          body: JSON.stringify({
-            businessId: business?.id,
-            geofence_lat: numLat,
-            geofence_lng: numLng,
-            geofence_radius_meters: radius,
-            geofence_enabled: true,
-          })
-        });
-      } catch (apiErr) {
-        console.warn("API sync error:", apiErr);
-      }
-
-      if (business?.id) {
-        supabaseClient
-          .from("businesses")
-          .update({
-            geofence_lat: numLat,
-            geofence_lng: numLng,
-            geofence_radius_meters: radius,
-            geofence_enabled: true,
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", business.id)
-          .then(() => {});
-      }
-
-      setShowCoordEditor(false);
-      setSaveSuccessMsg(`Shop GPS updated to ${numLat.toFixed(6)}, ${numLng.toFixed(6)}!`);
-      setTimeout(() => setSaveSuccessMsg(""), 6000);
-      evaluateAccess();
-    } catch (e) {
-      console.warn("Save custom coords error:", e);
-    } finally {
-      setIsSavingShopLoc(false);
-    }
-  }
-
-  // Parse quick paste input
-  function handleQuickParseLink() {
-    const parsed = parseCoordinatesInput(pasteInput);
-    if (!parsed) {
-      alert("Could not extract coordinates. Please enter 'lat, lng' or a Google Maps URL.");
-      return;
-    }
-    setEditLat(parsed.lat.toFixed(7));
-    setEditLng(parsed.lng.toFixed(7));
-    setPasteInput("");
-  }
 
   // Permitted view
   if (allowed) {
@@ -355,11 +194,6 @@ export default function GeofenceGate({ children }: { children: React.ReactNode }
   // Blocked / Outside Geofence or Denied state
   const isOutside = status === "outside";
   const excessDistance = userDistance !== null && userDistance > radius ? userDistance - radius : 0;
-  const mapsDirectionsUrl = userCoords
-    ? `https://www.google.com/maps/dir/?api=1&origin=${userCoords.lat},${userCoords.lng}&destination=${targetLat},${targetLng}`
-    : `https://www.google.com/maps/dir/?api=1&destination=${targetLat},${targetLng}`;
-
-  const mapsPinUrl = `https://www.google.com/maps?q=${targetLat},${targetLng}`;
 
   return (
     <div className="min-h-[82vh] flex items-center justify-center p-4 sm:p-6 bg-radial from-blue-50/40 via-slate-50 to-slate-100/80">
@@ -504,14 +338,6 @@ export default function GeofenceGate({ children }: { children: React.ReactNode }
             </div>
           )}
 
-          {/* Success Banner if Location was updated */}
-          {saveSuccessMsg && (
-            <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs rounded-2xl flex items-center gap-2 animate-in fade-in">
-              <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
-              <span className="font-semibold">{saveSuccessMsg}</span>
-            </div>
-          )}
-
           {/* Interactive Action Buttons */}
           <div className="space-y-2.5 pt-1">
             <button
@@ -523,149 +349,6 @@ export default function GeofenceGate({ children }: { children: React.ReactNode }
               <RefreshCw className={`w-4 h-4 ${isRetrying ? "animate-spin" : ""}`} />
               <span>{isRetrying ? "Re-checking GPS Location..." : "Re-check Location Now"}</span>
             </button>
-
-            <a
-              href={mapsDirectionsUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="w-full py-2.5 px-4 bg-white hover:bg-slate-50 active:scale-[0.99] border border-slate-200 text-slate-700 hover:text-slate-900 text-xs sm:text-sm font-bold rounded-2xl shadow-2xs transition-all flex items-center justify-center gap-2 group"
-            >
-              <ExternalLink className="w-4 h-4 text-[#2563EB] group-hover:scale-110 transition-transform" />
-              <span>Get Directions to Shop in Google Maps ↗</span>
-            </a>
-
-            <div className="flex items-center justify-center gap-2 text-[11px] text-slate-400">
-              <span>Shop GPS: <strong className="text-slate-600 font-mono">{targetLat.toFixed(6)}, {targetLng.toFixed(6)}</strong></span>
-              <span>•</span>
-              <a
-                href={mapsPinUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-blue-600 hover:underline font-semibold"
-              >
-                View Pin on Map ↗
-              </a>
-            </div>
-
-            {/* Store Location Setup Panel for wrong GPS / initial setup */}
-            <div className="mt-3 p-4 rounded-2xl bg-sky-50/70 border border-sky-200/80 text-left space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <MapPin className="w-4 h-4 text-sky-600" />
-                  <span className="text-xs font-bold text-slate-800">
-                    Store Location Management
-                  </span>
-                </div>
-                <span className="text-[10px] bg-sky-100 text-sky-800 font-bold px-2 py-0.5 rounded-full border border-sky-200">
-                  Admin Setup
-                </span>
-              </div>
-
-              <p className="text-[11px] text-slate-500 leading-relaxed">
-                If the store pin ({targetLat.toFixed(6)}, {targetLng.toFixed(6)}) is pointing to the wrong location, set the store pin to your current GPS or enter the coordinates below:
-              </p>
-
-              <div className="flex flex-col sm:flex-row gap-2">
-                {userCoords && (
-                  <button
-                    type="button"
-                    onClick={handleSetCurrentAsShopLocation}
-                    disabled={isSavingShopLoc}
-                    className="flex-1 py-2 px-3 bg-sky-600 hover:bg-sky-700 active:scale-95 text-white text-xs font-bold rounded-xl shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-60"
-                  >
-                    {isSavingShopLoc ? (
-                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                    ) : (
-                      <LocateFixed className="w-3.5 h-3.5" />
-                    )}
-                    <span>Set My Current GPS as Shop Pin</span>
-                  </button>
-                )}
-
-                <button
-                  type="button"
-                  onClick={() => setShowCoordEditor((prev) => !prev)}
-                  className="py-2 px-3 bg-white hover:bg-slate-50 active:scale-95 border border-sky-200 text-sky-700 text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer"
-                >
-                  <Edit3 className="w-3.5 h-3.5" />
-                  <span>{showCoordEditor ? "Close Editor" : "Enter Coordinates"}</span>
-                </button>
-              </div>
-
-              {/* Inline Coordinator Editor */}
-              {showCoordEditor && (
-                <div className="pt-2 border-t border-sky-200/70 space-y-2.5 animate-in fade-in duration-200">
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-slate-600 flex items-center gap-1">
-                      <ClipboardPaste className="w-3 h-3 text-sky-600" /> Quick Paste Google Maps URL or &quot;lat, lng&quot;:
-                    </label>
-                    <div className="flex gap-1.5">
-                      <input
-                        type="text"
-                        placeholder="e.g. 12.8439, 80.2268 or maps.google.com link"
-                        value={pasteInput}
-                        onChange={(e) => setPasteInput(e.target.value)}
-                        className="flex-1 px-2.5 py-1.5 text-xs bg-white border border-slate-200 rounded-lg font-mono focus:outline-sky-500"
-                      />
-                      <button
-                        type="button"
-                        onClick={handleQuickParseLink}
-                        disabled={!pasteInput.trim()}
-                        className="px-2.5 py-1.5 bg-slate-800 text-white text-xs font-bold rounded-lg cursor-pointer disabled:opacity-50"
-                      >
-                        Parse
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <label className="text-[10px] font-bold text-slate-600">Latitude</label>
-                      <input
-                        type="number"
-                        step="any"
-                        value={editLat}
-                        onChange={(e) => setEditLat(e.target.value)}
-                        className="w-full px-2.5 py-1.5 text-xs bg-white border border-slate-200 rounded-lg font-mono focus:outline-sky-500"
-                        placeholder="12.8439000"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-[10px] font-bold text-slate-600">Longitude</label>
-                      <input
-                        type="number"
-                        step="any"
-                        value={editLng}
-                        onChange={(e) => setEditLng(e.target.value)}
-                        className="w-full px-2.5 py-1.5 text-xs bg-white border border-slate-200 rounded-lg font-mono focus:outline-sky-500"
-                        placeholder="80.2268000"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-between pt-1">
-                    <a
-                      href={`https://www.google.com/maps?q=${editLat},${editLng}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-[11px] font-bold text-sky-600 hover:underline flex items-center gap-1"
-                    >
-                      <ExternalLink className="w-3 h-3" /> Preview Pin on Google Maps ↗
-                    </a>
-
-                    <button
-                      type="button"
-                      onClick={handleSaveCustomCoordinates}
-                      disabled={isSavingShopLoc}
-                      className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg flex items-center gap-1 shadow-xs cursor-pointer disabled:opacity-50"
-                    >
-                      {isSavingShopLoc ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
-                      <span>Save &amp; Apply Pin</span>
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
 
             <div className="text-center pt-1">
               <Link

@@ -125,7 +125,7 @@ export async function POST(request: Request) {
         details: { name, logo_url: logo_url ? "updated" : "none", signature_url: signature_url ? "updated" : "none" },
         ...clientMeta,
       });
-    } catch (_) {}
+    } catch (_) { }
 
     return NextResponse.json({ ok: true, business: updatedBiz });
   } catch (e: any) {

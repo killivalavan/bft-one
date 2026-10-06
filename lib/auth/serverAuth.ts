@@ -50,7 +50,7 @@ export async function authenticateRequest(
   options: { requireAdmin?: boolean; requireSuperAdmin?: boolean } = {}
 ): Promise<AuthSuccess | AuthFailure> {
   const ip = request.headers.get("x-forwarded-for") || "unknown";
-  
+
   // Traffic control check
   if (!checkRateLimit(`ip_${ip}`, 120, 60000)) {
     return {

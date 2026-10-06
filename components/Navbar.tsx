@@ -11,7 +11,6 @@ import {
   Home, CalendarCheck2, CalendarDays, Coffee, Shield,
   User, LogOut, ChevronDown, Bell, Wallet, TrendingUp, Globe, Sparkles, Store, LifeBuoy, Bug, FileText, Boxes, Banknote, PanelLeftOpen, Menu
 } from "lucide-react";
-import { SeyalLogo } from "@/components/ui/SeyalLogo";
 import RaiseIssueModal from "@/components/support/RaiseIssueModal";
 
 interface NavbarProps {
@@ -208,9 +207,6 @@ export default function Navbar({
                     href={isSuperAdminView ? "/super-admin" : "/"}
                     className="flex items-center gap-2.5 sm:gap-3 group shrink-0"
                   >
-                    {/* Brand Gem Icon */}
-                    <SeyalLogo size={36} className="group-hover:scale-105 transition-transform" />
-
                     <div className="flex flex-col justify-center min-w-0">
                       <span className="font-extrabold text-lg sm:text-xl tracking-tight leading-none">
                         {isSuperAdminView ? (

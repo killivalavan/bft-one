@@ -60,7 +60,7 @@ export function StoreSettings() {
           const extraJson = localStorage.getItem(`bftone_tenant_extra_${bizId}`) || localStorage.getItem("bftone_tenant_cache");
           if (extraJson) localExtra = JSON.parse(extraJson);
         }
-      } catch {}
+      } catch { }
 
       let localShopLoc: any = {};
       try {
@@ -68,7 +68,7 @@ export function StoreSettings() {
           const shopLocStr = localStorage.getItem("bftone_shop_location");
           if (shopLocStr) localShopLoc = JSON.parse(shopLocStr);
         }
-      } catch {}
+      } catch { }
 
       setName(business.name || localExtra.name || "Brown fening tea");
       setLogoUrl(business.logo_url || localExtra.logo_url || "/dummy-logo.svg");
@@ -277,7 +277,7 @@ export function StoreSettings() {
             updated_at: new Date().toISOString(),
           })
           .eq("id", business.id);
-      } catch (_) {}
+      } catch (_) { }
 
       await refreshBusiness();
 
@@ -438,7 +438,7 @@ export function StoreSettings() {
             geofence_enabled: updatedProfile.geofence_enabled,
           })
           .eq("id", business.id);
-      } catch (_) {}
+      } catch (_) { }
 
       await refreshBusiness();
       toast({
@@ -817,11 +817,10 @@ export function StoreSettings() {
                       key={preset}
                       type="button"
                       onClick={() => setGeofenceRadius(preset)}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                        geofenceRadius === preset
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${geofenceRadius === preset
                           ? "bg-sky-600 text-white shadow-xs"
                           : "bg-white border border-slate-200 text-slate-700 hover:bg-slate-50"
-                      }`}
+                        }`}
                     >
                       {preset}m {preset === 150 ? "(Recommended)" : preset === 50 ? "(Strict)" : ""}
                     </button>

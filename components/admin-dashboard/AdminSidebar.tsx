@@ -528,17 +528,14 @@ export function AdminSidebar({
         isCollapsed ? "justify-center" : "justify-between"
       )}>
         {isCollapsed ? (
-          /* Collapsed Mode: Brand Gem / Toggle Trigger */
+          /* Collapsed Mode: Toggle Trigger */
           <button
             onClick={onToggleCollapse}
             title="Expand Sidebar (Ctrl+B)"
             aria-label="Expand Sidebar"
-            className="w-10 h-10 rounded-xl flex items-center justify-center text-white active:scale-95 transition-all group relative hover:opacity-95"
+            className="w-10 h-10 rounded-xl bg-slate-800/80 hover:bg-slate-800 flex items-center justify-center text-slate-300 hover:text-white active:scale-95 transition-all border border-slate-700/80"
           >
-            <SeyalLogo size={36} />
-            <span className="absolute inset-0 rounded-xl bg-blue-600/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center backdrop-blur-2xs">
-              <PanelLeftOpen size={16} className="text-white drop-shadow-md" />
-            </span>
+            <PanelLeftOpen size={18} />
           </button>
         ) : (
           /* Expanded Mode: Full Brand + Store + Collapse Button */

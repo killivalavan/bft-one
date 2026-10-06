@@ -21,6 +21,9 @@ const SIZE_MAP: Record<string, number> = {
   xl: 56,
 };
 
+// Flag to control SeyalPro logo icon visibility (temporarily disabled)
+const SHOW_LOGO_ICON = false;
+
 export function SeyalLogo({
   size = "md",
   className,
@@ -30,13 +33,17 @@ export function SeyalLogo({
   variant = "solid",
   onClick,
 }: SeyalLogoProps) {
+  if (!SHOW_LOGO_ICON && !showWordmark) {
+    return null;
+  }
+
   const reactId = useId();
   // Safe ID without colons for SVG defs
   const id = `seyal-${reactId.replace(/[^a-zA-Z0-9_-]/g, "")}`;
 
   const pxSize = typeof size === "number" ? size : SIZE_MAP[size] || 36;
 
-  const markSvg = (
+  const markSvg = SHOW_LOGO_ICON ? (
     <svg
       viewBox="0 0 40 40"
       width={pxSize}
@@ -133,7 +140,7 @@ export function SeyalLogo({
         fill="#FFFFFF"
       />
     </svg>
-  );
+  ) : null;
 
   if (!showWordmark) {
     return markSvg;
