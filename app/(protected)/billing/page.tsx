@@ -6,12 +6,11 @@ import { useCart, totalCents, CartItem } from "@/store/cart";
 import { useToast } from "@/components/ui/Toast";
 import { cn } from "@/lib/utils/cn";
 import { useTenant, DEFAULT_BUSINESS } from "@/lib/context/TenantContext";
-import Link from "next/link";
 import { useProfile } from "@/lib/hooks/useProfile";
 import {
   Search, X, Plus, Minus, Trash2, ShoppingBag, Receipt,
   CreditCard, QrCode, Banknote, Printer, Download, FileText,
-  Grid, List, ArrowRight, ArrowLeft,
+  Grid, List, ArrowRight,
   Hash, Coffee, Zap, CheckCircle2, Phone, MessageCircle, Copy, Check, ExternalLink,
   Boxes
 } from "lucide-react";
@@ -754,15 +753,8 @@ ${order.taxCents > 0 ? `🏛️ *GST (5%):* ₹${(order.taxCents / 100).toFixed(
       {/* ======================================================== */}
       <header className="bg-white border-b border-slate-200/90 shrink-0 z-30 px-3 sm:px-6 py-3 shadow-2xs">
         <div className="flex items-center justify-between gap-3">
-          {/* Left: Exit/Back button + Terminal & Business Badge */}
+          {/* Left: Terminal & Business Badge */}
           <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
-            <Link
-              href={flags?.isAdmin ? "/admin" : "/"}
-              className="flex items-center justify-center w-9 h-9 rounded-xl bg-slate-100 hover:bg-slate-200 active:bg-slate-300 text-slate-700 transition-colors shrink-0"
-              title={flags?.isAdmin ? "Exit POS to Admin Dashboard" : "Exit POS to Home"}
-            >
-              <ArrowLeft className="w-4 h-4" />
-            </Link>
             <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-[#EFF6FF] text-[#2563EB] border border-[#2563EB]/20 flex items-center justify-center font-bold shadow-xs shrink-0">
               <Zap className="w-4 h-4 sm:w-5 sm:h-5" />
             </div>

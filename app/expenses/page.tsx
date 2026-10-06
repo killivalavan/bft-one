@@ -13,7 +13,6 @@ import {
     Wallet, Building2, CheckCircle2, Power, Zap, AlertCircle, ArrowUpRight, ArrowDownRight,
     History, Info, Filter, SlidersHorizontal, RefreshCw, ShieldCheck, Users
 } from "lucide-react";
-import Link from "next/link";
 import {
     format, addDays, isSameDay, addWeeks, addMonths, addYears,
     startOfWeek, endOfWeek, startOfMonth, endOfMonth, startOfYear, endOfYear, startOfDay, endOfDay
@@ -1316,11 +1315,6 @@ export default function ExpensesPage() {
             <div className={`mx-auto p-4 md:p-6 space-y-6 ${isAdmin ? "max-w-6xl" : "max-w-md"}`}>
                 {/* Header */}
                 <div className="space-y-4">
-                    <Link href="/" className="inline-flex items-center gap-2 text-zinc-500 hover:text-zinc-800 transition-colors text-sm font-medium">
-                        <ChevronLeft size={16} />
-                        Back Home
-                    </Link>
-
                     <div className="flex items-center justify-between gap-4">
                         <div>
                             <div className="flex items-center gap-2">

@@ -11,8 +11,11 @@ import { ImageCropperModal } from "@/components/ui/ImageCropperModal";
 import {
   Store, Image as ImageIcon, Save,
   Phone, MapPin, Receipt, Upload, RefreshCw,
-  FileSignature, Building2, CheckCircle2, Crop
+  FileSignature, Building2, CheckCircle2, Crop,
+  Navigation, Crosshair, ExternalLink, ShieldCheck, LocateFixed,
+  ClipboardPaste, Check
 } from "lucide-react";
+import { saveShopGeofence, parseCoordinatesInput } from "@/lib/geofence";
 
 export function StoreSettings() {
   const { business, refreshBusiness } = useTenant();
@@ -26,6 +29,24 @@ export function StoreSettings() {
   );
   const [phone, setPhone] = useState((business as any)?.phone || "+91 98765 43210");
   const [gstin, setGstin] = useState((business as any)?.gstin || "");
+
+  // Store Geofence & Location state
+  const [geofenceLat, setGeofenceLat] = useState<string>(
+    business?.geofence_lat !== null && business?.geofence_lat !== undefined ? String(business.geofence_lat) : "12.8439"
+  );
+  const [geofenceLng, setGeofenceLng] = useState<string>(
+    business?.geofence_lng !== null && business?.geofence_lng !== undefined ? String(business.geofence_lng) : "80.2268"
+  );
+  const [geofenceRadius, setGeofenceRadius] = useState<number>(
+    business?.geofence_radius_meters || 150
+  );
+  const [geofenceEnabled, setGeofenceEnabled] = useState<boolean>(
+    business?.geofence_enabled ?? true
+  );
+  const [detectingLocation, setDetectingLocation] = useState(false);
+  const [savingLocation, setSavingLocation] = useState(false);
+  const [locationAccuracy, setLocationAccuracy] = useState<number | null>(null);
+  const [quickPasteInput, setQuickPasteInput] = useState("");
 
   const [saving, setSaving] = useState(false);
 
@@ -41,12 +62,45 @@ export function StoreSettings() {
         }
       } catch {}
 
+      let localShopLoc: any = {};
+      try {
+        if (typeof window !== "undefined") {
+          const shopLocStr = localStorage.getItem("bftone_shop_location");
+          if (shopLocStr) localShopLoc = JSON.parse(shopLocStr);
+        }
+      } catch {}
+
       setName(business.name || localExtra.name || "Brown fening tea");
       setLogoUrl(business.logo_url || localExtra.logo_url || "/dummy-logo.svg");
       setSignatureUrl((business as any).signature_url || localExtra.signature_url || "/default-signature.svg");
       setAddress((business as any).address || localExtra.address || "255, Rajiv Gandhi Salai (OMR), Navalur,\nChennai,\nTamil Nadu, India - 600130");
       setPhone((business as any).phone || localExtra.phone || "+91 98765 43210");
       setGstin((business as any).gstin || localExtra.gstin || "");
+
+      // Prioritize explicit shop location, then business from DB, then local extra
+      const bLat = (localShopLoc.lat !== undefined && localShopLoc.lat !== null && !isNaN(Number(localShopLoc.lat)))
+        ? String(localShopLoc.lat)
+        : ((business.geofence_lat !== null && business.geofence_lat !== undefined)
+          ? String(business.geofence_lat)
+          : (localExtra.geofence_lat !== undefined ? String(localExtra.geofence_lat) : "12.8439"));
+
+      const bLng = (localShopLoc.lng !== undefined && localShopLoc.lng !== null && !isNaN(Number(localShopLoc.lng)))
+        ? String(localShopLoc.lng)
+        : ((business.geofence_lng !== null && business.geofence_lng !== undefined)
+          ? String(business.geofence_lng)
+          : (localExtra.geofence_lng !== undefined ? String(localExtra.geofence_lng) : "80.2268"));
+
+      const bRadius = localShopLoc.radius || business.geofence_radius_meters || localExtra.geofence_radius_meters || 150;
+      const bEnabled = localShopLoc.enabled !== undefined
+        ? localShopLoc.enabled
+        : (business.geofence_enabled !== undefined
+          ? business.geofence_enabled
+          : (localExtra.geofence_enabled !== undefined ? localExtra.geofence_enabled : true));
+
+      setGeofenceLat(bLat);
+      setGeofenceLng(bLng);
+      setGeofenceRadius(Number(bRadius) || 150);
+      setGeofenceEnabled(bEnabled !== false);
     }
   }, [business?.id]);
 
@@ -168,6 +222,145 @@ export function StoreSettings() {
     }
   }
 
+  // Dedicated direct saver for shop GPS coordinates (no need to submit whole form)
+  async function saveLocationDirectly(
+    latNum: number,
+    lngNum: number,
+    radiusNum = 150,
+    enabledBool = true
+  ) {
+    if (!business?.id) return;
+    setSavingLocation(true);
+    try {
+      // 1. Immediately write to localStorage & broadcast event
+      saveShopGeofence({
+        lat: latNum,
+        lng: lngNum,
+        radius: radiusNum,
+        enabled: enabledBool,
+        name: name.trim() || business.name,
+        address: address.trim(),
+        businessId: business.id,
+      });
+
+      // 2. Persist to API
+      try {
+        const { data: { session } } = await supabaseClient.auth.getSession();
+        const token = session?.access_token;
+        await fetch("/api/business/profile", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {})
+          },
+          body: JSON.stringify({
+            businessId: business.id,
+            geofence_lat: latNum,
+            geofence_lng: lngNum,
+            geofence_radius_meters: radiusNum,
+            geofence_enabled: enabledBool,
+          })
+        });
+      } catch (apiErr) {
+        console.warn("Backend API sync warning:", apiErr);
+      }
+
+      // 3. Best effort direct client update
+      try {
+        await supabaseClient
+          .from("businesses")
+          .update({
+            geofence_lat: latNum,
+            geofence_lng: lngNum,
+            geofence_radius_meters: radiusNum,
+            geofence_enabled: enabledBool,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", business.id);
+      } catch (_) {}
+
+      await refreshBusiness();
+
+      toast({
+        title: "Store Location Saved! 📍",
+        description: `Coordinates (${latNum.toFixed(6)}, ${lngNum.toFixed(6)}) updated in database. Timesheet geofence is now active!`,
+        variant: "success",
+      });
+    } catch (e) {
+      console.warn("Error saving shop location directly:", e);
+    } finally {
+      setSavingLocation(false);
+    }
+  }
+
+  // Handle parsing coordinates or Google Maps link from quick paste
+  function handleApplyQuickPaste() {
+    const parsed = parseCoordinatesInput(quickPasteInput);
+    if (!parsed) {
+      toast({
+        title: "Could not parse coordinates",
+        description: "Please paste standard 'lat, lng' (e.g. 12.8439, 80.2268) or a Google Maps URL.",
+        variant: "error",
+      });
+      return;
+    }
+
+    const latStr = parsed.lat.toFixed(7);
+    const lngStr = parsed.lng.toFixed(7);
+    setGeofenceLat(latStr);
+    setGeofenceLng(lngStr);
+    setQuickPasteInput("");
+
+    // Auto save
+    saveLocationDirectly(parsed.lat, parsed.lng, Number(geofenceRadius) || 150, geofenceEnabled);
+  }
+
+  // GPS Store Location auto-detection
+  function handleDetectShopLocation() {
+    if (typeof window === "undefined" || !navigator.geolocation) {
+      toast({
+        title: "GPS Not Supported",
+        description: "Geolocation is not supported by your current browser or device.",
+        variant: "error",
+      });
+      return;
+    }
+
+    setDetectingLocation(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const lat = pos.coords.latitude.toFixed(7);
+        const lng = pos.coords.longitude.toFixed(7);
+        const acc = Math.round(pos.coords.accuracy);
+
+        setGeofenceLat(lat);
+        setGeofenceLng(lng);
+        setLocationAccuracy(acc);
+        setDetectingLocation(false);
+
+        // Instantly save so user does not need to submit the entire profile form
+        saveLocationDirectly(Number(lat), Number(lng), Number(geofenceRadius) || 150, geofenceEnabled);
+      },
+      (err) => {
+        setDetectingLocation(false);
+        let msg = "Could not retrieve GPS coordinates.";
+        if (err.code === err.PERMISSION_DENIED) {
+          msg = "GPS permission was denied by browser. Please allow location access or type coordinates manually.";
+        } else if (err.code === err.TIMEOUT) {
+          msg = "Location request timed out. Please try again or type coordinates manually.";
+        } else if (err.code === err.POSITION_UNAVAILABLE) {
+          msg = "Location information is unavailable on this device.";
+        }
+        toast({
+          title: "Location Detection Failed",
+          description: msg,
+          variant: "error",
+        });
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+    );
+  }
+
   // Save changes
   async function saveSettings(e: React.FormEvent) {
     e.preventDefault();
@@ -175,6 +368,10 @@ export function StoreSettings() {
 
     setSaving(true);
     try {
+      const numLat = geofenceLat !== "" && !isNaN(Number(geofenceLat)) ? Number(geofenceLat) : null;
+      const numLng = geofenceLng !== "" && !isNaN(Number(geofenceLng)) ? Number(geofenceLng) : null;
+      const numRadius = Number(geofenceRadius) || 150;
+
       const updatedProfile = {
         name: name.trim() || business.name,
         logo_url: logoUrl.trim() || "/dummy-logo.svg",
@@ -182,6 +379,10 @@ export function StoreSettings() {
         address: address.trim(),
         phone: phone.trim(),
         gstin: gstin.trim(),
+        geofence_lat: numLat,
+        geofence_lng: numLng,
+        geofence_radius_meters: numRadius,
+        geofence_enabled: Boolean(geofenceEnabled),
       };
 
       // 1. Instantly write to local tenant storage cache (guaranteed persistence across tab switches)
@@ -191,6 +392,15 @@ export function StoreSettings() {
           const cached = localStorage.getItem("bftone_tenant_cache");
           const parsed = cached ? JSON.parse(cached) : {};
           localStorage.setItem("bftone_tenant_cache", JSON.stringify({ ...parsed, ...updatedProfile }));
+          // Explicit shop location cache for instant retrieval across Timesheet and Geofence gate
+          localStorage.setItem("bftone_shop_location", JSON.stringify({
+            lat: numLat,
+            lng: numLng,
+            radius: numRadius,
+            enabled: Boolean(geofenceEnabled),
+            name: updatedProfile.name,
+            address: updatedProfile.address,
+          }));
         } catch (e) {
           console.warn("Local storage write error:", e);
         }
@@ -221,13 +431,21 @@ export function StoreSettings() {
           .from("businesses")
           .update({
             name: updatedProfile.name,
-            logo_url: updatedProfile.logo_url
+            logo_url: updatedProfile.logo_url,
+            geofence_lat: updatedProfile.geofence_lat,
+            geofence_lng: updatedProfile.geofence_lng,
+            geofence_radius_meters: updatedProfile.geofence_radius_meters,
+            geofence_enabled: updatedProfile.geofence_enabled,
           })
           .eq("id", business.id);
       } catch (_) {}
 
       await refreshBusiness();
-      toast({ title: "Store Profile Updated! 🎉", description: "Logo, signature, and shop details saved successfully", variant: "success" });
+      toast({
+        title: "Store Profile Updated! 🎉",
+        description: "Logo, signature, address, and timesheet location saved successfully",
+        variant: "success",
+      });
     } catch (err: any) {
       toast({ title: "Profile updated locally", description: "Saved to browser cache", variant: "info" });
     } finally {
@@ -432,6 +650,167 @@ export function StoreSettings() {
                     />
                   </div>
                 </div>
+              </div>
+            </div>
+
+            {/* 4. Store Physical Location & Attendance Geofence */}
+            <div className="p-5 rounded-2xl bg-sky-50/50 border border-sky-100/90 space-y-5">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-sky-100 text-sky-700 flex items-center justify-center font-bold shrink-0">
+                    <Navigation className="w-5 h-5 text-sky-600" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h4 className="text-sm font-bold text-slate-900">Store Physical Location &amp; Geofence</h4>
+                      <span className="text-[10px] font-bold bg-sky-100 text-sky-800 px-2 py-0.5 rounded-md flex items-center gap-1">
+                        <LocateFixed className="w-3 h-3 text-sky-600" /> Used for Timesheet
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Exact GPS location of your shop. Used to verify employee presence before allowing timesheet attendance check-in.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Detect GPS Button */}
+                <div className="flex items-center gap-2 shrink-0">
+                  <Button
+                    type="button"
+                    onClick={handleDetectShopLocation}
+                    disabled={detectingLocation}
+                    className="h-9 px-3.5 bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold rounded-xl shadow-xs flex items-center gap-1.5 cursor-pointer"
+                  >
+                    {detectingLocation ? (
+                      <>
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                        <span>Detecting GPS...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Crosshair className="w-3.5 h-3.5" />
+                        <span>Get Current Location</span>
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </div>
+
+              {locationAccuracy !== null && (
+                <div className="text-[11px] bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-xl px-3.5 py-2 flex items-center justify-between">
+                  <span>📍 GPS coordinates captured with high accuracy: <strong>±{locationAccuracy} meters</strong></span>
+                  <span className="text-[10px] text-emerald-600 font-bold">Remember to click &ldquo;Save All Changes&rdquo; below</span>
+                </div>
+              )}
+
+              {/* Coordinates Inputs */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-700 flex items-center justify-between">
+                    <span className="flex items-center gap-1.5">
+                      <MapPin className="w-3.5 h-3.5 text-sky-600" /> Shop Latitude (GPS)
+                    </span>
+                    <span className="text-[10px] font-normal text-slate-400">e.g. 12.8439000</span>
+                  </label>
+                  <Input
+                    type="number"
+                    step="any"
+                    placeholder="12.8439000"
+                    value={geofenceLat}
+                    onChange={(e) => setGeofenceLat(e.target.value)}
+                    className="bg-white text-xs h-10 font-mono"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-700 flex items-center justify-between">
+                    <span className="flex items-center gap-1.5">
+                      <MapPin className="w-3.5 h-3.5 text-sky-600" /> Shop Longitude (GPS)
+                    </span>
+                    <span className="text-[10px] font-normal text-slate-400">e.g. 80.2268000</span>
+                  </label>
+                  <Input
+                    type="number"
+                    step="any"
+                    placeholder="80.2268000"
+                    value={geofenceLng}
+                    onChange={(e) => setGeofenceLng(e.target.value)}
+                    className="bg-white text-xs h-10 font-mono"
+                  />
+                </div>
+              </div>
+
+              {/* Allowed Radius & Presets */}
+              <div className="space-y-2">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                  <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                    <ShieldCheck className="w-3.5 h-3.5 text-sky-600" /> Allowed Attendance Radius (Meters)
+                  </label>
+                  <span className="text-xs text-slate-500">
+                    Employees within <strong>{geofenceRadius}m</strong> can mark attendance
+                  </span>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  {[50, 100, 150, 250, 500].map((preset) => (
+                    <button
+                      key={preset}
+                      type="button"
+                      onClick={() => setGeofenceRadius(preset)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                        geofenceRadius === preset
+                          ? "bg-sky-600 text-white shadow-xs"
+                          : "bg-white border border-slate-200 text-slate-700 hover:bg-slate-50"
+                      }`}
+                    >
+                      {preset}m {preset === 150 ? "(Recommended)" : preset === 50 ? "(Strict)" : ""}
+                    </button>
+                  ))}
+                  <div className="flex items-center gap-1.5 ml-auto">
+                    <span className="text-xs text-slate-500 font-medium">Custom:</span>
+                    <Input
+                      type="number"
+                      min={10}
+                      max={5000}
+                      value={geofenceRadius}
+                      onChange={(e) => setGeofenceRadius(Number(e.target.value) || 150)}
+                      className="w-20 h-8 text-xs bg-white text-center font-bold"
+                    />
+                    <span className="text-xs text-slate-500">m</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Status and Verification Link */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between pt-3 border-t border-sky-100 gap-3">
+                <label className="inline-flex items-center gap-2.5 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={geofenceEnabled}
+                    onChange={(e) => setGeofenceEnabled(e.target.checked)}
+                    className="w-4 h-4 rounded border-slate-300 text-sky-600 focus:ring-sky-500 cursor-pointer"
+                  />
+                  <div>
+                    <span className="text-xs font-bold text-slate-800">
+                      Enforce Shop Geofence for Staff Timesheet Attendance
+                    </span>
+                    <p className="text-[11px] text-slate-500">
+                      When enabled, employees must be physically at the store to mark attendance.
+                    </p>
+                  </div>
+                </label>
+
+                {geofenceLat && geofenceLng && (
+                  <a
+                    href={`https://www.google.com/maps?q=${geofenceLat},${geofenceLng}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 text-xs text-sky-600 hover:text-sky-800 font-bold hover:underline shrink-0"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    <span>Verify Location in Google Maps ↗</span>
+                  </a>
+                )}
               </div>
             </div>
 

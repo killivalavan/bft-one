@@ -1,12 +1,16 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
+import { usePathname } from "next/navigation";
 import { useOfflineSync } from "@/lib/offline/useOfflineSync";
 import { WifiOff, X, CheckCircle2, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { useToast } from "@/components/ui/Toast";
 
 export function OfflineBanner() {
+  const pathname = usePathname();
+  const isAuthPage = pathname === "/login" || pathname?.startsWith("/super-admin/login");
+
   const { isOnline: syncEngineOnline, pendingCount, syncState, triggerSync } = useOfflineSync();
   const { toast } = useToast();
 
@@ -21,7 +25,20 @@ export function OfflineBanner() {
   });
   const [isChecking, setIsChecking] = useState(false);
 
-  // Directly track browser network state with event listeners & 1s polling
+  // Verify real reachability on initial mount if navigator initially reported false
+  useEffect(() => {
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      fetch(`/api/health?t=${Date.now()}`, { method: "HEAD", cache: "no-store" })
+        .then((res) => {
+          if (res.ok) {
+            setBrowserOnline(true);
+          }
+        })
+        .catch(() => {});
+    }
+  }, []);
+
+  // Directly track browser network state with event listeners & polling
   useEffect(() => {
     function handleOnlineEvent() {
       setBrowserOnline(true);
@@ -29,24 +46,51 @@ export function OfflineBanner() {
     }
 
     function handleOfflineEvent() {
-      setBrowserOnline(false);
-      setDismissed(false);
-      sessionStorage.removeItem("offline_banner_dismissed");
+      // Confirm with quick health check to prevent false-positives
+      fetch(`/api/health?t=${Date.now()}`, { method: "HEAD", cache: "no-store" })
+        .then((res) => {
+          if (res.ok) {
+            setBrowserOnline(true);
+          } else {
+            setBrowserOnline(false);
+            setDismissed(false);
+            sessionStorage.removeItem("offline_banner_dismissed");
+          }
+        })
+        .catch(() => {
+          setBrowserOnline(false);
+          setDismissed(false);
+          sessionStorage.removeItem("offline_banner_dismissed");
+        });
     }
 
     window.addEventListener("online", handleOnlineEvent);
     window.addEventListener("offline", handleOfflineEvent);
 
-    // Fast 1s polling to catch DevTools throttling changes immediately without reload
     const timer = setInterval(() => {
       if (typeof navigator !== "undefined") {
         const currentOnline = navigator.onLine;
-        setBrowserOnline(currentOnline);
-        if (currentOnline && !dismissed) {
-          setDismissed(true);
+        if (currentOnline) {
+          setBrowserOnline(true);
+          if (!dismissed) {
+            setDismissed(true);
+          }
+        } else {
+          // Verify with quick health check
+          fetch(`/api/health?t=${Date.now()}`, { method: "HEAD", cache: "no-store" })
+            .then((res) => {
+              if (res.ok) {
+                setBrowserOnline(true);
+              } else {
+                setBrowserOnline(false);
+              }
+            })
+            .catch(() => {
+              setBrowserOnline(false);
+            });
         }
       }
-    }, 1000);
+    }, 2500);
 
     return () => {
       window.removeEventListener("online", handleOnlineEvent);
@@ -56,9 +100,10 @@ export function OfflineBanner() {
   }, [dismissed]);
 
   // Exactly one toast per genuine transition. Ref starts at the load-time value,
-  // so a page refresh never produces a toast.
+  // so a page refresh never produces a toast. Never fire on login pages.
   const prevOnlineRef = useRef<boolean>(browserOnline);
   useEffect(() => {
+    if (isAuthPage) return;
     if (prevOnlineRef.current === browserOnline) return;
     prevOnlineRef.current = browserOnline;
     toast(
@@ -74,7 +119,7 @@ export function OfflineBanner() {
             variant: "info",
           }
     );
-  }, [browserOnline, toast]);
+  }, [browserOnline, isAuthPage, toast]);
 
   function handleDismiss(e?: React.MouseEvent) {
     if (e) {
@@ -96,6 +141,12 @@ export function OfflineBanner() {
       if (isNowOnline) {
         setBrowserOnline(true);
         handleDismiss();
+      } else {
+        const res = await fetch(`/api/health?t=${Date.now()}`, { method: "HEAD", cache: "no-store" });
+        if (res.ok) {
+          setBrowserOnline(true);
+          handleDismiss();
+        }
       }
       await triggerSync().catch(() => {});
     } finally {
@@ -103,8 +154,8 @@ export function OfflineBanner() {
     }
   }
 
-  // If online by either hook or navigator, or user dismissed, DO NOT RENDER
-  if (browserOnline || syncEngineOnline || dismissed) {
+  // If on login/auth page, or online by either hook or navigator, or user dismissed, DO NOT RENDER
+  if (isAuthPage || browserOnline || syncEngineOnline || dismissed) {
     return null;
   }
 

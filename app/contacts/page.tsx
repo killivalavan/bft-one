@@ -1,15 +1,16 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import { supabaseClient } from "@/lib/supabaseClient";
 import { useUser } from "@/lib/hooks/useUser";
+import { useProfile } from "@/lib/hooks/useProfile";
 import { useToast } from "@/components/ui/Toast";
 import { Input } from "@/components/ui/Input";
-import { ChevronLeft, Phone, ShieldAlert, User, Store, Search } from "lucide-react";
+import { Phone, ShieldAlert, User, Store, Search, Shield, Users } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { useTenant } from "@/lib/context/TenantContext";
 import { SyncStatusBadge } from "@/components/offline/SyncStatusBadge";
+import { ContactManager } from "@/components/admin/ContactManager";
 import {
     STORES,
     getItemsByTenant,
@@ -35,12 +36,16 @@ type ExternalContact = {
 
 export default function ContactsPage() {
     const { user } = useUser();
+    const { flags } = useProfile();
     const { business } = useTenant();
     const { toast } = useToast();
 
     const [employees, setEmployees] = useState<Employee[]>([]);
     const [others, setOthers] = useState<ExternalContact[]>([]);
     const [emergencyContacts, setEmergencyContacts] = useState<ExternalContact[]>([]);
+    const [rawSystemUsers, setRawSystemUsers] = useState<any[]>([]);
+    const [rawExternalContacts, setRawExternalContacts] = useState<ExternalContact[]>([]);
+    const [isManageMode, setIsManageMode] = useState(false);
     const [loading, setLoading] = useState(true);
     const [tab, setTab] = useState<"employees" | "emergency" | "vendors">("employees");
 
@@ -124,6 +129,8 @@ export default function ContactsPage() {
             setEmployees(mergedEmps);
             setOthers(otherContacts);
             setEmergencyContacts(emergency);
+            setRawSystemUsers(empData || []);
+            setRawExternalContacts(allExt);
 
             // Save to IndexedDB
             const localCusts: LocalCustomer[] = allExt.map(c => ({
@@ -144,6 +151,59 @@ export default function ContactsPage() {
             }
         } finally {
             setLoading(false);
+        }
+    }
+
+    // Contact CRUD Actions for Admins
+    async function addContact(contact: Omit<ExternalContact, "id">) {
+        const { error } = await supabaseClient.from("external_contacts").insert([{ ...contact, business_id: business?.id }]);
+        if (error) { toast({ title: "Failed to add contact", description: error.message, variant: "error" }); return; }
+        await loadData();
+        toast({ title: "Contact added", variant: "success" });
+    }
+
+    async function updateContact(contact: ExternalContact) {
+        const { error } = await supabaseClient.from("external_contacts").update(contact).eq('id', contact.id);
+        if (error) { toast({ title: "Failed to update contact", description: error.message, variant: "error" }); return; }
+        await loadData();
+        toast({ title: "Contact updated", variant: "success" });
+    }
+
+    async function deleteContact(id: string) {
+        const { error } = await supabaseClient.from("external_contacts").delete().eq('id', id);
+        if (error) { toast({ title: "Failed to delete contact", description: error.message, variant: "error" }); return; }
+        await loadData();
+        toast({ title: "Contact deleted", variant: "success" });
+    }
+
+    async function updateSystemUser(id: string, updates: any) {
+        const { error } = await supabaseClient.from('profiles').update(updates).eq('id', id);
+        if (error) { toast({ title: "Update failed", description: error.message, variant: "error" }); return; }
+        await loadData();
+        toast({ title: "Profile updated", variant: "success" });
+    }
+
+    async function deleteSystemUser(userId: string) {
+        try {
+            const { data: { session } } = await supabaseClient.auth.getSession();
+            const token = session?.access_token;
+            const res = await fetch("/api/admin-users", {
+                method: "DELETE",
+                headers: {
+                    "Content-Type": "application/json",
+                    ...(token ? { Authorization: `Bearer ${token}` } : {})
+                },
+                body: JSON.stringify({ userId })
+            });
+            if (!res.ok) {
+                const data = await res.json().catch(() => ({}));
+                toast({ title: "Failed to remove user", description: data?.error || "Unknown error", variant: "error" });
+                return;
+            }
+            await loadData();
+            toast({ title: "User removed", variant: "success" });
+        } catch (e: any) {
+            toast({ title: "Failed to remove user", description: e?.message || "Unknown error", variant: "error" });
         }
     }
 
@@ -187,23 +247,54 @@ export default function ContactsPage() {
     return (
         <div className="min-h-screen bg-[#F8FAFC] pb-20">
             <div className="max-w-5xl mx-auto p-4 md:p-6 space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-300">
-
-                {/* Header */}
-                <div className="flex items-center justify-between">
-                    <Link href="/" className="inline-flex items-center gap-2 text-slate-500 hover:text-[#2563EB] transition-colors text-sm font-medium">
-                        <ChevronLeft size={16} />
-                        Back to Dashboard
-                    </Link>
-                </div>
-
-                <div className="space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div className="flex items-center gap-3">
                         <h1 className="text-2xl font-bold text-[#0F172A] tracking-tight">Contacts Directory</h1>
                         <SyncStatusBadge />
                     </div>
 
-                    {/* --- Owner Contacts (Static Section) --- */}
-                    <div className="space-y-3">
+                    {flags?.isAdmin && (
+                        <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200/80 self-start sm:self-auto">
+                            <button
+                                onClick={() => setIsManageMode(false)}
+                                className={cn(
+                                    "px-3 py-1.5 text-xs font-bold rounded-lg transition-all",
+                                    !isManageMode ? "bg-white text-blue-600 shadow-xs" : "text-slate-600 hover:text-slate-900"
+                                )}
+                            >
+                                Directory Cards
+                            </button>
+                            <button
+                                onClick={() => setIsManageMode(true)}
+                                className={cn(
+                                    "px-3 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5",
+                                    isManageMode ? "bg-white text-blue-600 shadow-xs" : "text-slate-600 hover:text-slate-900"
+                                )}
+                            >
+                                <Shield size={13} className="text-blue-500" />
+                                Manage Directory
+                            </button>
+                        </div>
+                    )}
+                </div>
+
+                {isManageMode ? (
+                    <div className="pt-2">
+                        <ContactManager
+                            contacts={rawExternalContacts}
+                            systemUsers={rawSystemUsers}
+                            onAddContact={addContact}
+                            onUpdateContact={updateContact}
+                            onDeleteContact={deleteContact}
+                            onUpdateSystemUser={updateSystemUser}
+                            onDeleteSystemUser={deleteSystemUser}
+                        />
+                    </div>
+                ) : (
+                    <>
+                        <div className="space-y-4">
+                            {/* --- Owner Contacts (Static Section) --- */}
+                            <div className="space-y-3">
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                             <div className="bg-white p-4 rounded-xl border border-[#E2E8F0] shadow-xs flex items-center justify-between gap-3 group relative">
                                 <div className="font-semibold text-[#0F172A] text-lg">Owner</div>
@@ -399,6 +490,8 @@ export default function ContactsPage() {
                         </>
                     )}
                 </div>
+                    </>
+                )}
 
             </div>
         </div>

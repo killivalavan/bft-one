@@ -18,6 +18,7 @@ interface RaiseIssueModalProps {
   isOpen: boolean;
   onClose: () => void;
   initialTab?: "list" | "create";
+  isInline?: boolean;
 }
 
 interface SupportTicket {
@@ -63,7 +64,7 @@ const PRIORITIES = [
   { id: "urgent", label: "Critical", color: "bg-rose-50 text-rose-700 border-rose-200" },
 ];
 
-export default function RaiseIssueModal({ isOpen, onClose, initialTab = "list" }: RaiseIssueModalProps) {
+export default function RaiseIssueModal({ isOpen, onClose, initialTab = "list", isInline = false }: RaiseIssueModalProps) {
   const { business } = useTenant();
   const { user } = useUser();
   const { toast } = useToast();
@@ -226,8 +227,17 @@ export default function RaiseIssueModal({ isOpen, onClose, initialTab = "list" }
 
   return (
     <>
-      <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 overflow-y-auto animate-in fade-in duration-200">
-        <div className="bg-white rounded-3xl max-w-2xl w-full shadow-2xl border border-zinc-200 overflow-hidden animate-in zoom-in-95 duration-200 my-6 max-h-[90vh] flex flex-col">
+      <div className={cn(
+        isInline
+          ? "w-full max-w-3xl mx-auto"
+          : "fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 overflow-y-auto animate-in fade-in duration-200"
+      )}>
+        <div className={cn(
+          "bg-white w-full border border-zinc-200 overflow-hidden flex flex-col",
+          isInline
+            ? "rounded-2xl shadow-xs"
+            : "rounded-3xl max-w-2xl shadow-2xl animate-in zoom-in-95 duration-200 my-6 max-h-[90vh]"
+        )}>
           
           {/* Header */}
           <div className="p-5 sm:p-6 border-b border-zinc-100 bg-gradient-to-r from-zinc-50 via-white to-indigo-50/30 shrink-0">
@@ -248,12 +258,14 @@ export default function RaiseIssueModal({ isOpen, onClose, initialTab = "list" }
                 </div>
               </div>
 
-              <button
-                onClick={handleCloseModal}
-                className="w-8 h-8 rounded-full bg-zinc-100 hover:bg-zinc-200 text-zinc-500 hover:text-zinc-800 flex items-center justify-center font-bold text-sm transition-colors"
-              >
-                ✕
-              </button>
+              {!isInline && (
+                <button
+                  onClick={handleCloseModal}
+                  className="w-8 h-8 rounded-full bg-zinc-100 hover:bg-zinc-200 text-zinc-500 hover:text-zinc-800 flex items-center justify-center font-bold text-sm transition-colors"
+                >
+                  ✕
+                </button>
+              )}
             </div>
 
             {/* Navigation Tabs */}

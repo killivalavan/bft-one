@@ -5,7 +5,8 @@ import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
-import { Boxes, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
+import { SeyalLogo } from "@/components/ui/SeyalLogo";
 import { useTenant } from "@/lib/context/TenantContext";
 
 export default function LoginPage() {
@@ -83,8 +84,8 @@ export default function LoginPage() {
         <div className="min-h-[80vh] flex items-center justify-center p-4">
             <div className="w-full max-w-md space-y-8 animate-in fade-in zoom-in-95 duration-300">
                 <div className="text-center space-y-2">
-                    <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-[#2563EB] text-white shadow-xs mb-2">
-                        <Boxes size={24} />
+                    <div className="flex justify-center mb-1">
+                        <SeyalLogo size={52} variant="glow" />
                     </div>
                     <h1 className="text-2xl font-extrabold tracking-tight">
                         <span className="text-[#0F172A]">Seyal</span><span className="text-[#2563EB]">Pro</span>

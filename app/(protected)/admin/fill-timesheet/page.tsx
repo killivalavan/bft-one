@@ -4,7 +4,7 @@ import Link from "next/link";
 import { ChevronLeft, ChevronRight, CalendarDays, ArrowLeftRight, GripHorizontal, ZoomIn, ZoomOut } from "lucide-react";
 import { format, addDays, addMonths, startOfDay, startOfMonth, endOfMonth, eachDayOfInterval, isWeekend, isSameDay } from "date-fns";
 import { supabaseClient } from "@/lib/supabaseClient";
-import { UserAttendanceCard } from "@/components/admin/UserAttendanceCard";
+import { UserAttendanceCard, SalaryAdjustmentItem } from "@/components/admin/UserAttendanceCard";
 import { useToast } from "@/components/ui/Toast";
 import { cn } from "@/lib/utils/cn";
 import { useTenant } from "@/lib/context/TenantContext";
@@ -14,6 +14,7 @@ type UserProfile = { id: string; email: string; base_salary_cents: number; per_d
 type AttendanceStatus = 'present' | 'leave' | 'half_day' | 'off' | 'unmarked';
 type DayLog = { status: AttendanceStatus; lateMinutes: number; extraHours: number };
 type MonthlyLogs = Record<string, Record<string, DayLog>>; // dateKey -> userId -> Log
+type MonthlyAdjustments = Record<string, Record<string, SalaryAdjustmentItem[]>>; // dateKey -> userId -> adjustments
 
 export default function FillTimesheetPage() {
     const { toast } = useToast();
@@ -21,6 +22,7 @@ export default function FillTimesheetPage() {
     const [date, setDate] = useState(new Date());
     const [users, setUsers] = useState<UserProfile[]>([]);
     const [monthlyLogs, setMonthlyLogs] = useState<MonthlyLogs>({});
+    const [monthlyAdjustments, setMonthlyAdjustments] = useState<MonthlyAdjustments>({});
     const [loading, setLoading] = useState(true);
 
     const dateKey = format(date, "yyyy-MM-dd");
@@ -89,7 +91,16 @@ export default function FillTimesheetPage() {
                     lvQuery = lvQuery.eq('business_id', business.id);
                 }
 
-                const [{ data: ts }, { data: lv }] = await Promise.all([tsQuery, lvQuery]);
+                let seQuery = supabaseClient
+                    .from('salary_entries')
+                    .select('id, user_id, entry_date, amount_cents, reason, kind')
+                    .gte('entry_date', startStr)
+                    .lte('entry_date', endStr);
+                if (business?.id) {
+                    seQuery = seQuery.eq('business_id', business.id);
+                }
+
+                const [{ data: ts }, { data: lv }, { data: se }] = await Promise.all([tsQuery, lvQuery, seQuery]);
 
                 // Map to State
                 const newLogs: MonthlyLogs = {};
@@ -106,12 +117,30 @@ export default function FillTimesheetPage() {
                     setLog(l.leave_date, l.user_id, { status, lateMinutes: 0, extraHours: 0 });
                 });
 
-                // Apply Timesheets (Override)
+                // Apply Timesheets (Override): Simply Present with 0 late minutes
                 (ts || []).forEach((t: any) => {
-                    setLog(t.work_date, t.user_id, { status: 'present', lateMinutes: t.minutes_late || 0, extraHours: t.extra_hours || 0 });
+                    setLog(t.work_date, t.user_id, { status: 'present', lateMinutes: 0, extraHours: t.extra_hours || 0 });
                 });
 
                 setMonthlyLogs(newLogs);
+
+                // Map Monthly Adjustments (Deductions & Additions)
+                const newAdjustments: MonthlyAdjustments = {};
+                (se || []).forEach((entry: any) => {
+                    const d = entry.entry_date;
+                    const u = entry.user_id;
+                    if (!newAdjustments[d]) newAdjustments[d] = {};
+                    if (!newAdjustments[d][u]) newAdjustments[d][u] = [];
+                    newAdjustments[d][u].push({
+                        id: entry.id,
+                        userId: u,
+                        date: d,
+                        amountCents: entry.amount_cents,
+                        reason: entry.reason,
+                        kind: entry.kind
+                    });
+                });
+                setMonthlyAdjustments(newAdjustments);
 
             } catch (e) {
                 console.error(e);
@@ -137,52 +166,29 @@ export default function FillTimesheetPage() {
             const user = users.find(u => u.id === userId);
             if (!user) return;
 
-            // Database Sync
-            const delResults = await Promise.all([
+            // Database Sync: clear timesheet and leave records for this date
+            await Promise.all([
                 supabaseClient.from('timesheets').delete().eq('user_id', userId).eq('work_date', dateKey),
                 supabaseClient.from('leaves').delete().eq('user_id', userId).eq('leave_date', dateKey),
-                // Delete deductions and additions (overtime)
-                supabaseClient.from('salary_entries').delete().eq('user_id', userId).eq('entry_date', dateKey).or('kind.eq.deduction,kind.eq.addition').in('reason', ['late', 'leave', 'Half Day', 'half day', 'Leave deduction', 'Weekly Off']).ilike('reason', '%Overtime%')
             ]);
-            // Note: The OR logic above is tricky with Supabase syntax. Better to split deletion.
 
-            // Clear specific salary entries (Deductions relating to attendance)
-            await supabaseClient.from('salary_entries').delete().eq('user_id', userId).eq('entry_date', dateKey).in('reason', ['late', 'leave', 'Half Day', 'half day', 'Leave deduction', 'Weekly Off']);
-            // Clear Overtime entries
-            await supabaseClient.from('salary_entries').delete().eq('user_id', userId).eq('entry_date', dateKey).ilike('reason', 'Overtime%');
-
+            // Clear automated attendance deductions if marking away from leave/half-day
+            await supabaseClient.from('salary_entries').delete().eq('user_id', userId).eq('entry_date', dateKey).in('reason', ['leave', 'Half Day', 'half day', 'Leave deduction', 'Weekly Off']);
 
             if (newState.status === 'present') {
                 const checkInDate = new Date(date);
-                checkInDate.setHours(9, newState.lateMinutes, 0, 0);
+                checkInDate.setHours(9, 0, 0, 0);
 
+                // Simply mark Present: no time check, minutes_late is 0!
                 const { error } = await supabaseClient.from('timesheets').insert({
                     user_id: userId,
                     work_date: dateKey,
                     check_in: checkInDate.toISOString(),
-                    minutes_late: newState.lateMinutes,
+                    minutes_late: 0,
                     extra_hours: newState.extraHours || 0,
                     business_id: business?.id
                 });
                 if (error) throw error;
-
-                // Late Deduction
-                if (newState.lateMinutes > 0) {
-                    const amount = newState.lateMinutes >= 120 ? 30000 : newState.lateMinutes >= 60 ? 20000 : newState.lateMinutes >= 30 ? 10000 : 5000;
-                    const { error: salError } = await supabaseClient.from('salary_entries').insert({
-                        user_id: userId, entry_date: dateKey, amount_cents: amount, reason: 'late', kind: 'deduction', business_id: business?.id
-                    });
-                    if (salError) throw salError;
-                }
-
-                // Overtime Addition
-                if (newState.extraHours > 0) {
-                    const amount = newState.extraHours * 50 * 100; // 50 INR per hour -> cents
-                    const { error: otError } = await supabaseClient.from('salary_entries').insert({
-                        user_id: userId, entry_date: dateKey, amount_cents: amount, reason: `Overtime (${newState.extraHours} hrs)`, kind: 'addition', business_id: business?.id
-                    });
-                    if (otError) throw otError;
-                }
 
             } else if (newState.status === 'leave') {
                 const { error } = await supabaseClient.from('leaves').insert({ user_id: userId, leave_date: dateKey, reason: 'Admin Marked', business_id: business?.id });
@@ -215,23 +221,63 @@ export default function FillTimesheetPage() {
         }
     }
 
-    // Add Custom Allowance / Addition
-    async function addCustomAllowance(userId: string, reason: string, amountRupees: number) {
+    // Add Custom Adjustment (Deduction or Addition)
+    async function handleAddAdjustment(userId: string, reason: string, amountRupees: number, kind: 'deduction' | 'addition') {
         try {
             const amountCents = Math.round(amountRupees * 100);
-            const { error } = await supabaseClient.from('salary_entries').insert({
+            const { data, error } = await supabaseClient.from('salary_entries').insert({
                 user_id: userId,
                 entry_date: dateKey,
                 amount_cents: amountCents,
                 reason: reason,
-                kind: 'addition',
+                kind: kind,
                 business_id: business?.id
-            });
+            }).select().single();
             if (error) throw error;
-            toast({ title: `Added ₹${amountRupees}`, description: `Allowance: ${reason}`, variant: "success" });
+
+            setMonthlyAdjustments(prev => {
+                const next = { ...prev };
+                if (!next[dateKey]) next[dateKey] = {};
+                if (!next[dateKey][userId]) next[dateKey][userId] = [];
+                next[dateKey][userId] = [...next[dateKey][userId], {
+                    id: data?.id || crypto.randomUUID(),
+                    userId,
+                    date: dateKey,
+                    amountCents,
+                    reason,
+                    kind
+                }];
+                return next;
+            });
+
+            toast({
+                title: kind === 'deduction' ? `Deduction Added: -₹${amountRupees}` : `Addition Added: +₹${amountRupees}`,
+                description: reason,
+                variant: "success"
+            });
         } catch (e: any) {
-            toast({ title: "Failed to add allowance", description: e.message, variant: "error" });
+            toast({ title: "Failed to add adjustment", description: e.message, variant: "error" });
             throw e;
+        }
+    }
+
+    // Delete Custom Adjustment
+    async function handleDeleteAdjustment(entryId: string, userId: string) {
+        try {
+            const { error } = await supabaseClient.from('salary_entries').delete().eq('id', entryId);
+            if (error) throw error;
+
+            setMonthlyAdjustments(prev => {
+                const next = { ...prev };
+                if (next[dateKey]?.[userId]) {
+                    next[dateKey][userId] = next[dateKey][userId].filter(item => item.id !== entryId);
+                }
+                return next;
+            });
+
+            toast({ title: "Adjustment removed", variant: "success", duration: 1500 });
+        } catch (e: any) {
+            toast({ title: "Failed to remove adjustment", description: e.message, variant: "error" });
         }
     }
 
@@ -303,10 +349,10 @@ export default function FillTimesheetPage() {
                 {/* Header */}
                 <div className="sticky top-0 z-30 bg-white/80 backdrop-blur-md border-b border-zinc-200 shadow-sm">
                     <div className="max-w-7xl mx-auto px-2 sm:px-4 min-h-[64px] flex flex-row items-center justify-between gap-2 py-2">
-                        <div className="flex items-center gap-2">
-                            <Link href="/admin" className="p-2 text-zinc-400 hover:text-zinc-600 shrink-0">
-                                <ChevronLeft size={20} />
-                            </Link>
+                        <div className="flex items-center gap-2.5">
+                            <div className="w-9 h-9 rounded-xl bg-purple-100 text-purple-700 border border-purple-200/80 flex items-center justify-center shrink-0 shadow-2xs">
+                                <CalendarDays size={18} />
+                            </div>
                             <div className="min-w-0">
                                 <h1 className="text-base sm:text-lg font-bold text-zinc-900 truncate">
                                     <span className="sm:hidden">Attendance</span>
@@ -349,8 +395,10 @@ export default function FillTimesheetPage() {
                                 <UserAttendanceCard
                                     user={user}
                                     current={dailyLogs[user.id] || { status: 'unmarked', lateMinutes: 0, extraHours: 0 }}
+                                    adjustments={monthlyAdjustments[dateKey]?.[user.id] || []}
                                     onChange={updateAttendance}
-                                    onAddAllowance={addCustomAllowance}
+                                    onAddAdjustment={handleAddAdjustment}
+                                    onDeleteAdjustment={handleDeleteAdjustment}
                                 />
                             </div>
                         ))}
@@ -441,10 +489,6 @@ export default function FillTimesheetPage() {
                                                     if (status === 'present') {
                                                         cellClass = "text-emerald-600 font-medium";
                                                         content = "Present";
-                                                        if (lateMinutes > 0) {
-                                                            cellClass = "text-amber-600 font-medium";
-                                                            content = `Present (+${lateMinutes}m)`;
-                                                        }
                                                     } else if (status === 'leave') {
                                                         cellClass = "text-rose-600 font-bold";
                                                         content = "Leave";
@@ -457,9 +501,29 @@ export default function FillTimesheetPage() {
                                                     }
                                                 }
 
+                                                const dayAdjs = monthlyAdjustments[dKey]?.[u.id];
+
                                                 return (
                                                     <td key={u.id} className="px-4 py-3 text-center border-l border-dashed border-zinc-100 last:border-r-0">
-                                                        <span className={cellClass}>{content}</span>
+                                                        <div className="flex flex-col items-center gap-0.5">
+                                                            <span className={cellClass}>{content}</span>
+                                                            {dayAdjs && dayAdjs.length > 0 && (
+                                                                <div className="flex flex-wrap justify-center gap-0.5 mt-0.5">
+                                                                    {dayAdjs.map(adj => (
+                                                                        <span
+                                                                            key={adj.id}
+                                                                            className={cn(
+                                                                                "text-[9px] font-bold px-1 rounded tabular-nums",
+                                                                                adj.kind === 'deduction' ? "bg-rose-100 text-rose-700" : "bg-emerald-100 text-emerald-700"
+                                                                            )}
+                                                                            title={`${adj.kind === 'deduction' ? 'Deduction' : 'Addition'}: ${adj.reason}`}
+                                                                        >
+                                                                            {adj.kind === 'deduction' ? '-' : '+'}₹{(adj.amountCents / 100).toFixed(0)}
+                                                                        </span>
+                                                                    ))}
+                                                                </div>
+                                                            )}
+                                                        </div>
                                                     </td>
                                                 );
                                             })}

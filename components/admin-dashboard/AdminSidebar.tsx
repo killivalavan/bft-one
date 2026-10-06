@@ -2,8 +2,12 @@
 
 import React, { useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { useUser } from "@/lib/hooks/useUser";
+import { useProfile } from "@/lib/hooks/useProfile";
+import { supabaseClient } from "@/lib/supabaseClient";
 import { cn } from "@/lib/utils/cn";
+import { SeyalLogo } from "@/components/ui/SeyalLogo";
 import {
   PanelLeftClose,
   PanelLeftOpen,
@@ -20,10 +24,16 @@ import {
   Shield,
   Bell,
   ChevronRight,
+  ChevronUp,
   Store,
   Sparkles,
   CalendarDays,
-  Contact
+  Contact,
+  Users,
+  LifeBuoy,
+  User,
+  LogOut,
+  Wallet
 } from "lucide-react";
 
 export interface NavItemConfig {
@@ -33,6 +43,7 @@ export interface NavItemConfig {
   icon: React.ComponentType<{ size?: number; className?: string }>;
   category: "CORE" | "OPERATIONS" | "FINANCE" | "STAFF" | "ADMIN";
   badge?: string;
+  adminOnly?: boolean;
   colorScheme?: "blue" | "emerald" | "amber" | "purple" | "cyan" | "rose" | "slate";
 }
 
@@ -62,7 +73,77 @@ export function AdminSidebar({
   onCloseMobile,
 }: AdminSidebarProps) {
   const pathname = usePathname();
+  const router = useRouter();
+  const { user, loading } = useUser();
+  const { flags } = useProfile();
+
   const [hoveredItem, setHoveredItem] = useState<string | null>(null);
+  const [userEmail, setUserEmail] = useState<string | undefined>(undefined);
+  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+  const profileMenuRef = React.useRef<HTMLDivElement>(null);
+
+  // Sync display email
+  React.useEffect(() => {
+    try {
+      const cached = typeof window !== "undefined" ? localStorage.getItem("bftone_display_email") : null;
+      if (cached) setUserEmail(cached);
+    } catch {}
+  }, []);
+
+  React.useEffect(() => {
+    if (user) {
+      setUserEmail(user.email);
+      try { localStorage.setItem("bftone_display_email", user.email!); } catch {}
+    } else if (!loading) {
+      setUserEmail(undefined);
+      try { localStorage.removeItem("bftone_display_email"); } catch {}
+    }
+  }, [user, loading]);
+
+  // Click outside to close profile popover
+  React.useEffect(() => {
+    function onDocClick(e: MouseEvent) {
+      if (profileMenuRef.current && !profileMenuRef.current.contains(e.target as Node)) {
+        setProfileMenuOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", onDocClick);
+    return () => document.removeEventListener("mousedown", onDocClick);
+  }, []);
+
+  // Close popover when collapsing/expanding
+  React.useEffect(() => {
+    setProfileMenuOpen(false);
+  }, [isCollapsed]);
+
+  const userRoleTitle = flags?.isAdmin
+    ? "Store Admin"
+    : flags?.isStockManager
+    ? "Stock Manager"
+    : "Staff Member";
+
+  const displayName = userEmail ? userEmail.split("@")[0] : null;
+  const initial = displayName ? displayName[0].toUpperCase() : (flags?.isAdmin ? "A" : "S");
+
+  async function handleLogout() {
+    try {
+      await Promise.race([
+        supabaseClient.auth.signOut(),
+        new Promise((resolve) => setTimeout(resolve, 2000))
+      ]);
+    } catch (e) {
+      console.error("Logout error/timeout", e);
+    } finally {
+      setProfileMenuOpen(false);
+      try { localStorage.removeItem("bftone_display_email"); } catch {}
+      try { localStorage.removeItem("bftone_tenant_cache"); } catch {}
+      try { localStorage.removeItem("bftone_flags"); } catch {}
+      if (typeof document !== "undefined") {
+        document.cookie = "tenant_slug=; path=/; max-age=0; SameSite=Lax";
+      }
+      window.location.href = "/login";
+    }
+  }
 
   // Prevent background scroll when mobile drawer is open
   React.useEffect(() => {
@@ -129,11 +210,20 @@ export function AdminSidebar({
       colorScheme: "purple",
     },
     {
+      id: "notifications",
+      label: "Alerts",
+      href: "/notifications",
+      icon: Bell,
+      category: "OPERATIONS",
+      colorScheme: "slate",
+    },
+    {
       id: "invoices",
       label: "Tax Invoices",
       href: "/invoices",
       icon: FileText,
       category: "FINANCE",
+      adminOnly: true,
       colorScheme: "blue",
     },
     {
@@ -161,12 +251,12 @@ export function AdminSidebar({
       colorScheme: "cyan",
     },
     {
-      id: "fill-timesheet",
-      label: "Fill Attendance",
-      href: "/admin/fill-timesheet",
-      icon: CalendarPlus,
+      id: "salary",
+      label: "My Salary",
+      href: "/mysalary",
+      icon: Wallet,
       category: "STAFF",
-      colorScheme: "purple",
+      colorScheme: "emerald",
     },
     {
       id: "deductions",
@@ -181,35 +271,62 @@ export function AdminSidebar({
       label: "Calendar",
       href: "/calendar",
       icon: CalendarDays,
-      category: "OPERATIONS",
+      category: "STAFF",
       colorScheme: "blue",
     },
     {
       id: "contacts",
-      label: "Directory",
+      label: "Contacts",
       href: "/contacts",
       icon: Contact,
-      category: "OPERATIONS",
+      category: "STAFF",
       colorScheme: "slate",
     },
     {
-      id: "admin",
-      label: "Store Settings",
-      href: "/admin",
-      icon: Shield,
+      id: "admin-users",
+      label: "Users & Roles",
+      href: "/admin/users",
+      icon: Users,
       category: "ADMIN",
-      badge: "Core",
       colorScheme: "blue",
     },
     {
-      id: "notifications",
-      label: "Alerts",
-      href: "/notifications",
-      icon: Bell,
+      id: "fill-timesheet",
+      label: "Fill Timesheet",
+      href: "/admin/fill-timesheet",
+      icon: CalendarPlus,
       category: "ADMIN",
-      colorScheme: "slate",
+      colorScheme: "purple",
+    },
+    {
+      id: "admin-store",
+      label: "Store & Logo",
+      href: "/admin/store",
+      icon: Store,
+      category: "ADMIN",
+      colorScheme: "blue",
+    },
+    {
+      id: "admin-support",
+      label: "Support & Issues",
+      href: "/admin/support",
+      icon: LifeBuoy,
+      category: "ADMIN",
+      colorScheme: "amber",
     },
   ];
+
+  const isItemActive = (item: NavItemConfig) => {
+    if (item.id === "dashboard" && pathname === "/") return true;
+    if (item.id === "admin-users" && (pathname === "/admin/users" || pathname === "/admin")) return true;
+    return pathname === item.href;
+  };
+
+  const handleNavClick = (item: NavItemConfig) => {
+    if (onSelectInternalView) onSelectInternalView(item.id);
+    if (onItemClick) onItemClick();
+    if (onCloseMobile) onCloseMobile();
+  };
 
   const categories = ["CORE", "OPERATIONS", "FINANCE", "STAFF", "ADMIN"] as const;
 
@@ -235,20 +352,9 @@ export function AdminSidebar({
       >
         {/* Mobile Header: Brand + Store + Close Button */}
         <div className="flex items-center justify-between h-[68px] px-3.5 border-b border-slate-800/80 shrink-0">
-          <div className="flex items-center gap-2.5 min-w-0 pr-2">
-            <div className="w-9 h-9 rounded-xl bg-blue-600 flex items-center justify-center text-white shrink-0 shadow-xs">
-              <Sparkles size={18} />
-            </div>
-            <div className="min-w-0">
-              <h2 className="font-extrabold text-sm text-white tracking-tight truncate leading-tight">
-                Seyal<span className="text-blue-400">Pro</span>
-              </h2>
-              <p className="text-[11px] text-slate-400 truncate font-medium flex items-center gap-1 mt-0.5">
-                <Store size={11} className="text-blue-400 shrink-0" />
-                <span className="truncate">{storeName}</span>
-              </p>
-            </div>
-          </div>
+          <Link href="/" className="min-w-0 pr-2">
+            <SeyalLogo size={36} showWordmark theme="dark" />
+          </Link>
 
           <button
             onClick={onCloseMobile}
@@ -288,22 +394,26 @@ export function AdminSidebar({
 
             return (
               <div key={`mob-${cat}`} className="space-y-1">
-                <div className="px-2.5 pt-2 pb-0.5 text-[10px] font-extrabold uppercase tracking-wider text-slate-400">
-                  {cat}
+                <div className="px-2.5 pt-2 pb-0.5 flex items-center justify-between">
+                  <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">
+                    {cat}
+                  </span>
+                  {cat === "ADMIN" && (
+                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[8.5px] font-bold tracking-wider uppercase bg-amber-400/10 text-amber-300 border border-amber-400/25">
+                      <Shield size={9} className="text-amber-400 shrink-0" />
+                      <span>Admin Access</span>
+                    </span>
+                  )}
                 </div>
                 {itemsInCat.map((item) => {
                   const Icon = item.icon;
-                  const isActive = pathname === item.href || (item.id === "dashboard" && pathname === "/");
+                  const isActive = isItemActive(item);
 
                   return (
                     <Link
                       key={`mob-${item.id}`}
                       href={item.href}
-                      onClick={() => {
-                        if (onSelectInternalView) onSelectInternalView(item.id);
-                        if (onItemClick) onItemClick();
-                        if (onCloseMobile) onCloseMobile();
-                      }}
+                      onClick={() => handleNavClick(item)}
                       className={cn(
                         "relative flex items-center min-h-[46px] px-3 py-2 rounded-xl font-semibold transition-all duration-150 justify-between text-sm active:scale-[0.98]",
                         isActive
@@ -322,7 +432,19 @@ export function AdminSidebar({
                         <span className="truncate">{item.label}</span>
                       </div>
 
-                      {item.badge && (
+                      {item.adminOnly ? (
+                        <span
+                          className={cn(
+                            "inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[9.5px] font-bold uppercase tracking-wider shrink-0 border transition-all",
+                            isActive
+                              ? "bg-amber-400/25 text-amber-200 border-amber-300/40 shadow-xs"
+                              : "bg-amber-400/10 text-amber-300 border-amber-400/25"
+                          )}
+                        >
+                          <Shield size={10} className="text-amber-400 shrink-0" />
+                          <span>Admin</span>
+                        </span>
+                      ) : item.badge ? (
                         <span
                           className={cn(
                             "px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider shrink-0 border",
@@ -333,13 +455,63 @@ export function AdminSidebar({
                         >
                           {item.badge}
                         </span>
-                      )}
+                      ) : null}
                     </Link>
                   );
                 })}
               </div>
             );
           })}
+        </div>
+
+        {/* Mobile Drawer Admin Profile & Session Footer (Directly below Alerts) */}
+        <div className="p-3 border-t border-slate-800/80 bg-slate-950/95 shrink-0 space-y-2.5">
+          <div className="flex items-center gap-2.5 px-1 py-1">
+            <div className="relative shrink-0">
+              <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-blue-600 via-indigo-600 to-violet-600 text-white font-extrabold text-sm flex items-center justify-center shadow-md shadow-blue-900/30">
+                {initial}
+              </div>
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 ring-2 ring-[#0B132B] absolute -bottom-0.5 -right-0.5" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-1.5">
+                <p className="text-xs font-bold text-white capitalize truncate leading-tight">
+                  {displayName || userRoleTitle}
+                </p>
+                {!flags?.isAdmin && (
+                  <span className={cn(
+                    "px-1.5 py-0.2 rounded text-[8.5px] font-extrabold uppercase shrink-0 border",
+                    flags?.isStockManager
+                      ? "bg-purple-500/20 text-purple-300 border-purple-400/30"
+                      : "bg-blue-500/20 text-blue-300 border-blue-400/30"
+                  )}>
+                    {flags?.isStockManager ? "Manager" : "Staff"}
+                  </span>
+                )}
+              </div>
+              <p className="text-[10px] text-slate-400 truncate leading-tight mt-0.5">
+                {userEmail || (flags?.isAdmin ? "admin@seyalpro.com" : "staff@seyalpro.com")}
+              </p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2 pt-0.5">
+            <Link
+              href="/profile"
+              onClick={onCloseMobile}
+              className="flex items-center justify-center gap-1.5 px-2.5 py-2 rounded-xl text-xs font-semibold text-slate-200 bg-slate-800/80 hover:bg-slate-800 hover:text-white border border-slate-700/60 active:scale-95 transition-all min-h-[40px]"
+            >
+              <User size={14} className="text-blue-400 shrink-0" />
+              <span>My Profile</span>
+            </Link>
+            <button
+              onClick={handleLogout}
+              className="flex items-center justify-center gap-1.5 px-2.5 py-2 rounded-xl text-xs font-semibold text-rose-400 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 active:scale-95 transition-all min-h-[40px]"
+            >
+              <LogOut size={14} className="shrink-0" />
+              <span>Sign out</span>
+            </button>
+          </div>
         </div>
       </aside>
 
@@ -361,27 +533,19 @@ export function AdminSidebar({
             onClick={onToggleCollapse}
             title="Expand Sidebar (Ctrl+B)"
             aria-label="Expand Sidebar"
-            className="w-10 h-10 rounded-xl bg-blue-600 hover:bg-blue-500 active:scale-95 text-white flex items-center justify-center shadow-xs transition-all group relative"
+            className="w-10 h-10 rounded-xl flex items-center justify-center text-white active:scale-95 transition-all group relative hover:opacity-95"
           >
-            <PanelLeftOpen size={18} className="group-hover:scale-110 transition-transform" />
+            <SeyalLogo size={36} />
+            <span className="absolute inset-0 rounded-xl bg-blue-600/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center backdrop-blur-2xs">
+              <PanelLeftOpen size={16} className="text-white drop-shadow-md" />
+            </span>
           </button>
         ) : (
           /* Expanded Mode: Full Brand + Store + Collapse Button */
           <>
-            <div className="flex items-center gap-2.5 min-w-0 pr-1">
-              <div className="w-9 h-9 rounded-xl bg-blue-600 flex items-center justify-center text-white shrink-0 shadow-xs">
-                <Sparkles size={18} />
-              </div>
-              <div className="min-w-0">
-                <h2 className="font-extrabold text-sm text-white tracking-tight truncate leading-tight">
-                  Seyal<span className="text-blue-400">Pro</span>
-                </h2>
-                <p className="text-[10px] text-slate-400 truncate font-medium flex items-center gap-1 mt-0.5">
-                  <Store size={10} className="text-blue-400 shrink-0" />
-                  <span className="truncate">{storeName}</span>
-                </p>
-              </div>
-            </div>
+            <Link href="/" className="min-w-0 pr-1">
+              <SeyalLogo size={36} showWordmark theme="dark" />
+            </Link>
 
             <button
               onClick={onToggleCollapse}
@@ -438,8 +602,16 @@ export function AdminSidebar({
             <div key={cat} className="space-y-0.5">
               {/* Category Header */}
               {!isCollapsed ? (
-                <div className="px-2 pt-1 pb-0.5 text-[9px] font-extrabold uppercase tracking-wider text-slate-500">
-                  {cat}
+                <div className="px-2 pt-1.5 pb-0.5 flex items-center justify-between">
+                  <span className="text-[9px] font-extrabold uppercase tracking-wider text-slate-500">
+                    {cat}
+                  </span>
+                  {cat === "ADMIN" && (
+                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[8px] font-bold tracking-wider uppercase bg-amber-400/10 text-amber-300 border border-amber-400/25">
+                      <Shield size={8} className="text-amber-400 shrink-0" />
+                      <span>Admin Access</span>
+                    </span>
+                  )}
                 </div>
               ) : (
                 <div className="h-px bg-slate-800/60 mx-1.5 my-0.5" />
@@ -448,7 +620,7 @@ export function AdminSidebar({
               {/* Items */}
               {itemsInCat.map((item) => {
                 const Icon = item.icon;
-                const isActive = pathname === item.href || (item.id === "dashboard" && pathname === "/");
+                const isActive = isItemActive(item);
 
                 return (
                   <div
@@ -459,10 +631,7 @@ export function AdminSidebar({
                   >
                     <Link
                       href={item.href}
-                      onClick={() => {
-                        if (onSelectInternalView) onSelectInternalView(item.id);
-                        if (onItemClick) onItemClick();
-                      }}
+                      onClick={() => handleNavClick(item)}
                       className={cn(
                         "relative flex items-center rounded-lg font-semibold transition-all duration-150 group/link",
                         isCollapsed
@@ -476,6 +645,14 @@ export function AdminSidebar({
                       {/* Active Indicator Bar on Left */}
                       {isActive && (
                         <span className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-4 bg-white rounded-r-full" />
+                      )}
+
+                      {/* Subtle admin indicator dot in collapsed mode */}
+                      {isCollapsed && item.adminOnly && (
+                        <span
+                          className="w-1.5 h-1.5 rounded-full bg-amber-400 ring-1 ring-[#0B132B] absolute top-1 right-1"
+                          title="Admin privilege required"
+                        />
                       )}
 
                       <div className="flex items-center gap-2.5 min-w-0">
@@ -492,17 +669,32 @@ export function AdminSidebar({
                       </div>
 
                       {/* Badge if present */}
-                      {!isCollapsed && item.badge && (
-                        <span
-                          className={cn(
-                            "px-1 py-0.2 rounded text-[8.5px] font-bold uppercase tracking-wider shrink-0 border",
-                            isActive
-                              ? "bg-blue-700/60 text-white border-blue-400/40"
-                              : "bg-slate-800 text-slate-300 border-slate-700"
-                          )}
-                        >
-                          {item.badge}
-                        </span>
+                      {!isCollapsed && (
+                        item.adminOnly ? (
+                          <span
+                            className={cn(
+                              "inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[9px] font-bold tracking-wider uppercase shrink-0 border transition-all",
+                              isActive
+                                ? "bg-amber-400/25 text-amber-200 border-amber-300/40 shadow-xs"
+                                : "bg-amber-400/10 text-amber-300 border-amber-400/25 group-hover/link:bg-amber-400/20 group-hover/link:border-amber-400/40"
+                            )}
+                            title="Store Administrator Privilege Required"
+                          >
+                            <Shield size={9} className="text-amber-400 shrink-0" />
+                            <span>Admin</span>
+                          </span>
+                        ) : item.badge ? (
+                          <span
+                            className={cn(
+                              "px-1 py-0.2 rounded text-[8.5px] font-bold uppercase tracking-wider shrink-0 border",
+                              isActive
+                                ? "bg-blue-700/60 text-white border-blue-400/40"
+                                : "bg-slate-800 text-slate-300 border-slate-700"
+                            )}
+                          >
+                            {item.badge}
+                          </span>
+                        ) : null
                       )}
                     </Link>
 
@@ -510,11 +702,21 @@ export function AdminSidebar({
                     {isCollapsed && hoveredItem === item.id && (
                       <div className="absolute left-full top-1/2 -translate-y-1/2 ml-2.5 px-2.5 py-1.5 bg-slate-900 text-white text-xs rounded-lg shadow-xl border border-slate-700 whitespace-nowrap z-50 pointer-events-none animate-in fade-in zoom-in-95 duration-100 flex items-center gap-1.5">
                         <span className="font-bold">{item.label}</span>
-                        {item.badge && (
+                        {item.adminOnly ? (
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[8.5px] font-extrabold uppercase bg-amber-400/15 text-amber-300 border border-amber-400/30">
+                            <Shield size={9} className="text-amber-400" />
+                            Admin
+                          </span>
+                        ) : item.category === "ADMIN" ? (
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[8px] font-bold uppercase bg-amber-400/10 text-amber-300 border border-amber-400/25">
+                            <Shield size={8} className="text-amber-400" />
+                            Admin
+                          </span>
+                        ) : item.badge ? (
                           <span className="px-1 py-0.2 rounded text-[8px] font-extrabold uppercase bg-blue-600/30 text-blue-300 border border-blue-500/30">
                             {item.badge}
                           </span>
-                        )}
+                        ) : null}
                       </div>
                     )}
                   </div>
@@ -550,6 +752,184 @@ export function AdminSidebar({
           </button>
         </div>
       )}
+
+      {/* Desktop Admin Profile & Session Footer (Directly below Alerts) */}
+      <div
+        ref={profileMenuRef}
+        className={cn(
+          "border-t border-slate-800/80 bg-slate-950/80 shrink-0 relative transition-all duration-200",
+          isCollapsed ? "py-2.5 px-2 flex justify-center" : "p-2"
+        )}
+      >
+        {/* Floating Dropup / Flyout Menu */}
+        {profileMenuOpen && (
+          <div
+            className={cn(
+              "bg-[#0F172A] border border-slate-700/80 rounded-2xl shadow-2xl p-2 z-50 animate-in fade-in duration-150 backdrop-blur-xl",
+              isCollapsed
+                ? "absolute left-full bottom-2 ml-3 w-64 zoom-in-95"
+                : "absolute bottom-full left-2 right-2 mb-2 slide-in-from-bottom-2"
+            )}
+          >
+            {/* Popover Header */}
+            <div className="px-2.5 py-2 border-b border-slate-800/80 mb-1">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-blue-600 via-indigo-600 to-violet-600 text-white font-extrabold text-xs flex items-center justify-center shrink-0 shadow-xs">
+                  {initial}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-bold text-white capitalize truncate">{displayName || userRoleTitle}</p>
+                  <p className="text-[10px] text-slate-400 truncate">{userEmail}</p>
+                </div>
+              </div>
+              <div className="mt-2 flex items-center justify-between">
+                <span className={cn(
+                  "inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-extrabold uppercase border",
+                  flags?.isAdmin
+                    ? "bg-amber-500/15 text-amber-300 border-amber-400/30"
+                    : flags?.isStockManager
+                    ? "bg-purple-500/15 text-purple-300 border-purple-400/30"
+                    : "bg-blue-500/15 text-blue-300 border-blue-400/30"
+                )}>
+                  {flags?.isAdmin ? (
+                    <>
+                      <Shield size={10} className="text-amber-400" />
+                      Store Admin
+                    </>
+                  ) : flags?.isStockManager ? (
+                    <>
+                      <Boxes size={10} className="text-purple-400" />
+                      Stock Manager
+                    </>
+                  ) : (
+                    <>
+                      <User size={10} className="text-blue-400" />
+                      Staff Member
+                    </>
+                  )}
+                </span>
+                <span className="text-[9.5px] text-slate-400 flex items-center gap-1 font-medium">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  Online
+                </span>
+              </div>
+            </div>
+
+            {/* Popover Links */}
+            <div className="space-y-0.5 py-0.5">
+              <Link
+                href="/profile"
+                onClick={() => setProfileMenuOpen(false)}
+                className="flex items-center gap-2.5 px-2.5 py-2 text-xs font-semibold text-slate-200 hover:text-white rounded-xl hover:bg-slate-800/90 transition-colors"
+              >
+                <User size={15} className="text-blue-400 shrink-0" />
+                <span>My Profile & Settings</span>
+              </Link>
+
+              {flags?.isAdmin ? (
+                <>
+                  <Link
+                    href="/admin/store"
+                    onClick={() => setProfileMenuOpen(false)}
+                    className="flex items-center gap-2.5 px-2.5 py-2 text-xs font-semibold text-slate-200 hover:text-white rounded-xl hover:bg-slate-800/90 transition-colors"
+                  >
+                    <Store size={15} className="text-blue-400 shrink-0" />
+                    <span>Store & Branding</span>
+                  </Link>
+
+                  <Link
+                    href="/admin/support"
+                    onClick={() => setProfileMenuOpen(false)}
+                    className="flex items-center gap-2.5 px-2.5 py-2 text-xs font-semibold text-slate-200 hover:text-white rounded-xl hover:bg-slate-800/90 transition-colors"
+                  >
+                    <LifeBuoy size={15} className="text-amber-400 shrink-0" />
+                    <span>Support & Issues Hub</span>
+                  </Link>
+                </>
+              ) : (
+                <Link
+                  href="/mysalary"
+                  onClick={() => setProfileMenuOpen(false)}
+                  className="flex items-center gap-2.5 px-2.5 py-2 text-xs font-semibold text-slate-200 hover:text-white rounded-xl hover:bg-slate-800/90 transition-colors"
+                >
+                  <Wallet size={15} className="text-emerald-400 shrink-0" />
+                  <span>My Salary & Stats</span>
+                </Link>
+              )}
+            </div>
+
+            {/* Popover Sign Out */}
+            <div className="pt-1 mt-1 border-t border-slate-800/80">
+              <button
+                onClick={handleLogout}
+                className="w-full flex items-center gap-2.5 px-2.5 py-2 text-xs font-semibold text-rose-400 hover:text-rose-300 rounded-xl hover:bg-rose-500/15 transition-colors text-left"
+              >
+                <LogOut size={15} className="shrink-0" />
+                <span>Sign out</span>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Collapsed Mode Avatar Trigger */}
+        {isCollapsed ? (
+          <button
+            onClick={() => setProfileMenuOpen(!profileMenuOpen)}
+            className="relative w-9 h-9 rounded-xl bg-gradient-to-tr from-blue-600 via-indigo-600 to-violet-600 text-white font-extrabold text-xs flex items-center justify-center shadow-xs hover:scale-105 hover:ring-2 hover:ring-blue-400 transition-all group"
+            title={`${userRoleTitle}: ${displayName || "User"} (${userEmail}) - Click for options`}
+            aria-label="User Profile and Settings"
+          >
+            {initial}
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 ring-2 ring-[#0B132B] absolute -bottom-0.5 -right-0.5" />
+          </button>
+        ) : (
+          /* Expanded Mode Profile Card Trigger */
+          <div
+            onClick={() => setProfileMenuOpen(!profileMenuOpen)}
+            className="flex items-center justify-between p-2 rounded-xl bg-slate-900/80 hover:bg-slate-900 border border-slate-800/80 hover:border-slate-700/80 transition-all cursor-pointer group select-none shadow-xs"
+            title={`${userRoleTitle} Account & Settings`}
+          >
+            <div className="flex items-center gap-2.5 min-w-0 pr-1">
+              <div className="relative shrink-0">
+                <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-blue-600 via-indigo-600 to-violet-600 text-white font-extrabold text-xs flex items-center justify-center shadow-xs group-hover:scale-105 transition-transform">
+                  {initial}
+                </div>
+                <span className="w-2 h-2 rounded-full bg-emerald-400 ring-2 ring-[#0B132B] absolute -bottom-0.5 -right-0.5" />
+              </div>
+
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-1.5">
+                  <p className="text-xs font-bold text-white capitalize truncate leading-tight group-hover:text-blue-300 transition-colors">
+                    {displayName || userRoleTitle}
+                  </p>
+                  {!flags?.isAdmin && (
+                    <span className={cn(
+                      "px-1 py-0.2 rounded text-[8px] font-extrabold uppercase shrink-0 border",
+                      flags?.isStockManager
+                        ? "bg-purple-500/20 text-purple-300 border-purple-400/30"
+                        : "bg-blue-500/20 text-blue-300 border-blue-400/30"
+                    )}>
+                      {flags?.isStockManager ? "Manager" : "Staff"}
+                    </span>
+                  )}
+                </div>
+                <p className="text-[10px] text-slate-400 truncate leading-tight mt-0.5" title={userEmail}>
+                  {userEmail || (flags?.isAdmin ? "admin@seyalpro.com" : "staff@seyalpro.com")}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center shrink-0">
+              <div className={cn(
+                "w-6 h-6 rounded-lg text-slate-400 group-hover:text-white flex items-center justify-center transition-transform duration-200",
+                profileMenuOpen ? "rotate-180" : ""
+              )}>
+                <ChevronUp size={14} />
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
     </aside>
     </>
   );

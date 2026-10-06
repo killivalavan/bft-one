@@ -119,9 +119,6 @@ async function emitSyncReport(businessId?: string) {
 // ==========================================
 
 export async function checkServerReachability(): Promise<boolean> {
-  if (typeof navigator !== "undefined" && !navigator.onLine) {
-    return false;
-  }
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 3500);

@@ -70,7 +70,7 @@ function formatDeductions(data: any[]) {
       amount_cents: entry.amount_cents,
       entry_date: entry.entry_date,
     }))
-    .filter((record) => typeof record.reason === "string" && record.reason.toLowerCase().includes("late"));
+    .filter((record) => typeof record.reason === "string" && record.reason.length > 0);
 
   return NextResponse.json({ deductions });
 }

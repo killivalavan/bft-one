@@ -6,7 +6,20 @@ import { useTenant } from "@/lib/context/TenantContext";
 import { useToast } from "@/components/ui/Toast";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
-import { ChevronLeft, ChevronRight, Loader2, Save, Lock, Calendar } from "lucide-react";
+import {
+    ChevronLeft,
+    ChevronRight,
+    Loader2,
+    Save,
+    Lock,
+    Calendar,
+    Banknote,
+    QrCode,
+    ShoppingBag,
+    Clock,
+    CheckCircle2,
+    Sparkles
+} from "lucide-react";
 import Link from "next/link";
 import { format, addDays, isSameDay } from "date-fns";
 
@@ -289,177 +302,332 @@ export default function SalesPage() {
 
     if (loading) return <div className="min-h-screen flex items-center justify-center"><Loader2 className="animate-spin text-zinc-400" /></div>;
 
-    return (
-        <div className="min-h-screen bg-slate-50/50 pb-20 md:pb-10">
-            <div className="max-w-md mx-auto p-4 space-y-6">
-                {/* Header */}
-                <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                        <Link href="/" className="inline-flex items-center gap-2 text-slate-500 hover:text-[#2563EB] transition-colors text-sm font-medium">
-                            <ChevronLeft size={16} />
-                            Back Home
-                        </Link>
+    const numCash = Number(cash) || 0;
+    const numUpi = Number(upi) || 0;
+    const totalSettlement = numCash + numUpi;
 
-                        <Link
-                            href="/daily-sales"
-                            className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 hover:bg-emerald-100 text-xs font-bold transition shadow-xs"
-                        >
-                            <span>Itemized Sales</span>
-                            <ChevronRight size={14} />
-                        </Link>
+    return (
+        <div className="min-h-screen bg-slate-50/50 pb-20 md:pb-12">
+            <div className="max-w-5xl 2xl:max-w-6xl mx-auto p-4 sm:p-6 lg:p-8 space-y-6 sm:space-y-7">
+                {/* Header Row */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200/80">
+                    <div className="flex items-center gap-3.5 min-w-0">
+                        <div className="w-12 h-12 rounded-2xl bg-blue-500/10 text-blue-600 border border-blue-200/80 flex items-center justify-center shrink-0 shadow-2xs">
+                            <Banknote size={24} />
+                        </div>
+                        <div className="min-w-0">
+                            <h1 className="text-2xl sm:text-3xl font-extrabold text-[#0F172A] tracking-tight">
+                                Cash & UPI Settlement
+                            </h1>
+                            <p className="text-[#64748B] text-xs sm:text-sm mt-0.5">
+                                Record physical drawer cash & digital UPI closing collections
+                            </p>
+                        </div>
                     </div>
 
-                    <div className="flex items-center justify-between gap-4">
-                        <div>
-                            <h1 className="text-2xl font-bold text-[#0F172A] tracking-tight">Cash & UPI Settlement</h1>
-                            <p className="text-[#64748B] text-sm">Record physical drawer cash & UPI closing numbers</p>
-                        </div>
+                    <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+                        <Link
+                            href="/daily-sales"
+                            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-700 text-xs font-bold transition shadow-2xs active:scale-95"
+                            title="View itemized daily sales & orders"
+                        >
+                            <ShoppingBag size={14} />
+                            <span>Itemized Sales</span>
+                            <ChevronRight size={13} />
+                        </Link>
 
-                        {/* Display the date user is entering for (non-admin only) */}
-                        {!isAdmin && (
-                            <div className="text-right">
-                                <p className="text-[10px] sm:text-xs text-slate-500 uppercase tracking-wider font-semibold">Entering for</p>
-                                <p className="text-base sm:text-lg font-bold text-[#0F172A]">{format(date, "MMM dd, yyyy")}</p>
-                            </div>
-                        )}
-                        {isAdmin && (
-                            <div className="flex items-center gap-1 bg-white border border-[#E2E8F0] rounded-xl p-1 shadow-xs">
-                                <button onClick={() => { setDate(addDays(date, -1)); setManualOverride(true); }} className="p-2 hover:bg-slate-50 rounded-lg text-slate-600">
-                                    <ChevronLeft size={18} />
+                        {/* Date Navigator */}
+                        {isAdmin ? (
+                            <div className="flex items-center gap-1 bg-white border border-[#E2E8F0] rounded-xl p-1 shadow-2xs">
+                                <button
+                                    onClick={() => { setDate(addDays(date, -1)); setManualOverride(true); }}
+                                    className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-600 transition-colors"
+                                    title="Previous Day"
+                                >
+                                    <ChevronLeft size={16} />
                                 </button>
-                                <div className="px-2 text-sm font-semibold text-[#0F172A] min-w-[100px] text-center">
-                                    {isToday ? "Today" : format(date, "MMM dd")}
+                                <div className="px-2.5 text-xs font-bold text-[#0F172A] min-w-[95px] text-center tabular-nums">
+                                    {isToday ? "Today" : format(date, "MMM dd, yyyy")}
                                 </div>
                                 <button
                                     onClick={() => { setDate(addDays(date, 1)); setManualOverride(true); }}
-                                    className="p-2 hover:bg-slate-50 rounded-lg text-slate-600 disabled:opacity-30"
+                                    className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-600 disabled:opacity-30 transition-colors"
                                     disabled={isToday}
+                                    title="Next Day"
                                 >
-                                    <ChevronRight size={18} />
+                                    <ChevronRight size={16} />
                                 </button>
                                 {manualOverride && (
-                                    <button onClick={() => { setManualOverride(false); setDate(getInitialDate()); }} className="ml-2 text-xs px-2 py-1 rounded bg-slate-100 hover:bg-slate-200 font-semibold text-slate-700">
+                                    <button
+                                        onClick={() => { setManualOverride(false); setDate(getInitialDate()); }}
+                                        className="ml-1 text-[11px] px-2 py-0.5 rounded-lg bg-blue-50 hover:bg-blue-100 font-bold text-blue-700 border border-blue-200 transition-colors"
+                                    >
                                         Auto
                                     </button>
                                 )}
                             </div>
+                        ) : (
+                            <div className="flex items-center gap-1.5 px-3 py-2 bg-white border border-[#E2E8F0] rounded-xl shadow-2xs">
+                                <Calendar size={14} className="text-blue-600" />
+                                <span className="text-xs font-bold text-slate-800">{format(date, "MMM dd, yyyy")}</span>
+                            </div>
                         )}
                     </div>
-                    {!isToday && (
-                        <div className="bg-slate-100 text-slate-800 text-xs px-3 py-2 rounded-lg border border-[#E2E8F0] flex items-center gap-2">
-                            <Calendar size={12} className="text-[#2563EB]" />
-                            Viewing past entry: <strong>{format(date, "MMMM do, yyyy")}</strong>
-                        </div>
-                    )}
-                    {/* Helper note when current time is before 9am */}
-                    {new Date().getHours() < 9 && (
-                        <div className="bg-[#EFF6FF] text-[#1E40AF] text-sm px-4 py-3 rounded-lg border border-[#BFDBFE] flex items-center gap-2">
-                            <Calendar size={14} />
-                            <span><strong>Note:</strong> You are entering sales for yesterday (shop closing). This will auto-switch to today at 9:00 AM.</span>
-                        </div>
-                    )}
                 </div>
 
-                <div className="grid gap-6">
-                    {/* Cash Section */}
-                    <div className="bg-white p-6 rounded-xl shadow-xs border border-[#E2E8F0] space-y-4">
-                        <div className="flex items-center justify-between">
-                            <h2 className="font-semibold text-[#0F172A]">Total Cash</h2>
-                            {cashSaved && <span className="text-xs font-bold text-[#15803D] bg-[#F0FDF4] px-2.5 py-1 rounded-md flex items-center gap-1 border border-[#BBF7D0]"><Lock size={10} /> Saved</span>}
+                {/* Date Notices */}
+                {!isToday && (
+                    <div className="bg-amber-50 text-amber-900 text-xs px-4 py-2.5 rounded-xl border border-amber-200/80 flex items-center gap-2 shadow-2xs">
+                        <Calendar size={14} className="text-amber-600 shrink-0" />
+                        <span>Viewing past entry for <strong>{format(date, "MMMM do, yyyy")}</strong>. Any saved values will update closing records.</span>
+                    </div>
+                )}
+                {new Date().getHours() < 9 && (
+                    <div className="bg-blue-50 text-blue-900 text-xs px-4 py-2.5 rounded-xl border border-blue-200/80 flex items-center gap-2 shadow-2xs">
+                        <Clock size={14} className="text-blue-600 shrink-0" />
+                        <span><strong>Note:</strong> You are entering sales for yesterday's shift closing. This will auto-switch to today at 9:00 AM.</span>
+                    </div>
+                )}
+
+                {/* Live Settlement Summary Ribbon */}
+                <div className={isAdmin ? "grid grid-cols-1 sm:grid-cols-3 gap-4" : "grid grid-cols-1 sm:grid-cols-2 gap-4"}>
+                    <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-2xs flex items-center justify-between">
+                        <div>
+                            <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Drawer Cash</p>
+                            <p className="text-xl sm:text-2xl font-black text-slate-900 mt-0.5">
+                                ₹{numCash.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                            </p>
                         </div>
-                        <div className="space-y-3">
-                            <label className="text-sm font-medium text-[#64748B]">Enter Cash Amount (₹)</label>
-                            <Input
-                                type="number"
-                                placeholder="0.00"
-                                className="text-lg"
-                                value={cash}
-                                onChange={(e) => setCash(e.target.value)}
-                                disabled={cashSaved && !cashEditing}
-                            />
-                            {/* Show submitter info in grey */}
-                            {cashSaved && cashSubmittedBy && (
-                                <p className="text-xs text-slate-400">Updated by: {cashSubmittedBy}</p>
+                        <span className={cashSaved
+                            ? "px-2 py-1 rounded-lg text-[10px] font-bold uppercase bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1"
+                            : "px-2 py-1 rounded-lg text-[10px] font-bold uppercase bg-slate-100 text-slate-600 border border-slate-200"
+                        }>
+                            {cashSaved ? <><CheckCircle2 size={11} /> Saved</> : "Unsaved"}
+                        </span>
+                    </div>
+
+                    {isAdmin && (
+                        <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-2xs flex items-center justify-between">
+                            <div>
+                                <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Online / UPI</p>
+                                <p className="text-xl sm:text-2xl font-black text-slate-900 mt-0.5">
+                                    ₹{numUpi.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                                </p>
+                            </div>
+                            <span className={upiSaved
+                                ? "px-2 py-1 rounded-lg text-[10px] font-bold uppercase bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1"
+                                : "px-2 py-1 rounded-lg text-[10px] font-bold uppercase bg-slate-100 text-slate-600 border border-slate-200"
+                            }>
+                                {upiSaved ? <><CheckCircle2 size={11} /> Saved</> : "Unsaved"}
+                            </span>
+                        </div>
+                    )}
+
+                    <div className={isAdmin
+                        ? "bg-gradient-to-br from-blue-600 to-indigo-600 text-white p-4 rounded-2xl shadow-xs flex items-center justify-between"
+                        : "bg-white p-4 rounded-2xl border border-slate-200/80 shadow-2xs flex items-center justify-between"
+                    }>
+                        <div>
+                            <p className={isAdmin ? "text-[11px] font-bold uppercase tracking-wider text-blue-100" : "text-[11px] font-bold uppercase tracking-wider text-slate-400"}>
+                                {isAdmin ? "Total Day Closing" : "Shift Date"}
+                            </p>
+                            <p className={isAdmin ? "text-xl sm:text-2xl font-black text-white mt-0.5" : "text-base sm:text-lg font-bold text-slate-900 mt-0.5"}>
+                                {isAdmin
+                                    ? `₹${totalSettlement.toLocaleString("en-IN", { minimumFractionDigits: 2 })}`
+                                    : format(date, "EEEE, MMM dd")}
+                            </p>
+                        </div>
+                        {isAdmin && (
+                            <div className="w-9 h-9 rounded-xl bg-white/20 flex items-center justify-center text-white shrink-0">
+                                <Sparkles size={18} />
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                {/* Main Settlement Forms Grid */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
+                    {/* Cash Section Card */}
+                    <div className="bg-white p-6 rounded-2xl shadow-xs border border-slate-200 space-y-5">
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2.5">
+                                <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center justify-center shrink-0">
+                                    <Banknote size={18} />
+                                </div>
+                                <div>
+                                    <h2 className="font-bold text-base text-[#0F172A]">Physical Drawer Cash</h2>
+                                    <p className="text-xs text-slate-400">Total counted cash from the cashier register</p>
+                                </div>
+                            </div>
+                            {cashSaved && (
+                                <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg flex items-center gap-1 border border-emerald-200">
+                                    <Lock size={11} /> Saved
+                                </span>
                             )}
-                            <div className="flex gap-2">
+                        </div>
+
+                        <div className="space-y-3 pt-1">
+                            <label className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                                Cash Closing Amount (₹)
+                            </label>
+                            <div className="relative">
+                                <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-lg font-extrabold text-slate-400">₹</span>
+                                <Input
+                                    type="number"
+                                    placeholder="0.00"
+                                    className="pl-8 text-xl sm:text-2xl font-bold h-13 rounded-xl border-slate-200 focus:border-blue-500"
+                                    value={cash}
+                                    onChange={(e) => setCash(e.target.value)}
+                                    disabled={cashSaved && !cashEditing}
+                                />
+                            </div>
+
+                            {/* Submitter Info */}
+                            {cashSaved && cashSubmittedBy && (
+                                <p className="text-xs text-slate-500 flex items-center gap-1.5 pt-0.5">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                                    <span>Last submitted by: <strong>{cashSubmittedBy}</strong></span>
+                                </p>
+                            )}
+
+                            {/* Action Buttons */}
+                            <div className="pt-2">
                                 {!cashSaved && (
-                                    <Button className="w-full gap-2 bg-[#2563EB] text-white hover:bg-[#1D4ED8]" onClick={saveCash}>
+                                    <Button className="w-full h-11 gap-2 bg-[#2563EB] text-white hover:bg-[#1D4ED8] rounded-xl font-bold shadow-xs active:scale-[0.99] transition-all" onClick={saveCash}>
                                         <Save size={16} /> Save Cash Entry
                                     </Button>
                                 )}
                                 {cashSaved && isAdmin && !cashEditing && (
-                                    <div className="flex gap-2 w-full">
-                                        <Button className="flex-1" onClick={() => setCashEditing(true)} variant="outline">
+                                    <div className="flex gap-2.5 w-full">
+                                        <Button className="flex-1 h-11 rounded-xl font-bold border-slate-200 hover:bg-slate-50" onClick={() => setCashEditing(true)} variant="outline">
                                             Edit Cash
                                         </Button>
-                                        <Button className="w-28" onClick={clearCash} variant="ghost">
+                                        <Button className="w-28 h-11 rounded-xl text-rose-600 hover:text-rose-700 hover:bg-rose-50 font-bold" onClick={clearCash} variant="ghost">
                                             Clear
                                         </Button>
                                     </div>
                                 )}
                                 {cashSaved && cashEditing && (
-                                    <Button className="w-full gap-2 bg-[#2563EB] text-white hover:bg-[#1D4ED8]" onClick={saveCash}>
-                                        <Save size={16} /> Save
+                                    <Button className="w-full h-11 gap-2 bg-[#2563EB] text-white hover:bg-[#1D4ED8] rounded-xl font-bold shadow-xs" onClick={saveCash}>
+                                        <Save size={16} /> Save Changes
                                     </Button>
                                 )}
                             </div>
+
+                            <p className="text-[11px] text-slate-400 pt-1">
+                                Tip: Count notes and coins thoroughly before locking in the day closing.
+                            </p>
                         </div>
                     </div>
 
-                    {/* UPI Section - Admin Only */}
+                    {/* UPI Section (Admin) or Staff Guidelines Checklist (Staff) */}
                     {isAdmin ? (
-                        <div className="bg-white p-6 rounded-xl shadow-xs border border-[#E2E8F0] space-y-4 relative overflow-hidden">
-                            <div className="absolute top-0 right-0 p-2 bg-[#EFF6FF] rounded-bl-lg border-b border-l border-[#BFDBFE] text-[10px] font-bold text-[#1E40AF] uppercase tracking-wider">
+                        <div className="bg-white p-6 rounded-2xl shadow-xs border border-slate-200 space-y-5 relative overflow-hidden">
+                            <div className="absolute top-0 right-0 px-3 py-1 bg-blue-50 rounded-bl-xl border-b border-l border-blue-200 text-[10px] font-extrabold text-[#1E40AF] uppercase tracking-wider">
                                 Admin Only
                             </div>
                             <div className="flex items-center justify-between">
-                                <h2 className="font-semibold text-[#0F172A]">Online / UPI</h2>
-                                {upiSaved && <span className="text-xs font-bold text-[#15803D] bg-[#F0FDF4] px-2.5 py-1 rounded-md flex items-center gap-1 border border-[#BBF7D0]"><Lock size={10} /> Saved</span>}
+                                <div className="flex items-center gap-2.5">
+                                    <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-700 border border-blue-200 flex items-center justify-center shrink-0">
+                                        <QrCode size={18} />
+                                    </div>
+                                    <div>
+                                        <h2 className="font-bold text-base text-[#0F172A]">Online / UPI Collections</h2>
+                                        <p className="text-xs text-slate-400">Total merchant QR & soundbox collections</p>
+                                    </div>
+                                </div>
+                                {upiSaved && (
+                                    <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg flex items-center gap-1 border border-emerald-200">
+                                        <Lock size={11} /> Saved
+                                    </span>
+                                )}
                             </div>
-                            <div className="space-y-3">
-                                <label className="text-sm font-medium text-[#64748B]">Enter UPI Amount (₹)</label>
-                                <Input
-                                    type="number"
-                                    placeholder="0.00"
-                                    className="text-lg"
-                                    value={upi}
-                                    onChange={(e) => setUpi(e.target.value)}
-                                    disabled={upiSaved && !upiEditing}
-                                />
-                                <div className="flex gap-2">
+
+                            <div className="space-y-3 pt-1">
+                                <label className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                                    UPI Closing Amount (₹)
+                                </label>
+                                <div className="relative">
+                                    <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-lg font-extrabold text-slate-400">₹</span>
+                                    <Input
+                                        type="number"
+                                        placeholder="0.00"
+                                        className="pl-8 text-xl sm:text-2xl font-bold h-13 rounded-xl border-slate-200 focus:border-blue-500"
+                                        value={upi}
+                                        onChange={(e) => setUpi(e.target.value)}
+                                        disabled={upiSaved && !upiEditing}
+                                    />
+                                </div>
+
+                                <div className="pt-2">
                                     {!upiSaved && (
-                                        <Button className="w-full gap-2 bg-[#2563EB] text-white hover:bg-[#1D4ED8]" onClick={saveUpi}>
+                                        <Button className="w-full h-11 gap-2 bg-[#2563EB] text-white hover:bg-[#1D4ED8] rounded-xl font-bold shadow-xs active:scale-[0.99] transition-all" onClick={saveUpi}>
                                             <Save size={16} /> Save UPI Entry
                                         </Button>
                                     )}
                                     {upiSaved && isAdmin && !upiEditing && (
-                                        <Button className="w-full gap-2" onClick={() => setUpiEditing(true)} variant="outline">
+                                        <Button className="w-full h-11 rounded-xl font-bold border-slate-200 hover:bg-slate-50" onClick={() => setUpiEditing(true)} variant="outline">
                                             Edit UPI
                                         </Button>
                                     )}
                                     {upiSaved && upiEditing && (
-                                        <Button className="w-full gap-2 bg-[#2563EB] text-white hover:bg-[#1D4ED8]" onClick={saveUpi}>
-                                            <Save size={16} /> Save
+                                        <Button className="w-full h-11 gap-2 bg-[#2563EB] text-white hover:bg-[#1D4ED8] rounded-xl font-bold shadow-xs" onClick={saveUpi}>
+                                            <Save size={16} /> Save Changes
                                         </Button>
                                     )}
                                 </div>
+
+                                <p className="text-[11px] text-slate-400 pt-1">
+                                    Tip: Compare with your merchant app's daily settlement summary before confirming.
+                                </p>
                             </div>
                         </div>
-                    ) : null}
+                    ) : (
+                        <div className="bg-white p-6 rounded-2xl shadow-xs border border-slate-200 space-y-4">
+                            <div className="flex items-center gap-2.5">
+                                <div className="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-700 border border-indigo-200 flex items-center justify-center shrink-0">
+                                    <CheckCircle2 size={18} />
+                                </div>
+                                <div>
+                                    <h2 className="font-bold text-base text-[#0F172A]">Closing Handoff Protocol</h2>
+                                    <p className="text-xs text-slate-400">End-of-shift checklist for cashier staff</p>
+                                </div>
+                            </div>
+
+                            <ul className="space-y-3 pt-2 text-xs text-slate-600">
+                                <li className="flex items-start gap-2.5 p-2.5 rounded-xl bg-slate-50 border border-slate-200/60">
+                                    <span className="w-5 h-5 rounded-full bg-blue-600 text-white font-bold text-[10px] flex items-center justify-center shrink-0 mt-0.5">1</span>
+                                    <span>Count all physical denomination notes & coins in the cash drawer accurately.</span>
+                                </li>
+                                <li className="flex items-start gap-2.5 p-2.5 rounded-xl bg-slate-50 border border-slate-200/60">
+                                    <span className="w-5 h-5 rounded-full bg-blue-600 text-white font-bold text-[10px] flex items-center justify-center shrink-0 mt-0.5">2</span>
+                                    <span>Verify that any petty expenses paid from the register were recorded in <strong>Expenses</strong>.</span>
+                                </li>
+                                <li className="flex items-start gap-2.5 p-2.5 rounded-xl bg-slate-50 border border-slate-200/60">
+                                    <span className="w-5 h-5 rounded-full bg-blue-600 text-white font-bold text-[10px] flex items-center justify-center shrink-0 mt-0.5">3</span>
+                                    <span>Enter the total cash figure on the left and tap <strong>Save Cash Entry</strong>.</span>
+                                </li>
+                                <li className="flex items-start gap-2.5 p-2.5 rounded-xl bg-slate-50 border border-slate-200/60">
+                                    <span className="w-5 h-5 rounded-full bg-blue-600 text-white font-bold text-[10px] flex items-center justify-center shrink-0 mt-0.5">4</span>
+                                    <span>Handoff the cash bag and key to the store manager or admin on duty.</span>
+                                </li>
+                            </ul>
+                        </div>
+                    )}
                 </div>
 
                 {/* Success Modal for Regular Users */}
                 {showSaveSuccess && !isAdmin && (
                     <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-50 animate-in fade-in duration-300 p-4">
-                        <div className="bg-white rounded-xl shadow-2xl p-6 sm:p-8 max-w-sm w-full text-center border border-[#E2E8F0]">
-                            <div className="w-14 h-14 sm:w-16 sm:h-16 bg-[#F0FDF4] rounded-xl flex items-center justify-center mx-auto mb-4 border border-[#DCFCE7]">
+                        <div className="bg-white rounded-2xl shadow-2xl p-6 sm:p-8 max-w-sm w-full text-center border border-[#E2E8F0]">
+                            <div className="w-14 h-14 sm:w-16 sm:h-16 bg-[#F0FDF4] rounded-2xl flex items-center justify-center mx-auto mb-4 border border-[#DCFCE7] shadow-xs">
                                 <svg className="w-7 h-7 sm:w-8 sm:h-8 text-[#16A34A]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                                 </svg>
                             </div>
-                            <h3 className="text-xl sm:text-2xl font-bold text-[#0F172A] mb-2">Thank You!</h3>
-                            <p className="text-sm sm:text-base text-[#64748B] mb-4">Thanks for your calculation. Your entry has been recorded successfully.</p>
-                            <p className="text-xs sm:text-sm text-slate-400">This message will close automatically...</p>
+                            <h3 className="text-xl sm:text-2xl font-bold text-[#0F172A] mb-2">Settlement Recorded!</h3>
+                            <p className="text-sm text-[#64748B] mb-4">Thanks for balancing the register. Your cash closing has been safely recorded.</p>
+                            <p className="text-xs text-slate-400">Closing automatically...</p>
                         </div>
                     </div>
                 )}

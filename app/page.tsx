@@ -107,7 +107,7 @@ export default function Home() {
       label: "Calendar",
       href: "/calendar",
       icon: CalendarDays,
-      category: "Operations",
+      category: "Staff",
       colorTheme: "blue" as const,
       description: "View team leave schedules & holidays."
     },
@@ -123,7 +123,7 @@ export default function Home() {
       label: "All Contacts",
       href: "/contacts",
       icon: Contact,
-      category: "Operations",
+      category: "Staff",
       colorTheme: "slate" as const,
       description: "Employee & vendor emergency directory."
     },

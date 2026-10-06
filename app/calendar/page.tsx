@@ -1,10 +1,9 @@
 "use client";
-import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { format } from "date-fns";
 import { supabaseClient } from "@/lib/supabaseClient";
 import { Button } from "@/components/ui/Button";
-import { ChevronLeft, ChevronRight, CalendarDays, Home } from "lucide-react";
+import { ChevronLeft, ChevronRight, CalendarDays } from "lucide-react";
 import { MonthGrid } from "@/components/calendar/MonthGrid";
 import { LeafDialog } from "@/components/calendar/LeafDialog";
 
@@ -93,38 +92,27 @@ export default function CalendarPage() {
   return (
     <div className="min-h-screen bg-slate-50/50 pb-20">
       <div className="max-w-6xl mx-auto p-4 md:p-6 space-y-6">
-        {/* Top Nav */}
-        <div className="flex items-center justify-between">
-          <Link href="/" className="inline-flex items-center gap-2 text-slate-500 hover:text-[#2563EB] transition-colors text-sm font-medium">
-            <ChevronLeft size={16} />
-            Back Home
-          </Link>
-        </div>
-
         {/* Title & Controls */}
-        <div className="grid grid-cols-1 md:grid-cols-3 items-center gap-4">
-          <div className="flex justify-center md:justify-start">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
             <h1 className="text-2xl md:text-3xl font-bold text-[#0F172A] tracking-tight flex items-center gap-3">
               <CalendarDays className="text-[#2563EB]" size={28} />
               Global Leave Calendar
             </h1>
+            <p className="text-slate-500 text-sm mt-0.5">Overview of team scheduled leaves and planned time off</p>
           </div>
 
-          <div className="flex justify-center">
-            <div className="flex items-center gap-3 bg-white p-1 rounded-xl shadow-xs border border-slate-200">
-              <Button variant="ghost" size="sm" onClick={prevMonth} className="h-8 w-8 p-0 rounded-lg hover:bg-zinc-100">
-                <ChevronLeft size={18} />
-              </Button>
-              <span className="min-w-[140px] text-center font-semibold text-zinc-800 tabular-nums">
-                {monthLabel}
-              </span>
-              <Button variant="ghost" size="sm" onClick={nextMonth} className="h-8 w-8 p-0 rounded-lg hover:bg-zinc-100">
-                <ChevronRight size={18} />
-              </Button>
-            </div>
+          <div className="flex items-center gap-3 bg-white p-1 rounded-xl shadow-xs border border-slate-200 shrink-0 self-start sm:self-auto">
+            <Button variant="ghost" size="sm" onClick={prevMonth} className="h-8 w-8 p-0 rounded-lg hover:bg-zinc-100">
+              <ChevronLeft size={18} />
+            </Button>
+            <span className="min-w-[140px] text-center font-semibold text-zinc-800 tabular-nums">
+              {monthLabel}
+            </span>
+            <Button variant="ghost" size="sm" onClick={nextMonth} className="h-8 w-8 p-0 rounded-lg hover:bg-zinc-100">
+              <ChevronRight size={18} />
+            </Button>
           </div>
-
-          <div className="hidden md:block" aria-hidden="true" />
         </div>
 
         {/* Calendar Grid */}

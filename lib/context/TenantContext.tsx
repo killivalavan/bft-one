@@ -173,6 +173,21 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
               return;
             }
           }
+
+          // If Super Admin has an assigned business_id or default business exists in DB
+          const targetBizId = prof?.business_id || DEFAULT_BUSINESS.id;
+          const { data: bizById } = await supabaseClient
+            .from("businesses")
+            .select("*")
+            .eq("id", targetBizId)
+            .maybeSingle();
+
+          if (bizById) {
+            const finalBiz = normalizeBusiness(bizById);
+            setBusiness(finalBiz);
+            persistTenant(finalBiz);
+            return;
+          }
         }
       }
 
@@ -203,11 +218,21 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
         }
       }
 
-      // 3. Fall back to default business (BFT Navalur)
-      setBusiness(DEFAULT_BUSINESS);
-      persistTenant(DEFAULT_BUSINESS);
+      // 3. Fall back to default business: query database for default BFT or first business
+      const { data: defaultBiz } = await supabaseClient
+        .from("businesses")
+        .select("*")
+        .eq("id", DEFAULT_BUSINESS.id)
+        .maybeSingle();
+
+      const sourceBiz = defaultBiz || DEFAULT_BUSINESS;
+      const finalBiz = normalizeBusiness(sourceBiz);
+      setBusiness(finalBiz);
+      persistTenant(finalBiz);
     } catch (e) {
       console.warn("Tenant fetch fallback to default:", e);
+      const fallbackBiz = normalizeBusiness(DEFAULT_BUSINESS);
+      setBusiness(fallbackBiz);
     } finally {
       setLoading(false);
     }
@@ -223,6 +248,38 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
       }
     } catch {}
 
+    let localShopLoc: any = {};
+    if (typeof window !== "undefined") {
+      try {
+        const shopLocStr = localStorage.getItem("bftone_shop_location");
+        if (shopLocStr) localShopLoc = JSON.parse(shopLocStr);
+      } catch {}
+    }
+
+    const resolvedLat = (localShopLoc.lat !== undefined && localShopLoc.lat !== null && !isNaN(Number(localShopLoc.lat)))
+      ? Number(localShopLoc.lat)
+      : (raw.geofence_lat !== null && raw.geofence_lat !== undefined && !isNaN(Number(raw.geofence_lat))
+        ? Number(raw.geofence_lat)
+        : ((localExtra.geofence_lat !== undefined && localExtra.geofence_lat !== null && !isNaN(Number(localExtra.geofence_lat)))
+          ? Number(localExtra.geofence_lat)
+          : DEFAULT_BUSINESS.geofence_lat));
+
+    const resolvedLng = (localShopLoc.lng !== undefined && localShopLoc.lng !== null && !isNaN(Number(localShopLoc.lng)))
+      ? Number(localShopLoc.lng)
+      : (raw.geofence_lng !== null && raw.geofence_lng !== undefined && !isNaN(Number(raw.geofence_lng))
+        ? Number(raw.geofence_lng)
+        : ((localExtra.geofence_lng !== undefined && localExtra.geofence_lng !== null && !isNaN(Number(localExtra.geofence_lng)))
+          ? Number(localExtra.geofence_lng)
+          : DEFAULT_BUSINESS.geofence_lng));
+
+    const resolvedRadius = (localShopLoc.radius && !isNaN(Number(localShopLoc.radius)))
+      ? Number(localShopLoc.radius)
+      : (localExtra.geofence_radius_meters ? Number(localExtra.geofence_radius_meters) : (raw.geofence_radius_meters ? Number(raw.geofence_radius_meters) : 150));
+
+    const resolvedEnabled = localShopLoc.enabled !== undefined
+      ? !!localShopLoc.enabled
+      : (localExtra.geofence_enabled !== undefined ? localExtra.geofence_enabled !== false : (raw.geofence_enabled !== undefined ? raw.geofence_enabled !== false : true));
+
     return {
       id: bizId,
       name: raw.name || localExtra.name || DEFAULT_BUSINESS.name,
@@ -234,10 +291,10 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
       gstin: (raw.gstin as string) || localExtra.gstin || DEFAULT_BUSINESS.gstin,
       currency_symbol: raw.currency_symbol || "₹",
       timezone: raw.timezone || "Asia/Kolkata",
-      geofence_lat: raw.geofence_lat !== null ? Number(raw.geofence_lat) : DEFAULT_BUSINESS.geofence_lat,
-      geofence_lng: raw.geofence_lng !== null ? Number(raw.geofence_lng) : DEFAULT_BUSINESS.geofence_lng,
-      geofence_radius_meters: raw.geofence_radius_meters ? Number(raw.geofence_radius_meters) : 150,
-      geofence_enabled: raw.geofence_enabled !== false,
+      geofence_lat: resolvedLat,
+      geofence_lng: resolvedLng,
+      geofence_radius_meters: resolvedRadius,
+      geofence_enabled: resolvedEnabled,
       enabled_modules: raw.enabled_modules || DEFAULT_BUSINESS.enabled_modules,
       plan_type: raw.plan_type || "pro",
       max_users: raw.max_users || 50,
@@ -257,6 +314,10 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
             address: biz.address,
             phone: biz.phone,
             gstin: biz.gstin,
+            geofence_lat: biz.geofence_lat,
+            geofence_lng: biz.geofence_lng,
+            geofence_radius_meters: biz.geofence_radius_meters,
+            geofence_enabled: biz.geofence_enabled,
           }));
         }
       }
@@ -266,6 +327,24 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     fetchTenant();
   }, [user]);
+
+  useEffect(() => {
+    function handleLocationUpdated(e: any) {
+      if (e?.detail && e.detail.lat && e.detail.lng) {
+        setBusiness((prev) => ({
+          ...prev,
+          geofence_lat: Number(e.detail.lat),
+          geofence_lng: Number(e.detail.lng),
+          geofence_radius_meters: e.detail.radius ? Number(e.detail.radius) : prev.geofence_radius_meters,
+          geofence_enabled: e.detail.enabled !== undefined ? Boolean(e.detail.enabled) : prev.geofence_enabled,
+        }));
+      }
+    }
+    if (typeof window !== "undefined") {
+      window.addEventListener("bftone_shop_location_updated", handleLocationUpdated);
+      return () => window.removeEventListener("bftone_shop_location_updated", handleLocationUpdated);
+    }
+  }, []);
 
   function isModuleEnabled(moduleName: string): boolean {
     if (!business?.enabled_modules) return true;

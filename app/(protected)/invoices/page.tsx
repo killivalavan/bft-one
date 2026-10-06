@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useMemo } from "react";
+import Link from "next/link";
 import { supabaseClient } from "@/lib/supabaseClient";
 import { useTenant } from "@/lib/context/TenantContext";
 import { useToast } from "@/components/ui/Toast";
@@ -796,14 +797,24 @@ export default function InvoicesPage() {
 
   if (!flags?.isAdmin) {
     return (
-      <div className="min-h-[60vh] flex flex-col items-center justify-center text-center p-6">
-        <div className="w-16 h-16 bg-slate-100 rounded-lg flex items-center justify-center text-slate-600 mb-4 shadow-xs border border-[#E2E8F0]">
+      <div className="min-h-[60vh] flex flex-col items-center justify-center text-center p-6 max-w-md mx-auto">
+        <div className="w-16 h-16 bg-amber-50 rounded-2xl flex items-center justify-center text-amber-600 mb-4 shadow-xs border border-amber-200">
           <ShieldAlert size={32} />
         </div>
-        <h2 className="text-xl font-bold text-[#0F172A]">Restricted Access</h2>
-        <p className="text-xs text-[#64748B] mt-2 max-w-sm">
+        <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-amber-500/10 text-amber-700 border border-amber-300/80 mb-3">
+          <ShieldAlert size={13} className="text-amber-600" />
+          Admin Only Feature
+        </div>
+        <h2 className="text-2xl font-bold text-[#0F172A] tracking-tight">Restricted Access</h2>
+        <p className="text-sm text-[#64748B] mt-2 leading-relaxed">
           Only store administrators have authorization to view, create, and manage official tax invoices.
         </p>
+        <Link
+          href="/"
+          className="mt-6 px-5 py-2.5 bg-[#2563EB] hover:bg-[#1D4ED8] active:scale-95 text-white text-xs font-bold rounded-xl shadow-xs transition-all inline-flex items-center gap-2"
+        >
+          Return to Command Center
+        </Link>
       </div>
     );
   }
