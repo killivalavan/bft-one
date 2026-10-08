@@ -272,7 +272,10 @@ export default function ContactsPage() {
                                 )}
                             >
                                 <Shield size={13} className="text-blue-500" />
-                                Manage Directory
+                                <span>Manage Directory</span>
+                                <span className="text-[9px] font-extrabold uppercase tracking-wider bg-blue-100 text-blue-700 px-1.5 py-0.2 rounded border border-blue-200">
+                                    Admin Only
+                                </span>
                             </button>
                         </div>
                     )}

@@ -181,31 +181,85 @@ export function saveShopGeofence(config: {
   }
 }
 
+function isValidLatLng(lat: number, lng: number): boolean {
+  return (
+    !isNaN(lat) &&
+    !isNaN(lng) &&
+    lat >= -90 &&
+    lat <= 90 &&
+    lng >= -180 &&
+    lng <= 180 &&
+    (lat !== 0 || lng !== 0)
+  );
+}
+
 /**
- * Flexible parser for manual input, Google Maps query URLs, and coordinate pairs
+ * Flexible parser for manual input, Google Maps query URLs, place pins, DMS, and coordinate pairs
  */
 export function parseCoordinatesInput(input: string): { lat: number; lng: number } | null {
   if (!input || typeof input !== "string") return null;
-  const trimmed = input.trim();
+  let text = input.trim();
 
-  // Pattern 1: URL with @lat,lng or ?q=lat,lng or ?q=loc:lat,lng
-  const urlMatch = trimmed.match(/[@?&]q?=?loc:?(-?\d+\.\d+),(-?\d+\.\d+)/);
-  if (urlMatch) {
-    const lat = parseFloat(urlMatch[1]);
-    const lng = parseFloat(urlMatch[2]);
-    if (!isNaN(lat) && !isNaN(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
-      return { lat, lng };
-    }
+  // Strip wrapping quotes, brackets, or parentheses e.g. "(12.84, 80.22)"
+  text = text.replace(/^["'([{<]+|["')\]}>]+$/g, "").trim();
+
+  try {
+    text = decodeURIComponent(text);
+  } catch (_) {}
+
+  // 1. Google Maps explicit place data: !3d<lat>!4d<lng>
+  const match3d = text.match(/!3d(-?\d+(?:\.\d+)?)/);
+  const match4d = text.match(/!4d(-?\d+(?:\.\d+)?)/);
+  if (match3d && match4d) {
+    const lat = parseFloat(match3d[1]);
+    const lng = parseFloat(match4d[1]);
+    if (isValidLatLng(lat, lng)) return { lat, lng };
   }
 
-  // Pattern 2: Raw comma or whitespace separated "lat, lng" or "lat lng"
-  const rawMatch = trimmed.match(/^(-?\d+\.?\d*)[,\s]+(-?\d+\.?\d*)$/);
-  if (rawMatch) {
-    const lat = parseFloat(rawMatch[1]);
-    const lng = parseFloat(rawMatch[2]);
-    if (!isNaN(lat) && !isNaN(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
-      return { lat, lng };
-    }
+  // 2. DMS (Degrees Minutes Seconds): e.g. 12°50'38.0"N 80°13'36.5"E
+  const dmsMatch = text.match(
+    /(\d{1,2})[°\s]+(\d{1,2})['′\s]+(\d{1,2}(?:\.\d+)?)["″\s]*([NSns])[,\s]+(\d{1,3})[°\s]+(\d{1,2})['′\s]+(\d{1,2}(?:\.\d+)?)["″\s]*([EWew])/
+  );
+  if (dmsMatch) {
+    let lat = parseInt(dmsMatch[1], 10) + parseInt(dmsMatch[2], 10) / 60 + parseFloat(dmsMatch[3]) / 3600;
+    if (dmsMatch[4].toUpperCase() === "S") lat = -lat;
+    let lng = parseInt(dmsMatch[5], 10) + parseInt(dmsMatch[6], 10) / 60 + parseFloat(dmsMatch[7]) / 3600;
+    if (dmsMatch[8].toUpperCase() === "W") lng = -lng;
+    if (isValidLatLng(lat, lng)) return { lat, lng };
+  }
+
+  // 3. Query params: q=, query=, ll=, daddr=, destination=, center=, point=, loc:lat,lng
+  const queryMatch = text.match(
+    /(?:[?&](?:q|query|ll|daddr|saddr|center|destination|point)=|(?:loc:))(-?\d+(?:\.\d+)?)[,\s+](-?\d+(?:\.\d+)?)/i
+  );
+  if (queryMatch) {
+    const lat = parseFloat(queryMatch[1]);
+    const lng = parseFloat(queryMatch[2]);
+    if (isValidLatLng(lat, lng)) return { lat, lng };
+  }
+
+  // 4. Center / map coordinate: @lat,lng
+  const atMatch = text.match(/@(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/);
+  if (atMatch) {
+    const lat = parseFloat(atMatch[1]);
+    const lng = parseFloat(atMatch[2]);
+    if (isValidLatLng(lat, lng)) return { lat, lng };
+  }
+
+  // 5. geo:lat,lng
+  const geoMatch = text.match(/geo:(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/i);
+  if (geoMatch) {
+    const lat = parseFloat(geoMatch[1]);
+    const lng = parseFloat(geoMatch[2]);
+    if (isValidLatLng(lat, lng)) return { lat, lng };
+  }
+
+  // 6. Generic lat, lng anywhere in the string (e.g. "12.8439, 80.2268" or "12.8439 80.2268")
+  const genericMatch = text.match(/(-?\d{1,2}(?:\.\d+)?)[,\s]+(-?\d{1,3}(?:\.\d+)?)/);
+  if (genericMatch) {
+    const lat = parseFloat(genericMatch[1]);
+    const lng = parseFloat(genericMatch[2]);
+    if (isValidLatLng(lat, lng)) return { lat, lng };
   }
 
   return null;

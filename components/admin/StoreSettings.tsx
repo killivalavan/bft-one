@@ -13,9 +13,9 @@ import {
   Phone, MapPin, Receipt, Upload, RefreshCw,
   FileSignature, Building2, CheckCircle2, Crop,
   Navigation, Crosshair, ExternalLink, ShieldCheck, LocateFixed,
-  ClipboardPaste, Check
+  ClipboardPaste, Check, Loader2
 } from "lucide-react";
-import { saveShopGeofence, parseCoordinatesInput } from "@/lib/geofence";
+import { saveShopGeofence, parseCoordinatesInput, metersBetween } from "@/lib/geofence";
 
 export function StoreSettings() {
   const { business, refreshBusiness } = useTenant();
@@ -52,6 +52,8 @@ export function StoreSettings() {
   const [savingLocation, setSavingLocation] = useState(false);
   const [locationAccuracy, setLocationAccuracy] = useState<number | null>(null);
   const [quickPasteInput, setQuickPasteInput] = useState("");
+  const [testingDevice, setTestingDevice] = useState(false);
+  const [deviceTestResult, setDeviceTestResult] = useState<string | null>(null);
 
   const [saving, setSaving] = useState(false);
 
@@ -311,12 +313,37 @@ export function StoreSettings() {
   }
 
   // Handle parsing coordinates or Google Maps link from quick paste
-  function handleApplyQuickPaste() {
-    const parsed = parseCoordinatesInput(quickPasteInput);
+  async function handleApplyQuickPaste() {
+    const raw = quickPasteInput.trim();
+    if (!raw) return;
+
+    // 1. Direct synchronous parse for all coordinate formats and direct URLs
+    let parsed = parseCoordinatesInput(raw);
+
+    // 2. If direct parse failed, check if it's a URL (e.g. maps.app.goo.gl or goo.gl/maps or Google redirect URL)
+    if (!parsed && (raw.startsWith("http://") || raw.startsWith("https://") || raw.includes("goo.gl") || raw.includes("maps"))) {
+      setSavingLocation(true);
+      try {
+        const res = await fetch("/api/business/resolve-maps-url", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url: raw }),
+        });
+        const data = await res.json();
+        if (data?.success && data.lat && data.lng) {
+          parsed = { lat: Number(data.lat), lng: Number(data.lng) };
+        }
+      } catch (err) {
+        console.warn("Failed to resolve maps URL via backend:", err);
+      } finally {
+        setSavingLocation(false);
+      }
+    }
+
     if (!parsed) {
       toast({
         title: "Could not parse coordinates",
-        description: "Please paste standard 'lat, lng' (e.g. 12.8439, 80.2268) or a Google Maps URL.",
+        description: "Please paste standard 'lat, lng' (e.g. 12.8439, 80.2268) or a valid Google Maps link.",
         variant: "error",
       });
       return;
@@ -329,7 +356,7 @@ export function StoreSettings() {
     setQuickPasteInput("");
 
     // Auto save
-    saveLocationDirectly(parsed.lat, parsed.lng, Number(geofenceRadius) || 150, geofenceEnabled);
+    await saveLocationDirectly(parsed.lat, parsed.lng, Number(geofenceRadius) || 150, geofenceEnabled);
   }
 
   // GPS Store Location auto-detection
@@ -375,6 +402,62 @@ export function StoreSettings() {
         });
       },
       { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+    );
+  }
+
+  // Device Distance Check: Test whether current device is inside store geofence
+  function handleTestDeviceDistance() {
+    if (typeof window === "undefined" || !navigator.geolocation) {
+      toast({
+        title: "GPS Not Supported",
+        description: "Geolocation is not supported by your current browser.",
+        variant: "error",
+      });
+      return;
+    }
+
+    const sLat = Number(geofenceLat);
+    const sLng = Number(geofenceLng);
+    if (!geofenceLat || !geofenceLng || isNaN(sLat) || isNaN(sLng)) {
+      toast({
+        title: "No Store Coordinates Set",
+        description: "Please enter or paste store coordinates first before testing device distance.",
+        variant: "error",
+      });
+      return;
+    }
+
+    setTestingDevice(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const uLat = pos.coords.latitude;
+        const uLng = pos.coords.longitude;
+        const uAcc = Math.round(pos.coords.accuracy);
+        const radiusNum = Number(geofenceRadius) || 150;
+
+        const dist = Math.round(metersBetween(uLat, uLng, sLat, sLng));
+        const isInside = dist <= radiusNum;
+
+        setTestingDevice(false);
+        setDeviceTestResult(
+          `Your device is ~${dist}m away (±${uAcc}m accuracy). ${isInside ? "✅ Inside allowed radius!" : `⚠️ Outside ${radiusNum}m radius.`}`
+        );
+
+        toast({
+          title: isInside ? "Device Inside Store! ✅" : `Device Outside (~${dist}m) 📍`,
+          description: `Your phone/laptop is ~${dist} meters from the shop pin (Allowed: ${radiusNum}m, GPS precision: ±${uAcc}m).`,
+          variant: isInside ? "success" : "warning",
+        });
+      },
+      (err) => {
+        setTestingDevice(false);
+        toast({
+          title: "Could not get device location",
+          description: err.message || "Please allow location permission in your browser.",
+          variant: "error",
+        });
+      },
+      { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 }
     );
   }
 
@@ -771,7 +854,17 @@ export function StoreSettings() {
                     disabled={!quickPasteInput.trim() || savingLocation}
                     className="h-9 px-3 bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold rounded-lg shrink-0 cursor-pointer disabled:opacity-50"
                   >
-                    <Check className="w-3.5 h-3.5 mr-1" /> Parse &amp; Save
+                    {savingLocation ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" />
+                        <span>Resolving...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Check className="w-3.5 h-3.5 mr-1" />
+                        <span>Parse &amp; Save</span>
+                      </>
+                    )}
                   </Button>
                 </div>
               </div>
@@ -819,6 +912,79 @@ export function StoreSettings() {
                   />
                 </div>
               </div>
+
+              {/* Interactive Verification & Live Map Preview */}
+              {geofenceLat && geofenceLng && !isNaN(Number(geofenceLat)) && !isNaN(Number(geofenceLng)) && (
+                <div className="p-4 bg-slate-50/90 rounded-2xl border border-sky-200/90 space-y-3.5 shadow-2xs">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+                      <div className="min-w-0">
+                        <span className="text-xs font-bold text-slate-800">
+                          Active Store Pin:{" "}
+                          <code className="text-[11px] text-sky-800 font-mono bg-sky-100/70 px-2 py-0.5 rounded-md border border-sky-200/60 font-semibold">
+                            {Number(geofenceLat).toFixed(6)}, {Number(geofenceLng).toFixed(6)}
+                          </code>
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0">
+                      <a
+                        href={`https://www.google.com/maps?q=${geofenceLat},${geofenceLng}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-700 text-white font-bold text-xs shadow-xs transition-colors"
+                      >
+                        <ExternalLink className="w-3.5 h-3.5" />
+                        <span>Open Pin in Google Maps ↗</span>
+                      </a>
+
+                      <a
+                        href={`https://www.google.com/maps/dir/?api=1&destination=${geofenceLat},${geofenceLng}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 font-bold text-xs transition-colors"
+                      >
+                        <Navigation className="w-3.5 h-3.5 text-sky-600" />
+                        <span>Directions</span>
+                      </a>
+                    </div>
+                  </div>
+
+                  {/* Live Embedded Map Preview */}
+                  <div className="relative w-full h-48 sm:h-56 rounded-xl overflow-hidden border border-slate-200 shadow-inner bg-slate-100">
+                    <iframe
+                      title="Store Location Pin Preview"
+                      className="w-full h-full border-0"
+                      src={`https://maps.google.com/maps?q=${geofenceLat},${geofenceLng}&hl=en&z=17&output=embed`}
+                      loading="lazy"
+                    />
+                  </div>
+
+                  {/* Real-time Device Distance Verification */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pt-2.5 border-t border-slate-200/70 text-xs">
+                    <div className="flex items-start sm:items-center gap-1.5 text-slate-600">
+                      <LocateFixed className="w-4 h-4 text-sky-600 shrink-0 mt-0.5 sm:mt-0" />
+                      {deviceTestResult ? (
+                        <span className="font-semibold text-slate-800">{deviceTestResult}</span>
+                      ) : (
+                        <span>Verify whether your current phone or laptop GPS is recognized inside this store pin.</span>
+                      )}
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={handleTestDeviceDistance}
+                      disabled={testingDevice}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 active:scale-95 font-bold text-xs shadow-2xs transition-all cursor-pointer disabled:opacity-50 shrink-0 self-start sm:self-auto"
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 text-sky-600 ${testingDevice ? "animate-spin" : ""}`} />
+                      <span>{testingDevice ? "Testing Device GPS..." : "Test My Device Distance"}</span>
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {/* Allowed Radius & Presets */}
               <div className="space-y-2">

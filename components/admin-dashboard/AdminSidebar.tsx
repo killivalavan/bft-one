@@ -33,7 +33,8 @@ import {
   LifeBuoy,
   User,
   LogOut,
-  Wallet
+  Wallet,
+  Megaphone
 } from "lucide-react";
 
 export interface NavItemConfig {
@@ -252,40 +253,24 @@ export function AdminSidebar({
       colorScheme: "slate",
     },
     {
-      id: "invoices",
-      label: "Tax Invoices",
-      href: "/invoices",
-      icon: FileText,
-      category: "FINANCE",
-      adminOnly: true,
-      colorScheme: "blue",
-    },
-    {
-      id: "sales",
-      label: "Cash Settlement",
-      href: "/sales",
-      icon: Banknote,
-      category: "FINANCE",
-      colorScheme: "cyan",
-    },
-    {
-      id: "expenses",
-      label: "Daily Expenses",
-      href: "/expenses",
-      icon: Receipt,
-      category: "FINANCE",
-      colorScheme: "amber",
-    },
-    {
-      id: "timesheet",
-      label: "Timesheets",
-      href: "/timesheet",
-      icon: CalendarCheck2,
+      id: "notice-board",
+      label: "Notice Board",
+      href: "/notice-board",
+      icon: Megaphone,
       category: "STAFF",
-      colorScheme: "cyan",
+      badge: "Board",
+      colorScheme: "blue",
     },
     ...(!isAdmin
       ? [
+          {
+            id: "timesheet",
+            label: "Timesheets",
+            href: "/timesheet",
+            icon: CalendarCheck2,
+            category: "STAFF" as const,
+            colorScheme: "cyan" as const,
+          },
           {
             id: "salary",
             label: "My Salary",
@@ -321,6 +306,31 @@ export function AdminSidebar({
       colorScheme: "slate",
     },
     {
+      id: "invoices",
+      label: "Tax Invoices",
+      href: "/invoices",
+      icon: FileText,
+      category: "FINANCE",
+      adminOnly: true,
+      colorScheme: "blue",
+    },
+    {
+      id: "sales",
+      label: "Cash Settlement",
+      href: "/sales",
+      icon: Banknote,
+      category: "FINANCE",
+      colorScheme: "cyan",
+    },
+    {
+      id: "expenses",
+      label: "Daily Expenses",
+      href: "/expenses",
+      icon: Receipt,
+      category: "FINANCE",
+      colorScheme: "amber",
+    },
+    {
       id: "admin-users",
       label: "Users & Roles",
       href: "/admin/users",
@@ -330,7 +340,7 @@ export function AdminSidebar({
     },
     {
       id: "fill-timesheet",
-      label: "Fill Timesheet",
+      label: "Manual Timesheet Entry",
       href: "/admin/fill-timesheet",
       icon: CalendarPlus,
       category: "ADMIN",
@@ -338,7 +348,7 @@ export function AdminSidebar({
     },
     {
       id: "admin-store",
-      label: "Store & Logo",
+      label: "Business Profile",
       href: "/admin/store",
       icon: Store,
       category: "ADMIN",
@@ -366,7 +376,7 @@ export function AdminSidebar({
     if (onCloseMobile) onCloseMobile();
   };
 
-  const categories = ["CORE", "OPERATIONS", "FINANCE", "STAFF", "ADMIN"] as const;
+  const categories = ["CORE", "OPERATIONS", "STAFF", "FINANCE", "ADMIN"] as const;
 
   return (
     <>
@@ -869,7 +879,7 @@ export function AdminSidebar({
                     className="flex items-center gap-2.5 px-2.5 py-2 text-xs font-semibold text-slate-200 hover:text-white rounded-xl hover:bg-slate-800/90 transition-colors"
                   >
                     <Store size={15} className="text-blue-400 shrink-0" />
-                    <span>Store & Branding</span>
+                    <span>Business Profile</span>
                   </Link>
 
                   <Link

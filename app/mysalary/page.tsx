@@ -206,7 +206,10 @@ export default function MySalaryPage() {
                   className="gap-2 bg-[#2563EB] text-white hover:bg-[#1D4ED8] border-transparent shadow-xs"
                 >
                   {downloading ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
-                  Payslip
+                  <span>Payslip</span>
+                  <span className="text-[9px] font-extrabold uppercase bg-white/20 text-white px-1.5 py-0.2 rounded">
+                    Admin Only
+                  </span>
                 </Button>
               )}
             </div>

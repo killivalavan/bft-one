@@ -15,9 +15,9 @@ export default function AdminStoreSettingsPage() {
             <Store size={20} />
           </div>
           <div>
-            <h1 className="text-2xl sm:text-3xl font-bold text-zinc-900 tracking-tight">Store & Brand Identity</h1>
+            <h1 className="text-2xl sm:text-3xl font-bold text-zinc-900 tracking-tight">Business Profile</h1>
             <p className="text-xs text-zinc-500 mt-0.5">
-              {business?.name || "Store Operations"} — Brand logos, bill headers, authorized signature & address
+              {business?.name || "Store Operations"} — Brand logos, bill headers, authorized signature & store location
             </p>
           </div>
         </div>

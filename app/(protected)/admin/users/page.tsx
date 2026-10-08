@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { supabaseClient } from "@/lib/supabaseClient";
 import { useToast } from "@/components/ui/Toast";
 import { UserList } from "@/components/admin/UserList";
@@ -8,7 +9,6 @@ import { generatePayslipPdf } from "@/lib/utils/payslip";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { useTenant } from "@/lib/context/TenantContext";
 import { Users, Loader2, AlertTriangle, Copy, Check, ExternalLink, Bell } from "lucide-react";
-import { NoticeBoardModal } from "@/components/admin/NoticeBoardModal";
 import { Button } from "@/components/ui/Button";
 
 type Profile = {
@@ -48,7 +48,6 @@ export default function UsersAndRolesPage() {
   const [totalPayroll, setTotalPayroll] = useState(0);
   const [totalNetPayroll, setTotalNetPayroll] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [noticeModalOpen, setNoticeModalOpen] = useState(false);
   const [migrationNeeded, setMigrationNeeded] = useState(false);
   const [copiedSql, setCopiedSql] = useState(false);
 
@@ -456,14 +455,13 @@ export default function UsersAndRolesPage() {
             </div>
           </div>
 
-          <Button
-            size="sm"
-            onClick={() => setNoticeModalOpen(true)}
-            className="bg-white hover:bg-blue-50 text-blue-700 border border-blue-200 font-semibold text-xs gap-1.5 shadow-2xs self-start sm:self-auto h-9"
+          <Link
+            href="/notice-board"
+            className="inline-flex items-center bg-white hover:bg-blue-50 text-blue-700 border border-blue-200 font-semibold text-xs gap-1.5 shadow-2xs self-start sm:self-auto h-9 px-3 rounded-lg transition-colors"
           >
             <Bell size={14} className="text-blue-600" />
             <span>📢 Manage Notice Board</span>
-          </Button>
+          </Link>
         </div>
 
         {loading ? (
@@ -565,11 +563,6 @@ export default function UsersAndRolesPage() {
           }}
           onCancel={() => setConfirmState({ open: false, title: "", desc: "", action: undefined })}
           confirmLabel="Delete User"
-        />
-
-        <NoticeBoardModal
-          open={noticeModalOpen}
-          onClose={() => setNoticeModalOpen(false)}
         />
       </div>
     </div>

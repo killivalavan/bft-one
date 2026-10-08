@@ -710,7 +710,7 @@ export function AdminDashboardView({ baseItems }: AdminDashboardViewProps) {
                       className="p-2.5 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-200 text-center transition-all group"
                     >
                       <Users size={16} className="mx-auto text-purple-600 mb-1 group-hover:scale-110 transition-transform" />
-                      <span className="text-[11px] font-bold text-slate-800 block truncate">Attendance</span>
+                      <span className="text-[11px] font-bold text-slate-800 block truncate">Manual Timesheet</span>
                     </Link>
                   </div>
                 </div>

@@ -1328,20 +1328,25 @@ export default function ExpensesPage() {
                         </div>
 
                         {isAdmin && activeTab === "add" && (
-                            <div className="flex items-center gap-1 bg-white border border-zinc-200 rounded-lg p-1 shadow-sm">
-                                <button onClick={() => setDate(d => addDays(d, -1))} className="p-2 hover:bg-zinc-50 rounded-md text-zinc-600">
-                                    <ChevronLeft size={18} />
-                                </button>
-                                <div className="px-2 text-sm font-semibold text-zinc-900 min-w-[90px] text-center">
-                                    {isToday ? "Today" : format(date, "MMM dd")}
+                            <div className="flex items-center gap-1.5">
+                                <span className="hidden sm:inline-flex text-[10px] font-extrabold uppercase tracking-wider bg-zinc-100 text-zinc-600 border border-zinc-200 px-2 py-1 rounded-lg">
+                                    Admin Only
+                                </span>
+                                <div className="flex items-center gap-1 bg-white border border-zinc-200 rounded-lg p-1 shadow-sm">
+                                    <button onClick={() => setDate(d => addDays(d, -1))} className="p-2 hover:bg-zinc-50 rounded-md text-zinc-600">
+                                        <ChevronLeft size={18} />
+                                    </button>
+                                    <div className="px-2 text-sm font-semibold text-zinc-900 min-w-[90px] text-center">
+                                        {isToday ? "Today" : format(date, "MMM dd")}
+                                    </div>
+                                    <button
+                                        onClick={() => setDate(d => addDays(d, 1))}
+                                        className="p-2 hover:bg-zinc-50 rounded-md text-zinc-600 disabled:opacity-30"
+                                        disabled={isToday}
+                                    >
+                                        <ChevronRight size={18} />
+                                    </button>
                                 </div>
-                                <button
-                                    onClick={() => setDate(d => addDays(d, 1))}
-                                    className="p-2 hover:bg-zinc-50 rounded-md text-zinc-600 disabled:opacity-30"
-                                    disabled={isToday}
-                                >
-                                    <ChevronRight size={18} />
-                                </button>
                             </div>
                         )}
                     </div>
@@ -1354,7 +1359,7 @@ export default function ExpensesPage() {
                     )}
                 </div>
 
-                {/* Tabs — Overview and AI Advisor are admin-only */}
+                {/* Tabs — Overview, Monthly and AI Advisor are admin-only */}
                 {isAdmin && (
                     <div className="flex p-1 bg-zinc-100 rounded-xl">
                         <button
@@ -1362,21 +1367,27 @@ export default function ExpensesPage() {
                             className={`flex-1 flex items-center justify-center gap-2 py-2.5 text-xs sm:text-sm font-medium rounded-lg transition-all ${activeTab === "add" ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-500 hover:text-zinc-700"}`}
                         >
                             <ClipboardList size={16} className={activeTab === "add" ? "text-cyan-600" : "text-zinc-400"} />
-                            Daily Expense
+                            <span>Daily Expense</span>
                         </button>
                         <button
                             onClick={() => setActiveTab("monthly")}
-                            className={`flex-1 flex items-center justify-center gap-2 py-2.5 text-xs sm:text-sm font-medium rounded-lg transition-all ${activeTab === "monthly" ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-500 hover:text-zinc-700"}`}
+                            className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs sm:text-sm font-medium rounded-lg transition-all ${activeTab === "monthly" ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-500 hover:text-zinc-700"}`}
                         >
                             <Building2 size={16} className={activeTab === "monthly" ? "text-violet-600" : "text-zinc-400"} />
-                            Monthly Expense
+                            <span>Monthly Expense</span>
+                            <span className="text-[9px] font-extrabold uppercase px-1 py-0.2 rounded bg-violet-100 text-violet-800">
+                                Admin Only
+                            </span>
                         </button>
                         <button
                             onClick={() => setActiveTab("overview")}
-                            className={`flex-1 flex items-center justify-center gap-2 py-2.5 text-xs sm:text-sm font-medium rounded-lg transition-all ${activeTab === "overview" ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-500 hover:text-zinc-700"}`}
+                            className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs sm:text-sm font-medium rounded-lg transition-all ${activeTab === "overview" ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-500 hover:text-zinc-700"}`}
                         >
                             <BarChart3 size={16} className={activeTab === "overview" ? "text-cyan-600" : "text-zinc-400"} />
-                            Overview
+                            <span>Overview</span>
+                            <span className="text-[9px] font-extrabold uppercase px-1 py-0.2 rounded bg-cyan-100 text-cyan-800">
+                                Admin Only
+                            </span>
                         </button>
                         <button
                             onClick={() => setActiveTab("ai-advisor")}
@@ -1385,7 +1396,7 @@ export default function ExpensesPage() {
                             <Sparkles size={15} className={activeTab === "ai-advisor" ? "text-violet-200 animate-pulse" : "text-violet-600"} />
                             <span>AI Advisor</span>
                             <span className={`text-[9px] uppercase font-bold px-1.5 py-0.2 rounded-full ${activeTab === "ai-advisor" ? "bg-white/20 text-white" : "bg-violet-100 text-violet-800"}`}>
-                                Agent
+                                Admin Only
                             </span>
                         </button>
                     </div>
@@ -1526,10 +1537,10 @@ export default function ExpensesPage() {
                                                             <span className="font-semibold text-zinc-900">₹{(row.price_cents / 100).toFixed(2)}</span>
                                                             {isAdmin && (
                                                                 <div className="flex items-center gap-1">
-                                                                    <button onClick={() => startEdit(row)} className="p-1.5 rounded-md hover:bg-zinc-100 text-zinc-500">
+                                                                    <button onClick={() => startEdit(row)} title="Edit Expense (Admin Only - Staff cannot edit)" className="p-1.5 rounded-md hover:bg-zinc-100 text-zinc-500">
                                                                         <Pencil size={14} />
                                                                     </button>
-                                                                    <button onClick={() => deleteExpense(row)} className="p-1.5 rounded-md hover:bg-red-50 text-red-500">
+                                                                    <button onClick={() => deleteExpense(row)} title="Delete Expense (Admin Only - Staff cannot delete)" className="p-1.5 rounded-md hover:bg-red-50 text-red-500">
                                                                         <Trash2 size={14} />
                                                                     </button>
                                                                 </div>

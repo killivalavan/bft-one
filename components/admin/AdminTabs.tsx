@@ -13,7 +13,7 @@ export function AdminTabs({ activeTab, onChange }: AdminTabsProps) {
         { id: "users", label: "Users & Roles", icon: Users },
         { id: "products", label: "Product Catalog", icon: Package },
         { id: "reports", label: "Order Reports", icon: FileText },
-        { id: "store", label: "Store & Logo", icon: Store },
+        { id: "store", label: "Business Profile", icon: Store },
     ];
 
     return (

@@ -18,7 +18,8 @@ import {
     ShoppingBag,
     Clock,
     CheckCircle2,
-    Sparkles
+    Sparkles,
+    Shield
 } from "lucide-react";
 import Link from "next/link";
 import { format, addDays, isSameDay } from "date-fns";
@@ -338,33 +339,38 @@ export default function SalesPage() {
 
                         {/* Date Navigator */}
                         {isAdmin ? (
-                            <div className="flex items-center gap-1 bg-white border border-[#E2E8F0] rounded-xl p-1 shadow-2xs">
-                                <button
-                                    onClick={() => { setDate(addDays(date, -1)); setManualOverride(true); }}
-                                    className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-600 transition-colors"
-                                    title="Previous Day"
-                                >
-                                    <ChevronLeft size={16} />
-                                </button>
-                                <div className="px-2.5 text-xs font-bold text-[#0F172A] min-w-[95px] text-center tabular-nums">
-                                    {isToday ? "Today" : format(date, "MMM dd, yyyy")}
-                                </div>
-                                <button
-                                    onClick={() => { setDate(addDays(date, 1)); setManualOverride(true); }}
-                                    className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-600 disabled:opacity-30 transition-colors"
-                                    disabled={isToday}
-                                    title="Next Day"
-                                >
-                                    <ChevronRight size={16} />
-                                </button>
-                                {manualOverride && (
+                            <div className="flex items-center gap-1.5">
+                                <span className="hidden md:inline-flex text-[10px] font-extrabold uppercase tracking-wider bg-slate-100 text-slate-600 border border-slate-200 px-2 py-1 rounded-lg">
+                                    Admin Only
+                                </span>
+                                <div className="flex items-center gap-1 bg-white border border-[#E2E8F0] rounded-xl p-1 shadow-2xs">
                                     <button
-                                        onClick={() => { setManualOverride(false); setDate(getInitialDate()); }}
-                                        className="ml-1 text-[11px] px-2 py-0.5 rounded-lg bg-blue-50 hover:bg-blue-100 font-bold text-blue-700 border border-blue-200 transition-colors"
+                                        onClick={() => { setDate(addDays(date, -1)); setManualOverride(true); }}
+                                        className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-600 transition-colors"
+                                        title="Previous Day"
                                     >
-                                        Auto
+                                        <ChevronLeft size={16} />
                                     </button>
-                                )}
+                                    <div className="px-2.5 text-xs font-bold text-[#0F172A] min-w-[95px] text-center tabular-nums">
+                                        {isToday ? "Today" : format(date, "MMM dd, yyyy")}
+                                    </div>
+                                    <button
+                                        onClick={() => { setDate(addDays(date, 1)); setManualOverride(true); }}
+                                        className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-600 disabled:opacity-30 transition-colors"
+                                        disabled={isToday}
+                                        title="Next Day"
+                                    >
+                                        <ChevronRight size={16} />
+                                    </button>
+                                    {manualOverride && (
+                                        <button
+                                            onClick={() => { setManualOverride(false); setDate(getInitialDate()); }}
+                                            className="ml-1 text-[11px] px-2 py-0.5 rounded-lg bg-blue-50 hover:bg-blue-100 font-bold text-blue-700 border border-blue-200 transition-colors"
+                                        >
+                                            Auto
+                                        </button>
+                                    )}
+                                </div>
                             </div>
                         ) : (
                             <div className="flex items-center gap-1.5 px-3 py-2 bg-white border border-[#E2E8F0] rounded-xl shadow-2xs">
@@ -409,7 +415,12 @@ export default function SalesPage() {
                     {isAdmin && (
                         <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-2xs flex items-center justify-between">
                             <div>
-                                <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Online / UPI</p>
+                                <div className="flex items-center gap-1.5">
+                                    <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Online / UPI</p>
+                                    <span className="text-[9px] font-extrabold uppercase tracking-wider bg-blue-50 text-blue-700 border border-blue-200 px-1.5 py-0.2 rounded">
+                                        Admin Only
+                                    </span>
+                                </div>
                                 <p className="text-xl sm:text-2xl font-black text-slate-900 mt-0.5">
                                     ₹{numUpi.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
                                 </p>
@@ -428,9 +439,16 @@ export default function SalesPage() {
                         : "bg-white p-4 rounded-2xl border border-slate-200/80 shadow-2xs flex items-center justify-between"
                     }>
                         <div>
-                            <p className={isAdmin ? "text-[11px] font-bold uppercase tracking-wider text-blue-100" : "text-[11px] font-bold uppercase tracking-wider text-slate-400"}>
-                                {isAdmin ? "Total Day Closing" : "Shift Date"}
-                            </p>
+                            <div className="flex items-center gap-1.5">
+                                <p className={isAdmin ? "text-[11px] font-bold uppercase tracking-wider text-blue-100" : "text-[11px] font-bold uppercase tracking-wider text-slate-400"}>
+                                    {isAdmin ? "Total Day Closing" : "Shift Date"}
+                                </p>
+                                {isAdmin && (
+                                    <span className="text-[9px] font-extrabold uppercase tracking-wider bg-white/20 text-white border border-white/30 px-1.5 py-0.2 rounded">
+                                        Admin Only
+                                    </span>
+                                )}
+                            </div>
                             <p className={isAdmin ? "text-xl sm:text-2xl font-black text-white mt-0.5" : "text-base sm:text-lg font-bold text-slate-900 mt-0.5"}>
                                 {isAdmin
                                     ? `₹${totalSettlement.toLocaleString("en-IN", { minimumFractionDigits: 2 })}`
@@ -499,11 +517,17 @@ export default function SalesPage() {
                                 )}
                                 {cashSaved && isAdmin && !cashEditing && (
                                     <div className="flex gap-2.5 w-full">
-                                        <Button className="flex-1 h-11 rounded-xl font-bold border-slate-200 hover:bg-slate-50" onClick={() => setCashEditing(true)} variant="outline">
-                                            Edit Cash
+                                        <Button className="flex-1 h-11 rounded-xl font-bold border-slate-200 hover:bg-slate-50 gap-1.5" onClick={() => setCashEditing(true)} variant="outline">
+                                            <span>Edit Cash</span>
+                                            <span className="text-[9px] font-extrabold uppercase bg-slate-100 text-slate-700 border border-slate-200 px-1.5 py-0.5 rounded">
+                                                Admin Only
+                                            </span>
                                         </Button>
-                                        <Button className="w-28 h-11 rounded-xl text-rose-600 hover:text-rose-700 hover:bg-rose-50 font-bold" onClick={clearCash} variant="ghost">
-                                            Clear
+                                        <Button className="w-32 h-11 rounded-xl text-rose-600 hover:text-rose-700 hover:bg-rose-50 font-bold gap-1" onClick={clearCash} variant="ghost">
+                                            <span>Clear</span>
+                                            <span className="text-[9px] font-extrabold uppercase bg-rose-50 text-rose-600 border border-rose-200 px-1 py-0.2 rounded">
+                                                Admin
+                                            </span>
                                         </Button>
                                     </div>
                                 )}
@@ -532,8 +556,13 @@ export default function SalesPage() {
                                         <QrCode size={18} />
                                     </div>
                                     <div>
-                                        <h2 className="font-bold text-base text-[#0F172A]">Online / UPI Collections</h2>
-                                        <p className="text-xs text-slate-400">Total merchant QR & soundbox collections</p>
+                                        <div className="flex items-center gap-2 flex-wrap">
+                                            <h2 className="font-bold text-base text-[#0F172A]">Online / UPI Collections</h2>
+                                            <span className="text-[10px] font-extrabold uppercase tracking-wider bg-blue-100 text-blue-800 border border-blue-200 px-2 py-0.5 rounded-full">
+                                                Admin Only
+                                            </span>
+                                        </div>
+                                        <p className="text-xs text-slate-400">Total merchant QR &amp; soundbox collections (Hidden from staff view)</p>
                                     </div>
                                 </div>
                                 {upiSaved && (
@@ -562,17 +591,26 @@ export default function SalesPage() {
                                 <div className="pt-2">
                                     {!upiSaved && (
                                         <Button className="w-full h-11 gap-2 bg-[#2563EB] text-white hover:bg-[#1D4ED8] rounded-xl font-bold shadow-xs active:scale-[0.99] transition-all" onClick={saveUpi}>
-                                            <Save size={16} /> Save UPI Entry
+                                            <Save size={16} /> <span>Save UPI Entry</span>
+                                            <span className="ml-1 text-[9px] font-extrabold uppercase bg-blue-800 text-white px-1.5 py-0.5 rounded tracking-wider">
+                                                Admin Only
+                                            </span>
                                         </Button>
                                     )}
                                     {upiSaved && isAdmin && !upiEditing && (
-                                        <Button className="w-full h-11 rounded-xl font-bold border-slate-200 hover:bg-slate-50" onClick={() => setUpiEditing(true)} variant="outline">
-                                            Edit UPI
+                                        <Button className="w-full h-11 rounded-xl font-bold border-slate-200 hover:bg-slate-50 gap-1.5" onClick={() => setUpiEditing(true)} variant="outline">
+                                            <span>Edit UPI</span>
+                                            <span className="text-[9px] font-extrabold uppercase bg-blue-100 text-blue-700 border border-blue-200 px-1.5 py-0.5 rounded">
+                                                Admin Only
+                                            </span>
                                         </Button>
                                     )}
                                     {upiSaved && upiEditing && (
                                         <Button className="w-full h-11 gap-2 bg-[#2563EB] text-white hover:bg-[#1D4ED8] rounded-xl font-bold shadow-xs" onClick={saveUpi}>
-                                            <Save size={16} /> Save Changes
+                                            <Save size={16} /> <span>Save Changes</span>
+                                            <span className="ml-1 text-[9px] font-extrabold uppercase bg-blue-800 text-white px-1.5 py-0.5 rounded tracking-wider">
+                                                Admin Only
+                                            </span>
                                         </Button>
                                     )}
                                 </div>

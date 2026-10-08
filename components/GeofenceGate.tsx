@@ -25,6 +25,7 @@ import {
   CheckCircle2,
   Sparkles,
   Lock,
+  ExternalLink,
 } from "lucide-react";
 
 export default function GeofenceGate({ children }: { children: React.ReactNode }) {
@@ -347,6 +348,51 @@ export default function GeofenceGate({ children }: { children: React.ReactNode }
               </div>
             </div>
           )}
+
+          {/* User-End Location Verification Bar */}
+          <div className="p-3.5 rounded-2xl bg-slate-50/90 border border-slate-200/90 space-y-2">
+            <div className="flex items-center justify-between text-[11px] font-bold text-slate-700">
+              <span className="flex items-center gap-1.5">
+                <MapPin className="w-3.5 h-3.5 text-[#2563EB]" /> Verify Location on Map
+              </span>
+              <span className="text-[10px] text-slate-500 font-mono font-medium">
+                Store: {targetLat.toFixed(5)}, {targetLng.toFixed(5)}
+              </span>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <a
+                href={`https://www.google.com/maps?q=${targetLat},${targetLng}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 font-semibold text-xs shadow-2xs transition-colors"
+              >
+                <ExternalLink className="w-3.5 h-3.5 text-[#2563EB]" />
+                <span>Store Pin ↗</span>
+              </a>
+
+              {userCoords && (
+                <a
+                  href={`https://www.google.com/maps?q=${userCoords.lat},${userCoords.lng}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 font-semibold text-xs shadow-2xs transition-colors"
+                >
+                  <Navigation className="w-3.5 h-3.5 text-rose-500" />
+                  <span>My GPS Pin ↗</span>
+                </a>
+              )}
+
+              <a
+                href={`https://www.google.com/maps/dir/?api=1&destination=${targetLat},${targetLng}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 font-semibold text-xs shadow-2xs transition-colors ml-auto"
+              >
+                <span>Directions ↗</span>
+              </a>
+            </div>
+          </div>
 
           {/* Interactive Action Buttons */}
           <div className="space-y-2.5 pt-1">

@@ -10,7 +10,7 @@ import { HomeHeader } from "@/components/home/HomeHeader";
 import { DashboardGrid, DashboardItem } from "@/components/home/DashboardGrid";
 import {
   CalendarCheck2, Coffee, Shield,
-  CalendarDays, Wallet, Boxes, Bell, Contact, Banknote, CalendarPlus, TrendingDown, Receipt, FileText, TrendingUp
+  CalendarDays, Wallet, Boxes, Bell, Contact, Banknote, CalendarPlus, TrendingDown, Receipt, FileText, TrendingUp, Megaphone
 } from "lucide-react";
 
 import { AdminDashboardView } from "@/components/admin-dashboard/AdminDashboardView";
@@ -57,7 +57,7 @@ export default function Home() {
         href: "/invoices",
         icon: FileText,
         category: "Finance",
-        badge: "Tax Ready",
+        badge: "Admin Only",
         colorTheme: "blue" as const,
         description: "Generate & track official tax invoices."
       }] : []),
@@ -66,15 +66,16 @@ export default function Home() {
         href: "/admin",
         icon: Shield,
         category: "Admin",
-        badge: "Core",
+        badge: "Admin Only",
         colorTheme: "navy" as const,
         description: "Manage users, permissions & store settings."
       },
       {
-        label: "Fill Timesheet",
+        label: "Manual Timesheet Entry",
         href: "/admin/fill-timesheet",
         icon: CalendarPlus,
         category: "Staff",
+        badge: "Admin Only",
         colorTheme: "purple" as const,
         description: "Bulk update staff attendance & logs."
       }
@@ -122,6 +123,14 @@ export default function Home() {
       description: "View late deduction summaries & details."
     }] : []),
     {
+      label: "Notice Board",
+      href: "/notice-board",
+      icon: Megaphone,
+      category: "Staff",
+      colorTheme: "blue" as const,
+      description: "Company announcements & policy updates."
+    },
+    {
       label: "Calendar",
       href: "/calendar",
       icon: CalendarDays,
@@ -129,14 +138,14 @@ export default function Home() {
       colorTheme: "blue" as const,
       description: "View team leave schedules & holidays."
     },
-    {
+    ...(!isAdmin ? [{
       label: "Timesheet",
       href: "/timesheet",
       icon: CalendarCheck2,
       category: "Staff",
       colorTheme: "cyan" as const,
       description: "Log daily attendance and check-ins."
-    },
+    }] : []),
     {
       label: "All Contacts",
       href: "/contacts",

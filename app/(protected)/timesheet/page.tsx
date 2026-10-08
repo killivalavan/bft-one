@@ -1,4 +1,5 @@
 "use client";
+import { useRouter } from "next/navigation";
 import { format, addDays, isAfter, isBefore, addMonths, startOfDay } from "date-fns";
 import { useEffect, useMemo, useState } from "react";
 import { supabaseClient } from "@/lib/supabaseClient";
@@ -8,7 +9,7 @@ import { ActionTabs } from "@/components/timesheet/ActionTabs";
 import { LogForm } from "@/components/timesheet/LogForm";
 import { PresentStaffModal } from "@/components/timesheet/PresentStaffModal";
 import { Button } from "@/components/ui/Button";
-import { Users, MapPin, RefreshCw, AlertTriangle, ShieldCheck } from "lucide-react";
+import { Users, MapPin, RefreshCw, AlertTriangle, ShieldCheck, ExternalLink } from "lucide-react";
 import { useTenant } from "@/lib/context/TenantContext";
 import { SyncStatusBadge } from "@/components/offline/SyncStatusBadge";
 import { isWithinGeofence, metersBetween, getShopGeofence } from "@/lib/geofence";
@@ -23,6 +24,7 @@ import {
 import { enqueueSyncOperation } from "@/lib/offline/syncEngine";
 
 export default function TimesheetPage() {
+  const router = useRouter();
   const { toast } = useToast();
   const { business } = useTenant();
   const [tab, setTab] = useState<"timesheet" | "leave">("timesheet");
@@ -51,6 +53,12 @@ export default function TimesheetPage() {
       const { data: prof } = await supabaseClient.from("profiles").select("is_admin").eq("id", user.id).maybeSingle();
       const userIsAdmin = !!prof?.is_admin;
       setIsAdmin(userIsAdmin);
+
+      if (userIsAdmin) {
+        // Admins don't need personal timesheet - redirect to manual staff attendance entry
+        router.replace("/admin/fill-timesheet");
+        return;
+      }
 
       const start = format(new Date(today.getFullYear(), today.getMonth(), 1), "yyyy-MM-01");
       const end = format(new Date(today.getFullYear(), today.getMonth() + 1, 0), "yyyy-MM-dd");
@@ -290,6 +298,9 @@ export default function TimesheetPage() {
             <Button size="sm" variant="outline" onClick={() => setShowPresentModal(true)} className="gap-2 bg-white border-slate-200 text-slate-700 hover:bg-slate-50 shadow-2xs">
               <Users size={16} />
               <span className="hidden sm:inline">Present Staff</span>
+              <span className="text-[9px] font-extrabold uppercase bg-blue-100 text-blue-700 px-1.5 py-0.2 rounded border border-blue-200">
+                Admin Only
+              </span>
             </Button>
           )}
         </div>
@@ -353,6 +364,17 @@ export default function TimesheetPage() {
                       ? "Enable GPS location in browser settings to submit attendance."
                       : "Checking your distance to the store..."}
                   </p>
+                  {business?.geofence_lat && business?.geofence_lng && (
+                    <a
+                      href={`https://www.google.com/maps?q=${business.geofence_lat},${business.geofence_lng}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-[10px] font-bold text-sky-700 hover:text-sky-900 hover:underline mt-1"
+                    >
+                      <ExternalLink size={10} />
+                      <span>View store pin on Google Maps ↗</span>
+                    </a>
+                  )}
                 </div>
               </div>
 
