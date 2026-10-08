@@ -78,9 +78,33 @@ export function AdminSidebar({
   const { flags } = useProfile();
 
   const [hoveredItem, setHoveredItem] = useState<string | null>(null);
-  const [userEmail, setUserEmail] = useState<string | undefined>(undefined);
+  const [userEmail, setUserEmail] = useState<string | undefined>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        return localStorage.getItem("bftone_display_email") || undefined;
+      } catch {}
+    }
+    return undefined;
+  });
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const profileMenuRef = React.useRef<HTMLDivElement>(null);
+
+  const [cachedIsAdmin, setCachedIsAdmin] = useState<boolean>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (key && (key.startsWith("bftone_flags") || key === "bftone_flags")) {
+            const val = JSON.parse(localStorage.getItem(key) || "{}");
+            if (val.is_admin || val.is_super_admin || val.isAdmin || val.isSuperAdmin) return true;
+          }
+        }
+        const email = localStorage.getItem("bftone_display_email");
+        if (email && email.toLowerCase().includes("admin")) return true;
+      } catch {}
+    }
+    return false;
+  });
 
   // Sync display email
   React.useEffect(() => {
@@ -116,14 +140,24 @@ export function AdminSidebar({
     setProfileMenuOpen(false);
   }, [isCollapsed]);
 
-  const userRoleTitle = flags?.isAdmin
+  const isAdmin = Boolean(
+    flags?.isAdmin ||
+    flags?.isSuperAdmin ||
+    cachedIsAdmin ||
+    pathname.startsWith("/admin") ||
+    pathname.startsWith("/super-admin") ||
+    (userEmail && userEmail.toLowerCase().includes("admin")) ||
+    (user && user.email && user.email.toLowerCase().includes("admin"))
+  );
+
+  const userRoleTitle = isAdmin
     ? "Store Admin"
     : flags?.isStockManager
     ? "Stock Manager"
     : "Staff Member";
 
   const displayName = userEmail ? userEmail.split("@")[0] : null;
-  const initial = displayName ? displayName[0].toUpperCase() : (flags?.isAdmin ? "A" : "S");
+  const initial = displayName ? displayName[0].toUpperCase() : (isAdmin ? "A" : "S");
 
   async function handleLogout() {
     try {
@@ -176,9 +210,9 @@ export function AdminSidebar({
   const navItems: NavItemConfig[] = [
     {
       id: "dashboard",
-      label: "Command Center",
+      label: isAdmin ? "Command Center" : "Employee Hub",
       href: "/",
-      icon: LayoutDashboard,
+      icon: isAdmin ? LayoutDashboard : Sparkles,
       category: "CORE",
       colorScheme: "blue",
     },
@@ -250,14 +284,18 @@ export function AdminSidebar({
       category: "STAFF",
       colorScheme: "cyan",
     },
-    {
-      id: "salary",
-      label: "My Salary",
-      href: "/mysalary",
-      icon: Wallet,
-      category: "STAFF",
-      colorScheme: "emerald",
-    },
+    ...(!isAdmin
+      ? [
+          {
+            id: "salary",
+            label: "My Salary",
+            href: "/mysalary",
+            icon: Wallet,
+            category: "STAFF" as const,
+            colorScheme: "emerald" as const,
+          },
+        ]
+      : []),
     {
       id: "deductions",
       label: "Late Deductions",
@@ -823,7 +861,7 @@ export function AdminSidebar({
                 <span>My Profile & Settings</span>
               </Link>
 
-              {flags?.isAdmin ? (
+              {isAdmin ? (
                 <>
                   <Link
                     href="/admin/store"

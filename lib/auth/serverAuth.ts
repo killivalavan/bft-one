@@ -67,7 +67,10 @@ export async function authenticateRequest(
   const authHeader = request.headers.get("authorization");
   let token = "";
   if (authHeader && authHeader.toLowerCase().startsWith("bearer ")) {
-    token = authHeader.substring(7).trim();
+    const candidate = authHeader.substring(7).trim();
+    if (candidate && candidate !== "null" && candidate !== "undefined") {
+      token = candidate;
+    }
   }
 
   // Fallback to cookie if present

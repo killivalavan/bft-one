@@ -7,7 +7,9 @@ import { UserList } from "@/components/admin/UserList";
 import { generatePayslipPdf } from "@/lib/utils/payslip";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { useTenant } from "@/lib/context/TenantContext";
-import { Users, Loader2 } from "lucide-react";
+import { Users, Loader2, AlertTriangle, Copy, Check, ExternalLink, Bell } from "lucide-react";
+import { NoticeBoardModal } from "@/components/admin/NoticeBoardModal";
+import { Button } from "@/components/ui/Button";
 
 type Profile = {
   id: string;
@@ -22,6 +24,20 @@ type Profile = {
   dob?: string | null;
   contact_number?: string | null;
   emergency_contact_number?: string | null;
+  first_name?: string | null;
+  last_name?: string | null;
+  full_name?: string | null;
+  aadhaar_number?: string | null;
+  employee_id?: string | null;
+  designation?: string | null;
+  department?: string | null;
+  date_of_joining?: string | null;
+  joining_salary_cents?: number | null;
+  increment_amount_cents?: number | null;
+  increment_frequency_months?: number | null;
+  next_increment_date?: string | null;
+  increment_policy_note?: string | null;
+  blood_group?: string | null;
 };
 
 export default function UsersAndRolesPage() {
@@ -32,6 +48,9 @@ export default function UsersAndRolesPage() {
   const [totalPayroll, setTotalPayroll] = useState(0);
   const [totalNetPayroll, setTotalNetPayroll] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [noticeModalOpen, setNoticeModalOpen] = useState(false);
+  const [migrationNeeded, setMigrationNeeded] = useState(false);
+  const [copiedSql, setCopiedSql] = useState(false);
 
   const [confirmState, setConfirmState] = useState<{
     open: boolean;
@@ -47,7 +66,7 @@ export default function UsersAndRolesPage() {
     // Fetch profiles scoped to business
     let profileQuery = supabaseClient
       .from("profiles")
-      .select("id,email,is_admin,is_stock_manager,in_time,base_salary_cents,fixed_allowance_cents,per_day_salary_cents,age,dob,contact_number,emergency_contact_number")
+      .select("id,email,first_name,last_name,full_name,aadhaar_number,is_admin,is_stock_manager,in_time,base_salary_cents,fixed_allowance_cents,per_day_salary_cents,age,dob,contact_number,emergency_contact_number,employee_id,designation,department,date_of_joining,joining_salary_cents,increment_amount_cents,increment_frequency_months,next_increment_date,increment_policy_note,blood_group")
       .order("email");
     if (bizId) {
       profileQuery = profileQuery.eq("business_id", bizId);
@@ -55,10 +74,11 @@ export default function UsersAndRolesPage() {
     let { data: us, error } = await profileQuery;
 
     if (error) {
-      console.warn("Full fetch failed, trying fallback...", error);
+      console.warn("Full fetch failed (missing columns in profiles table), using safe fallback...", error);
+      setMigrationNeeded(true);
       let fbQuery = supabaseClient
         .from("profiles")
-        .select("id,email,is_admin,is_stock_manager,in_time,base_salary_cents,per_day_salary_cents,age,contact_number,emergency_contact_number")
+        .select("id,email,full_name,is_admin,is_stock_manager,in_time,base_salary_cents,fixed_allowance_cents,per_day_salary_cents,age,dob,contact_number,emergency_contact_number")
         .order("email");
       if (bizId) {
         fbQuery = fbQuery.eq("business_id", bizId);
@@ -72,6 +92,8 @@ export default function UsersAndRolesPage() {
       } else {
         us = usFallback as any;
       }
+    } else {
+      setMigrationNeeded(false);
     }
 
     const allUsers = us || [];
@@ -257,21 +279,86 @@ export default function UsersAndRolesPage() {
   }
 
   async function updateFullProfile(id: string, updates: any) {
+    const bizId = business?.id;
+
+    // Multi-tenant check: ensure employee_id is unique within this store
+    if (updates.employee_id && typeof updates.employee_id === "string" && updates.employee_id.trim()) {
+      const empIdTrimmed = updates.employee_id.trim();
+      let dupQuery = supabaseClient
+        .from("profiles")
+        .select("id, email, first_name, full_name")
+        .neq("id", id)
+        .ilike("employee_id", empIdTrimmed);
+
+      if (bizId) {
+        dupQuery = dupQuery.eq("business_id", bizId);
+      }
+
+      const { data: existingDup } = await dupQuery.maybeSingle();
+      if (existingDup) {
+        const dupName = existingDup.first_name || existingDup.full_name || existingDup.email;
+        toast({
+          title: "Duplicate Employee ID",
+          description: `Employee ID "${empIdTrimmed}" is already assigned to ${dupName} in this store. Each staff member in your store must have a unique ID.`,
+          variant: "error",
+        });
+        return;
+      }
+    }
+
     const { error } = await supabaseClient.from('profiles').update(updates).eq('id', id);
     if (error) {
-      console.warn("Update failed, trying fallback...", error.message);
-      const { dob, age, ...safeUpdates } = updates;
+      if (
+        error.code === "23505" ||
+        error.message?.toLowerCase().includes("duplicate") ||
+        error.message?.toLowerCase().includes("unique")
+      ) {
+        toast({
+          title: "Duplicate Employee ID Conflict",
+          description: `Employee ID "${updates.employee_id}" is already in use by another user in this store. Please enter a unique Employee ID.`,
+          variant: "error",
+        });
+        return;
+      }
+
+      console.warn("Update failed (likely unmigrated columns), trying safe fallback...", error.message);
+      // Strip columns that might not exist in profiles table yet
+      const unmigratedCols = [
+        'first_name',
+        'last_name',
+        'aadhaar_number',
+        'blood_group',
+        'employee_id',
+        'designation',
+        'department',
+        'date_of_joining',
+        'joining_salary_cents',
+        'increment_amount_cents',
+        'increment_frequency_months',
+        'next_increment_date',
+        'increment_policy_note',
+        'dob',
+        'age',
+      ];
+      const safeUpdates = { ...updates };
+      unmigratedCols.forEach((col) => delete safeUpdates[col]);
+
       const { error: errFallback } = await supabaseClient.from('profiles').update(safeUpdates).eq('id', id);
 
       if (errFallback) {
         toast({ title: "Update failed", description: errFallback.message, variant: "error" });
       } else {
-        toast({ title: "Updated (Partial)", description: "Saved details, but DOB failed (missing DB column)", variant: "error" });
+        setMigrationNeeded(true);
+        toast({
+          title: "Base Profile Saved",
+          description: "Details saved! To persist 'blood_group' and employee hub data, please run the SQL script in Supabase.",
+          variant: "warning",
+        });
         await load();
       }
       return;
     }
-    toast({ title: "Profile updated", variant: "success" });
+    toast({ title: "Profile updated successfully", variant: "success" });
     await load();
   }
 
@@ -358,14 +445,25 @@ export default function UsersAndRolesPage() {
   return (
     <div className="min-h-screen pb-20 bg-[#F8FAFC]">
       <div className="max-w-6xl mx-auto p-4 md:p-6 space-y-6">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center shadow-xs">
-            <Users size={20} />
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center shadow-xs">
+              <Users size={20} />
+            </div>
+            <div>
+              <h1 className="text-2xl sm:text-3xl font-bold text-zinc-900 tracking-tight">Users & Roles</h1>
+              <p className="text-xs text-zinc-500 mt-0.5">{business?.name || "Store Operations"} — Staff accounts, permissions & salary structure</p>
+            </div>
           </div>
-          <div>
-            <h1 className="text-2xl sm:text-3xl font-bold text-zinc-900 tracking-tight">Users & Roles</h1>
-            <p className="text-xs text-zinc-500 mt-0.5">{business?.name || "Store Operations"} — Staff accounts, permissions & salary structure</p>
-          </div>
+
+          <Button
+            size="sm"
+            onClick={() => setNoticeModalOpen(true)}
+            className="bg-white hover:bg-blue-50 text-blue-700 border border-blue-200 font-semibold text-xs gap-1.5 shadow-2xs self-start sm:self-auto h-9"
+          >
+            <Bell size={14} className="text-blue-600" />
+            <span>📢 Manage Notice Board</span>
+          </Button>
         </div>
 
         {loading ? (
@@ -375,6 +473,62 @@ export default function UsersAndRolesPage() {
           </div>
         ) : (
           <>
+            {/* Database Migration Alert Banner */}
+            {migrationNeeded && (
+              <div className="bg-gradient-to-r from-amber-50 via-white to-orange-50 border border-amber-300 rounded-2xl p-4 shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-in fade-in">
+                <div className="flex items-start gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-2xs mt-0.5">
+                    <AlertTriangle size={18} />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-sm font-bold text-amber-950">
+                        Supabase Database Migration Required
+                      </span>
+                      <span className="text-[10px] font-semibold bg-amber-200/90 text-amber-900 px-2 py-0.5 rounded-full">
+                        Action Required
+                      </span>
+                    </div>
+                    <p className="text-xs text-amber-800 mt-1 max-w-2xl leading-relaxed">
+                      The <strong>blood_group</strong> and Employee Hub columns have not been added to your Supabase <code>profiles</code> table yet. Run the SQL script in your Supabase Dashboard to enable saving blood groups, employee IDs, and increments.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      const sql = `ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS first_name TEXT, ADD COLUMN IF NOT EXISTS last_name TEXT, ADD COLUMN IF NOT EXISTS aadhaar_number TEXT, ADD COLUMN IF NOT EXISTS blood_group TEXT, ADD COLUMN IF NOT EXISTS employee_id TEXT, ADD COLUMN IF NOT EXISTS designation TEXT, ADD COLUMN IF NOT EXISTS department TEXT, ADD COLUMN IF NOT EXISTS date_of_joining DATE, ADD COLUMN IF NOT EXISTS joining_salary_cents BIGINT;\nCREATE UNIQUE INDEX IF NOT EXISTS idx_profiles_business_employee_id ON public.profiles(business_id, employee_id) WHERE employee_id IS NOT NULL AND employee_id != '';`;
+                      navigator.clipboard.writeText(sql);
+                      setCopiedSql(true);
+                      setTimeout(() => setCopiedSql(false), 3000);
+                      toast({
+                        title: "SQL Copied to Clipboard!",
+                        description: "Paste it into the Supabase SQL editor and click Run.",
+                        variant: "success",
+                      });
+                    }}
+                    className="bg-white hover:bg-amber-100 text-amber-900 border border-amber-300 font-semibold text-xs h-8.5 gap-1.5 shadow-2xs"
+                  >
+                    {copiedSql ? <Check size={13} className="text-emerald-600" /> : <Copy size={13} />}
+                    <span>{copiedSql ? "Copied!" : "Copy SQL"}</span>
+                  </Button>
+
+                  <a
+                    href="https://supabase.com/dashboard/project/ekwiorjhcwrhrpkovyvl/sql/new"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1.5 bg-amber-600 hover:bg-amber-700 text-white font-semibold text-xs h-8.5 px-3 rounded-lg shadow-2xs transition-colors"
+                  >
+                    <span>Open SQL Editor</span>
+                    <ExternalLink size={12} />
+                  </a>
+                </div>
+              </div>
+            )}
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="bg-white rounded-2xl border border-zinc-200 shadow-xs p-5">
                 <div className="text-sm font-medium text-zinc-500">Total Salary Structure</div>
@@ -411,6 +565,11 @@ export default function UsersAndRolesPage() {
           }}
           onCancel={() => setConfirmState({ open: false, title: "", desc: "", action: undefined })}
           confirmLabel="Delete User"
+        />
+
+        <NoticeBoardModal
+          open={noticeModalOpen}
+          onClose={() => setNoticeModalOpen(false)}
         />
       </div>
     </div>

@@ -13,7 +13,27 @@ const DEFAULT_BUSINESS_ID = "a0000000-0000-0000-0000-000000000001";
 
 export function useProfile() {
     const { user, loading: userLoading } = useUser();
-    const [flags, setFlags] = useState<UserFlags | null>(null);
+    const [flags, setFlags] = useState<UserFlags | null>(() => {
+        if (typeof window === 'undefined') return null;
+        try {
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                if (key && (key.startsWith('bftone_flags') || key === 'bftone_flags')) {
+                    const cached = JSON.parse(localStorage.getItem(key) || '{}');
+                    if (cached && (cached.is_admin !== undefined || cached.isAdmin !== undefined)) {
+                        const isRootOwner = cached.email?.toLowerCase() === 'admin@seyalpro.com';
+                        return {
+                            isAdmin: !!(cached.is_admin ?? cached.isAdmin),
+                            isStockManager: !!(cached.is_stock_manager ?? cached.isStockManager),
+                            isSuperAdmin: isRootOwner || !!((cached.is_super_admin ?? cached.isSuperAdmin) && !cached.business_id),
+                            businessId: cached.business_id || cached.businessId || DEFAULT_BUSINESS_ID,
+                        };
+                    }
+                }
+            }
+        } catch { }
+        return null;
+    });
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {

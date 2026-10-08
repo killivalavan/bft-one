@@ -95,27 +95,36 @@ export default function Navbar({
   const initial = displayName ? displayName[0].toUpperCase() : "?";
   const isSuperAdminView = flags?.isSuperAdmin && pathname.startsWith("/super-admin");
 
+  const isAdmin = Boolean(
+    flags?.isAdmin ||
+    flags?.isSuperAdmin ||
+    pathname.startsWith("/admin") ||
+    pathname.startsWith("/super-admin") ||
+    (userEmail && userEmail.toLowerCase().includes("admin")) ||
+    (user && user.email && user.email.toLowerCase().includes("admin"))
+  );
+
   // Standard Desktop / Mobile Navigation Links
   const allLinks = isSuperAdminView
     ? [
       { href: "/super-admin", label: "Super Admin Hub", icon: Globe },
     ]
     : [
-      { href: "/", label: "Dashboard", icon: Home },
-      ...(flags?.isAdmin || flags?.isStockManager || isModuleEnabled("stock")
+      { href: "/", label: isAdmin ? "Dashboard" : "Employee Hub", icon: Home },
+      ...(isAdmin || flags?.isStockManager || isModuleEnabled("stock")
         ? [{ href: "/inventory", label: "Inventory", icon: Boxes }]
         : []),
-      ...(flags?.isAdmin
+      ...(isAdmin
         ? [
           ...(isModuleEnabled("invoices") ? [{ href: "/invoices", label: "Invoices", icon: FileText }] : []),
           { href: "/admin/fill-timesheet", label: "Fill Timesheet", icon: CalendarCheck2 }
         ]
         : []),
-      ...(flags?.isAdmin || isModuleEnabled("sales")
+      ...(isAdmin || isModuleEnabled("sales")
         ? [{ href: "/daily-sales", label: "Daily Sales", icon: TrendingUp }]
         : []),
       { href: "/calendar", label: "Calendar", icon: CalendarDays },
-      ...(flags?.isAdmin
+      ...(isAdmin
         ? [{ href: "/admin", label: "Admin Panel", icon: Shield }]
         : isModuleEnabled("salary") ? [{ href: "/mysalary", label: "My Salary", icon: Wallet }] : []),
     ];

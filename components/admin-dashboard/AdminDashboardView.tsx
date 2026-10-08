@@ -374,6 +374,16 @@ export function AdminDashboardView({ baseItems }: AdminDashboardViewProps) {
               )}
             </button>
 
+            {/* Preview Employee Hub */}
+            <Link
+              href="/?previewStaff=me"
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 transition-all shadow-2xs"
+              title="Preview Employee Hub (Staff View)"
+            >
+              <Sparkles size={13} className="text-blue-600" />
+              <span>Employee Hub</span>
+            </Link>
+
             {/* Quick "+ New POS Bill" Button */}
             <Link
               href="/billing"

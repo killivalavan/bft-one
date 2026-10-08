@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { supabaseClient } from "@/lib/supabaseClient";
 import { useUser } from "@/lib/hooks/useUser";
@@ -13,12 +14,22 @@ import {
 } from "lucide-react";
 
 import { AdminDashboardView } from "@/components/admin-dashboard/AdminDashboardView";
+import { EmployeeHubView } from "@/components/employee-hub/EmployeeHubView";
 
 export default function Home() {
-  const { user } = useUser();
+  const { user, loading: userLoading } = useUser();
   const { flags, loading: profileLoading } = useProfile();
   const { isModuleEnabled } = useTenant();
   const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [previewStaffId, setPreviewStaffId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const pStaff = params.get("previewStaff");
+      if (pStaff) setPreviewStaffId(pStaff);
+    }
+  }, []);
 
   useEffect(() => {
     if (user?.email) {
@@ -31,9 +42,16 @@ export default function Home() {
     }
   }, [user]);
 
+  const isAdmin = Boolean(
+    flags?.isAdmin ||
+    flags?.isSuperAdmin ||
+    (userEmail && userEmail.toLowerCase().includes("admin")) ||
+    (user && user.email && user.email.toLowerCase().includes("admin"))
+  );
+
   // Dashboard Items with Deep Navy + Blue & Semantic Color Mapping
   const baseItems: DashboardItem[] = [
-    ...(flags?.isAdmin ? [
+    ...(isAdmin ? [
       ...(isModuleEnabled("invoices") ? [{
         label: "Invoice Generator",
         href: "/invoices",
@@ -61,7 +79,7 @@ export default function Home() {
         description: "Bulk update staff attendance & logs."
       }
     ] : []),
-    ...(userEmail && (flags ? !flags.isAdmin : true) ? [{
+    ...(userEmail && !isAdmin ? [{
       label: "My Salary",
       href: "/mysalary",
       icon: Wallet,
@@ -156,8 +174,66 @@ export default function Home() {
     }
   ];
 
+  // While auth state is resolving, render a smooth minimal loading screen
+  if (userLoading || profileLoading) {
+    return (
+      <div className="min-h-[70vh] flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-8 h-8 border-3 border-blue-600 border-t-transparent rounded-full animate-spin" />
+          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Loading workspace...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // If user is not authenticated, show sign-in prompt
+  if (!user) {
+    return (
+      <div className="min-h-[70vh] flex items-center justify-center p-4">
+        <div className="max-w-md w-full bg-white border border-slate-200 rounded-3xl p-8 text-center shadow-lg space-y-4">
+          <div className="w-14 h-14 mx-auto rounded-2xl bg-blue-50 border border-blue-200 flex items-center justify-center text-blue-600">
+            <Shield className="w-7 h-7" />
+          </div>
+          <h2 className="text-xl font-bold text-slate-900">Sign in to SeyalPro</h2>
+          <p className="text-sm text-slate-500">
+            Please sign in with your employee account to view your dashboard.
+          </p>
+          <div className="pt-2">
+            <Link
+              href="/login"
+              className="inline-flex items-center justify-center w-full px-5 py-3 rounded-xl bg-blue-600 text-white font-semibold text-sm hover:bg-blue-700 transition shadow-sm"
+            >
+              Go to Login
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // If previewing as staff or Admin viewing in employee hub preview mode:
+  if (previewStaffId) {
+    const targetId =
+      previewStaffId === "me" || previewStaffId === "current"
+        ? (user?.id || null)
+        : previewStaffId;
+    return (
+      <EmployeeHubView
+        previewUserId={targetId}
+        onExitPreview={() => {
+          setPreviewStaffId(null);
+          if (typeof window !== "undefined") {
+            const url = new URL(window.location.href);
+            url.searchParams.delete("previewStaff");
+            window.history.replaceState({}, "", url.toString());
+          }
+        }}
+      />
+    );
+  }
+
   // If Admin Logged In: Render PetPooja-inspired Executive Store Command Center with left slide navbar
-  if (flags?.isAdmin) {
+  if (isAdmin) {
     return (
       <div className="min-h-screen">
         <AdminDashboardView baseItems={baseItems} />
@@ -165,11 +241,6 @@ export default function Home() {
     );
   }
 
-  // Standard Staff View
-  return (
-    <div className="min-h-screen pb-20 space-y-6">
-      <HomeHeader name={userEmail} />
-      <DashboardGrid items={baseItems} />
-    </div>
-  );
+  // Dedicated Employee / Staff Landing Page ("My journey with the company")
+  return <EmployeeHubView />;
 }
