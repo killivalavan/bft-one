@@ -16,6 +16,7 @@ import { generateBillPdf, BillPdfData } from "@/lib/utils/billPdf";
 import { putItem, STORES, LocalInvoice } from "@/lib/offline/db";
 import { BakerProduct, INITIAL_BAKER_PRODUCTS, capitalizeWords } from "../products/page";
 import { formatCafeName, DEFAULT_BAKER_SAMPLE_STORES, sanitizeBakerStores } from "@/lib/utils/bakerUtils";
+import { fetchB2BClients, saveB2BClient, B2B_CUSTOMERS_UPDATED_EVENT } from "@/lib/services/b2bClients";
 
 import { useSearchParams } from "next/navigation";
 
@@ -90,25 +91,9 @@ export default function BakerDispatchPage() {
       if (storedCusts) {
         const parsed = JSON.parse(storedCusts);
         const cleaned = sanitizeBakerStores(parsed);
-        if (cleaned.length !== parsed.length) {
-          localStorage.setItem(`bftone_customers_${bizId}`, JSON.stringify(cleaned));
-        }
-        const effective = cleaned.length > 0 ? cleaned : DEFAULT_BAKER_SAMPLE_STORES;
-        setStores(effective);
-        setSelectedStoreId(effective[0]?.id || "");
-      } else {
-        const fallback = bizId !== "default" ? localStorage.getItem("bftone_customers_default") : null;
-        if (fallback) {
-          const parsed = JSON.parse(fallback);
-          const cleaned = sanitizeBakerStores(parsed);
-          const effective = cleaned.length > 0 ? cleaned : DEFAULT_BAKER_SAMPLE_STORES;
-          setStores(effective);
-          setSelectedStoreId(effective[0]?.id || "");
-          localStorage.setItem(`bftone_customers_${bizId}`, JSON.stringify(cleaned));
-        } else {
-          setStores(DEFAULT_BAKER_SAMPLE_STORES);
-          localStorage.setItem(`bftone_customers_${bizId}`, JSON.stringify(DEFAULT_BAKER_SAMPLE_STORES));
-          setSelectedStoreId(DEFAULT_BAKER_SAMPLE_STORES[0].id);
+        if (cleaned.length > 0) {
+          setStores(cleaned);
+          setSelectedStoreId((prev) => prev || cleaned[0]?.id || "");
         }
       }
 
@@ -118,6 +103,23 @@ export default function BakerDispatchPage() {
         setSavedInvoices(JSON.parse(storedInvs));
       }
     } catch {}
+
+    // Fetch live B2B clients from server
+    if (bizId && bizId !== "default") {
+      fetchB2BClients(bizId).then((serverClients) => {
+        if (serverClients && serverClients.length > 0) {
+          setStores(serverClients);
+          setSelectedStoreId((prev) => prev || serverClients[0]?.id || "");
+        }
+      });
+    }
+
+    const handleStoresUpdated = (e: any) => {
+      if (e?.detail?.clients) {
+        setStores(e.detail.clients);
+      }
+    };
+    window.addEventListener(B2B_CUSTOMERS_UPDATED_EVENT, handleStoresUpdated);
 
     // Fetch live from Supabase
     if (business?.id) {
@@ -146,6 +148,10 @@ export default function BakerDispatchPage() {
           }
         });
     }
+
+    return () => {
+      window.removeEventListener(B2B_CUSTOMERS_UPDATED_EVENT, handleStoresUpdated);
+    };
   }, [bizId, business?.id]);
 
   const selectedStore = useMemo(() => {
@@ -253,9 +259,12 @@ export default function BakerDispatchPage() {
     const updated = [newSt, ...stores];
     setStores(updated);
     setSelectedStoreId(newSt.id);
-    try {
-      localStorage.setItem(`bftone_customers_${bizId}`, JSON.stringify(updated));
-    } catch {}
+    saveB2BClient(bizId, {
+      id: newSt.id,
+      name: newSt.name,
+      phone: newSt.phone,
+      address: newSt.address,
+    });
 
     setIsAddStoreOpen(false);
     setNewStoreName("");

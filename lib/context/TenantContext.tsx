@@ -120,7 +120,11 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
   async function fetchTenant() {
     try {
       // 1. Authenticated User Resolution (direct session check to eliminate React state race)
-      const { data: { session } } = await supabaseClient.auth.getSession();
+      const sessionPromise = supabaseClient.auth.getSession();
+      const timeoutPromise = new Promise<{ data: { session: null } }>((resolve) =>
+        setTimeout(() => resolve({ data: { session: null } }), 5000)
+      );
+      const { data: { session } } = await Promise.race([sessionPromise, timeoutPromise]);
       const currentUser = session?.user || user;
 
       if (currentUser) {

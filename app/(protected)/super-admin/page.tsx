@@ -1320,7 +1320,7 @@ export default function SuperAdminPage() {
               <tbody className="divide-y divide-[#E2E8F0] text-xs sm:text-sm bg-white">
                 {filteredBusinesses.map((biz) => {
                   const isProtectedRoot = biz.id === "a0000000-0000-0000-0000-000000000001";
-                  const enabledCount = Object.values(biz.enabled_modules || {}).filter(Boolean).length;
+                  const enabledCount = Object.entries(biz.enabled_modules || {}).filter(([k, v]) => !k.startsWith('_') && Boolean(v)).length;
                   const totalModules = MODULE_DEFINITIONS.length;
                   const openCount = biz.open_issues_count || 0;
                   const totalCount = biz.total_issues_count || 0;
@@ -1529,7 +1529,7 @@ export default function SuperAdminPage() {
           <div className="p-6 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
             {filteredBusinesses.map((biz) => {
               const isProtectedRoot = biz.id === "a0000000-0000-0000-0000-000000000001";
-              const enabledCount = Object.values(biz.enabled_modules || {}).filter(Boolean).length;
+              const enabledCount = Object.entries(biz.enabled_modules || {}).filter(([k, v]) => !k.startsWith('_') && Boolean(v)).length;
               const openCount = biz.open_issues_count || 0;
 
               return (

@@ -13,6 +13,7 @@ import {
   Search, ArrowRight, Store, DollarSign, Send, Filter
 } from "lucide-react";
 import { formatCafeName } from "@/lib/utils/bakerUtils";
+import { fetchB2BClients, B2B_CUSTOMERS_UPDATED_EVENT } from "@/lib/services/b2bClients";
 
 export interface BakerPaymentRecord {
   id: string;
@@ -67,6 +68,22 @@ export default function BakerPaymentsPage() {
       }
     } catch {}
 
+    // Fetch live B2B clients from server
+    if (bizId && bizId !== "default") {
+      fetchB2BClients(bizId).then((serverClients) => {
+        if (serverClients && serverClients.length > 0) {
+          setStores(serverClients);
+        }
+      });
+    }
+
+    const handleStoresUpdated = (e: any) => {
+      if (e?.detail?.clients) {
+        setStores(e.detail.clients);
+      }
+    };
+    window.addEventListener(B2B_CUSTOMERS_UPDATED_EVENT, handleStoresUpdated);
+
     if (business?.id) {
       supabaseClient.from("invoices").select("*").eq("business_id", business.id).then(({ data }) => {
         if (data && data.length > 0) {
@@ -85,6 +102,10 @@ export default function BakerPaymentsPage() {
         }
       });
     }
+
+    return () => {
+      window.removeEventListener(B2B_CUSTOMERS_UPDATED_EVENT, handleStoresUpdated);
+    };
   }, [bizId, business?.id]);
 
   useEffect(() => {

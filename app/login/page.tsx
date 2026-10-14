@@ -30,53 +30,69 @@ export default function LoginPage() {
         setLoading(true);
 
         const normalizedEmail = email.toLowerCase().trim();
-        const { data: authData, error } = await supabaseClient.auth.signInWithPassword({
-            email: normalizedEmail,
-            password,
-        });
 
-        if (error) {
-            setError(error.message);
-            setLoading(false);
-            return;
-        }
+        try {
+            const loginPromise = supabaseClient.auth.signInWithPassword({
+                email: normalizedEmail,
+                password,
+            });
+            const timeoutPromise = new Promise<any>((_, reject) =>
+                setTimeout(() => reject(new Error("Login timed out. Please check your internet connection and try again.")), 10000)
+            );
 
-        try { localStorage.setItem('bftone_display_email', normalizedEmail); } catch { }
-        try { localStorage.removeItem('bftone_tenant_cache'); } catch { }
+            const { data: authData, error } = await Promise.race([loginPromise, timeoutPromise]);
 
-        // Check if user is Super Admin -> Require 2FA on Super Admin Portal
-        if (normalizedEmail === 'admin@seyalpro.com') {
-            window.location.href = "/super-admin/login";
-            return;
-        }
+            if (error) {
+                setError(error.message);
+                setLoading(false);
+                return;
+            }
 
-        if (authData?.user) {
-            const { data: prof } = await supabaseClient
-                .from('profiles')
-                .select('is_super_admin, business_id')
-                .eq('id', authData.user.id)
-                .maybeSingle();
+            try { localStorage.setItem('bftone_display_email', normalizedEmail); } catch { }
+            try { localStorage.removeItem('bftone_tenant_cache'); } catch { }
 
-            if (prof?.is_super_admin) {
+            // Check if user is Super Admin -> Require 2FA on Super Admin Portal
+            if (normalizedEmail === 'admin@seyalpro.com') {
                 window.location.href = "/super-admin/login";
                 return;
             }
 
-            if (prof?.business_id) {
-                const { data: biz } = await supabaseClient
-                    .from('businesses')
-                    .select('slug')
-                    .eq('id', prof.business_id)
-                    .maybeSingle();
+            if (authData?.user) {
+                try {
+                    const { data: prof } = await supabaseClient
+                        .from('profiles')
+                        .select('is_super_admin, business_id')
+                        .eq('id', authData.user.id)
+                        .maybeSingle();
 
-                if (biz?.slug) {
-                    document.cookie = `tenant_slug=${biz.slug}; path=/; max-age=${60 * 60 * 24 * 30}; SameSite=Lax`;
+                    if (prof?.is_super_admin) {
+                        window.location.href = "/super-admin/login";
+                        return;
+                    }
+
+                    if (prof?.business_id) {
+                        const { data: biz } = await supabaseClient
+                            .from('businesses')
+                            .select('slug')
+                            .eq('id', prof.business_id)
+                            .maybeSingle();
+
+                        if (biz?.slug) {
+                            document.cookie = `tenant_slug=${biz.slug}; path=/; max-age=${60 * 60 * 24 * 30}; SameSite=Lax`;
+                        }
+                    }
+                } catch (bizErr) {
+                    console.warn("Tenant profile resolve error:", bizErr);
                 }
             }
-        }
 
-        // Standard shop user/admin redirect to shop dashboard
-        window.location.href = "/";
+            // Standard shop user/admin redirect to shop dashboard
+            window.location.href = "/";
+        } catch (err: any) {
+            console.error("Login failure:", err);
+            setError(err?.message || "An unexpected error occurred during login.");
+            setLoading(false);
+        }
     }
 
     return (

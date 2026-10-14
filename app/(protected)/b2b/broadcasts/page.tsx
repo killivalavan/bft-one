@@ -29,6 +29,7 @@ import {
 } from "lucide-react";
 import { BakerProduct, INITIAL_BAKER_PRODUCTS } from "../products/page";
 import { formatCafeName, DEFAULT_BAKER_SAMPLE_STORES, sanitizeBakerStores } from "@/lib/utils/bakerUtils";
+import { fetchB2BClients, B2B_CUSTOMERS_UPDATED_EVENT } from "@/lib/services/b2bClients";
 
 interface ClientStore {
   id: string;
@@ -94,27 +95,9 @@ export default function BakerBroadcastsPage() {
       if (storedCusts) {
         const parsed = JSON.parse(storedCusts);
         const cleaned = sanitizeBakerStores(parsed);
-        if (cleaned.length !== parsed.length) {
-          localStorage.setItem(`bftone_customers_${bizId}`, JSON.stringify(cleaned));
-        }
-        const effective = cleaned.length > 0 ? cleaned : DEFAULT_BAKER_SAMPLE_STORES;
-        setStores(
-          effective.map((c: any) => ({
-            id: c.id,
-            name: c.name,
-            phone: c.phone || "",
-            address: c.address || "",
-            business_id: c.business_id,
-          }))
-        );
-      } else {
-        const fallback = bizId !== "default" ? localStorage.getItem("bftone_customers_default") : null;
-        if (fallback) {
-          const parsed = JSON.parse(fallback);
-          const cleaned = sanitizeBakerStores(parsed);
-          const effective = cleaned.length > 0 ? cleaned : DEFAULT_BAKER_SAMPLE_STORES;
+        if (cleaned.length > 0) {
           setStores(
-            effective.map((c: any) => ({
+            cleaned.map((c: any) => ({
               id: c.id,
               name: c.name,
               phone: c.phone || "",
@@ -122,13 +105,43 @@ export default function BakerBroadcastsPage() {
               business_id: c.business_id,
             }))
           );
-          localStorage.setItem(`bftone_customers_${bizId}`, JSON.stringify(cleaned));
-        } else {
-          setStores(DEFAULT_BAKER_SAMPLE_STORES);
-          localStorage.setItem(`bftone_customers_${bizId}`, JSON.stringify(DEFAULT_BAKER_SAMPLE_STORES));
         }
       }
+    } catch {}
 
+    // Fetch live B2B clients from server
+    if (bizId && bizId !== "default") {
+      fetchB2BClients(bizId).then((serverClients) => {
+        if (serverClients && serverClients.length > 0) {
+          setStores(
+            serverClients.map((c: any) => ({
+              id: c.id,
+              name: c.name,
+              phone: c.phone || "",
+              address: c.address || "",
+              business_id: c.business_id,
+            }))
+          );
+        }
+      });
+    }
+
+    const handleStoresUpdated = (e: any) => {
+      if (e?.detail?.clients) {
+        setStores(
+          e.detail.clients.map((c: any) => ({
+            id: c.id,
+            name: c.name,
+            phone: c.phone || "",
+            address: c.address || "",
+            business_id: c.business_id,
+          }))
+        );
+      }
+    };
+    window.addEventListener(B2B_CUSTOMERS_UPDATED_EVENT, handleStoresUpdated);
+
+    try {
       const storedProds = localStorage.getItem(`bftone_baker_products_${bizId}`);
       if (storedProds) {
         const parsed = JSON.parse(storedProds);
@@ -154,6 +167,10 @@ export default function BakerBroadcastsPage() {
         }
       }
     } catch {}
+
+    return () => {
+      window.removeEventListener(B2B_CUSTOMERS_UPDATED_EVENT, handleStoresUpdated);
+    };
   }, [bizId]);
 
   const saveBroadcasts = (items: BakerBroadcast[]) => {

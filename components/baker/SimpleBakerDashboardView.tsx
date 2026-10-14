@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { capitalizeWords } from "@/app/(protected)/b2b/products/page";
 import { formatCafeName, DEFAULT_BAKER_SAMPLE_STORES, sanitizeBakerStores } from "@/lib/utils/bakerUtils";
+import { fetchB2BClients, saveB2BClient, B2B_CUSTOMERS_UPDATED_EVENT } from "@/lib/services/b2bClients";
 import {
   STORES,
   getItemsByTenant,
@@ -108,31 +109,36 @@ export function SimpleBakerDashboardView({ onSwitchToCafeMode }: SimpleBakerDash
       if (storedCusts) {
         const parsed = JSON.parse(storedCusts);
         const cleaned = sanitizeBakerStores(parsed);
-        if (cleaned.length !== parsed.length) {
-          localStorage.setItem(`bftone_customers_${bizId}`, JSON.stringify(cleaned));
-        }
-        const effective = cleaned.length > 0 ? cleaned : DEFAULT_BAKER_SAMPLE_STORES;
-        setStores(effective);
-        setSelectedStoreId(effective[0]?.id || "");
-      } else {
-        const fallback = bizId !== "default" ? localStorage.getItem("bftone_customers_default") : null;
-        if (fallback) {
-          const parsed = JSON.parse(fallback);
-          const cleaned = sanitizeBakerStores(parsed);
-          const effective = cleaned.length > 0 ? cleaned : DEFAULT_BAKER_SAMPLE_STORES;
-          setStores(effective);
-          setSelectedStoreId(effective[0]?.id || "");
-          localStorage.setItem(`bftone_customers_${bizId}`, JSON.stringify(cleaned));
-        } else {
-          setStores(DEFAULT_BAKER_SAMPLE_STORES);
-          localStorage.setItem(`bftone_customers_${bizId}`, JSON.stringify(DEFAULT_BAKER_SAMPLE_STORES));
-          setSelectedStoreId(DEFAULT_BAKER_SAMPLE_STORES[0].id);
+        if (cleaned.length > 0) {
+          setStores(cleaned);
+          setSelectedStoreId((prev) => prev || cleaned[0]?.id || "");
         }
       }
     } catch {}
 
+    // Fetch live B2B clients from server (ensures incognito & mobile are in sync)
+    if (bizId && bizId !== "default") {
+      fetchB2BClients(bizId).then((serverClients) => {
+        if (serverClients && serverClients.length > 0) {
+          setStores(serverClients);
+          setSelectedStoreId((prev) => prev || serverClients[0]?.id || "");
+        }
+      });
+    }
+
+    const handleStoresUpdated = (e: any) => {
+      if (e?.detail?.clients) {
+        setStores(e.detail.clients);
+      }
+    };
+    window.addEventListener(B2B_CUSTOMERS_UPDATED_EVENT, handleStoresUpdated);
+
     // Load Invoices
     loadInvoicesAndFinances();
+
+    return () => {
+      window.removeEventListener(B2B_CUSTOMERS_UPDATED_EVENT, handleStoresUpdated);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [business?.id]);
 
@@ -287,11 +293,13 @@ export function SimpleBakerDashboardView({ onSwitchToCafeMode }: SimpleBakerDash
     setNewStoreName("");
     setNewStorePhone("");
 
-    // Persist in local storage
+    // Persist to server & local cache
     const bizId = business?.id || "default";
-    try {
-      localStorage.setItem(`bftone_customers_${bizId}`, JSON.stringify(nextStores));
-    } catch {}
+    saveB2BClient(bizId, {
+      id: newStore.id,
+      name: newStore.name,
+      phone: newStore.phone,
+    });
     toast({ title: "Store Added! 🏬", description: `${newStore.name} added to your store list.`, variant: "success" });
   }
 

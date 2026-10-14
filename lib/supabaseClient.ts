@@ -16,5 +16,9 @@ export const supabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
     persistSession: true,
     autoRefreshToken: true,
     detectSessionInUrl: true,
+    // Workaround for WebKit / Safari navigator.locks deadlock bug where getSession() hangs indefinitely
+    lock: async (_name, _acquireTimeout, fn) => {
+      return await fn();
+    },
   }
 });

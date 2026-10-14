@@ -10,6 +10,13 @@ import { format } from "date-fns";
 import { generateStatementPdf } from "@/lib/utils/statementPdf";
 import { formatCafeName, DEFAULT_BAKER_SAMPLE_STORES, sanitizeBakerStores } from "@/lib/utils/bakerUtils";
 import {
+  fetchB2BClients,
+  saveB2BClient,
+  updateB2BClient,
+  deleteB2BClient,
+  B2B_CUSTOMERS_UPDATED_EVENT,
+} from "@/lib/services/b2bClients";
+import {
   Store, Plus, Phone, MapPin, Receipt, ArrowRight,
   Search, CheckCircle2, AlertCircle,
   Trash2, Edit3, FileDown, FileText
@@ -65,30 +72,16 @@ export default function BakerCustomersPage() {
 
   // Load Data
   useEffect(() => {
+    // 1. Initial immediate load from local cache to avoid flicker
     try {
-      // 1. Stores (Baker's own B2B client customer shops)
       const storedCusts = localStorage.getItem(`bftone_customers_${bizId}`);
-      let custList: any[] = [];
       if (storedCusts) {
         const parsed = JSON.parse(storedCusts);
         const cleaned = sanitizeBakerStores(parsed);
-        if (cleaned.length !== parsed.length) {
-          localStorage.setItem(`bftone_customers_${bizId}`, JSON.stringify(cleaned));
-        }
-        custList = cleaned;
-      } else {
-        const fallback = bizId !== "default" ? localStorage.getItem("bftone_customers_default") : null;
-        if (fallback) {
-          const parsed = JSON.parse(fallback);
-          const cleaned = sanitizeBakerStores(parsed);
-          custList = cleaned;
-          localStorage.setItem(`bftone_customers_${bizId}`, JSON.stringify(cleaned));
-        } else {
-          custList = DEFAULT_BAKER_SAMPLE_STORES;
-          localStorage.setItem(`bftone_customers_${bizId}`, JSON.stringify(custList));
+        if (cleaned.length > 0) {
+          setStores(cleaned);
         }
       }
-      setStores(custList);
 
       // 2. Invoices
       const storedInvs = localStorage.getItem(`bftone_invoices_${bizId}`);
@@ -102,6 +95,22 @@ export default function BakerCustomersPage() {
         setPaymentsHistory(JSON.parse(storedPayments));
       }
     } catch {}
+
+    // Fetch latest B2B clients from server (ensures incognito & mobile are in sync)
+    if (bizId && bizId !== "default") {
+      fetchB2BClients(bizId).then((serverClients) => {
+        if (serverClients && serverClients.length > 0) {
+          setStores(serverClients);
+        }
+      });
+    }
+
+    const handleStoresUpdated = (e: any) => {
+      if (e?.detail?.clients) {
+        setStores(e.detail.clients);
+      }
+    };
+    window.addEventListener(B2B_CUSTOMERS_UPDATED_EVENT, handleStoresUpdated);
 
     // Load registered SeyalPro partner businesses for linking
     if (business?.id) {
@@ -132,6 +141,10 @@ export default function BakerCustomersPage() {
         }
       });
     }
+
+    return () => {
+      window.removeEventListener(B2B_CUSTOMERS_UPDATED_EVENT, handleStoresUpdated);
+    };
   }, [bizId, business?.id]);
 
   // Compute Cafe Ledger
@@ -277,9 +290,13 @@ export default function BakerCustomersPage() {
     );
 
     setStores(updatedStores);
-    try {
-      localStorage.setItem(`bftone_customers_${bizId}`, JSON.stringify(updatedStores));
-    } catch {}
+    updateB2BClient(bizId, {
+      id: editingCafe.id,
+      name: newName,
+      phone: formattedPhone,
+      address: editAddress.trim(),
+      linked_business_id: editLinkedBusinessId || undefined,
+    });
 
     // If store name changed, update historical invoices so ledger stays consistent
     if (oldName.toLowerCase() !== newName.toLowerCase()) {
@@ -303,7 +320,7 @@ export default function BakerCustomersPage() {
   };
 
   // Save New Cafe
-  const handleSaveCafe = (e: React.FormEvent) => {
+  const handleSaveCafe = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return;
 
@@ -329,9 +346,13 @@ export default function BakerCustomersPage() {
 
     const updated = [newSt, ...stores];
     setStores(updated);
-    try {
-      localStorage.setItem(`bftone_customers_${bizId}`, JSON.stringify(updated));
-    } catch {}
+    saveB2BClient(bizId, {
+      id: newSt.id,
+      name: newSt.name,
+      phone: newSt.phone,
+      address: newSt.address,
+      linked_business_id: newSt.business_id,
+    });
 
     setIsModalOpen(false);
     setName("");
@@ -349,9 +370,7 @@ export default function BakerCustomersPage() {
     if (!deletingCafe) return;
     const updated = stores.filter((s) => s.id !== deletingCafe.id);
     setStores(updated);
-    try {
-      localStorage.setItem(`bftone_customers_${bizId}`, JSON.stringify(updated));
-    } catch {}
+    deleteB2BClient(bizId, deletingCafe.id);
     toast({
       title: "Store / Client Removed",
       description: `${deletingCafe.name} removed from your store list.`,

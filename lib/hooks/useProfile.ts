@@ -36,6 +36,14 @@ export function useProfile() {
     });
     const [loading, setLoading] = useState(true);
 
+    // Global fail-safe: never allow profile loading state to be stuck for > 6 seconds
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            setLoading(false);
+        }, 6000);
+        return () => clearTimeout(timer);
+    }, []);
+
     useEffect(() => {
         if (userLoading) return;
 
@@ -73,19 +81,27 @@ export function useProfile() {
                 let is_super_admin = isRootOwnerEmail;
                 let business_id = DEFAULT_BUSINESS_ID;
 
-                const { data: prof, error } = await supabaseClient
+                const fetchPromise = supabaseClient
                     .from('profiles')
                     .select('is_admin,is_stock_manager,is_super_admin,business_id')
                     .eq('id', user!.id)
                     .maybeSingle();
 
+                const timeoutPromise = new Promise<{ data: any; error: Error }>((resolve) =>
+                    setTimeout(() => resolve({ data: null, error: new Error('Profile query timeout') }), 5000)
+                );
+
+                const { data: prof, error } = await Promise.race([fetchPromise, timeoutPromise]);
+
                 if (error) {
                     // Fallback to legacy columns if migration not yet applied
-                    const { data: legacyProf } = await supabaseClient
+                    const legacyFetch = supabaseClient
                         .from('profiles')
                         .select('is_admin,is_stock_manager')
                         .eq('id', user!.id)
                         .maybeSingle();
+
+                    const { data: legacyProf } = await Promise.race([legacyFetch, timeoutPromise]);
 
                     if (legacyProf) {
                         is_admin = !!legacyProf.is_admin;

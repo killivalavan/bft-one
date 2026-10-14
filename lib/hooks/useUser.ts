@@ -12,10 +12,14 @@ export function useUser() {
     useEffect(() => {
         mounted.current = true;
 
-        // 1. Initial Fetch
+        // 1. Initial Fetch with timeout safeguard
         async function getUser() {
             try {
-                const { data: { session } } = await supabaseClient.auth.getSession();
+                const sessionPromise = supabaseClient.auth.getSession();
+                const timeoutPromise = new Promise<{ data: { session: null }; error: Error }>((resolve) =>
+                    setTimeout(() => resolve({ data: { session: null }, error: new Error('Auth session timeout') }), 5000)
+                );
+                const { data: { session } } = await Promise.race([sessionPromise, timeoutPromise]);
                 if (mounted.current) {
                     setUser(session?.user ?? null);
                     setLoading(false);
