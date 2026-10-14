@@ -15,6 +15,7 @@ import {
 
 import { AdminDashboardView } from "@/components/admin-dashboard/AdminDashboardView";
 import { EmployeeHubView } from "@/components/employee-hub/EmployeeHubView";
+import { SimpleBakerDashboardView } from "@/components/baker/SimpleBakerDashboardView";
 
 export default function Home() {
   const { user, loading: userLoading } = useUser();
@@ -22,6 +23,53 @@ export default function Home() {
   const { isModuleEnabled } = useTenant();
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [previewStaffId, setPreviewStaffId] = useState<string | null>(null);
+
+  // App View Mode State: "cafe" (full POS/timesheets) vs "baker" (minimal dispatch/profit)
+  const [appMode, setAppMode] = useState<"cafe" | "baker">(() => {
+    if (typeof window !== "undefined") {
+      const cached = localStorage.getItem("seyalpro_app_mode");
+      if (cached === "baker" || cached === "cafe") return cached;
+    }
+    return "cafe";
+  });
+
+  const handleSwitchMode = (mode: "cafe" | "baker") => {
+    setAppMode(mode);
+    try {
+      localStorage.setItem("seyalpro_app_mode", mode);
+      window.dispatchEvent(new CustomEvent("seyalpro_mode_change", { detail: { mode } }));
+    } catch {}
+  };
+
+  useEffect(() => {
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === "seyalpro_app_mode" && (e.newValue === "baker" || e.newValue === "cafe")) {
+        setAppMode(e.newValue);
+      }
+    };
+    const handleCustomEvent = (e: any) => {
+      if (e.detail?.mode === "baker" || e.detail?.mode === "cafe") {
+        setAppMode(e.detail.mode);
+      }
+    };
+    window.addEventListener("storage", handleStorage);
+    window.addEventListener("seyalpro_mode_change", handleCustomEvent);
+    return () => {
+      window.removeEventListener("storage", handleStorage);
+      window.removeEventListener("seyalpro_mode_change", handleCustomEvent);
+    };
+  }, []);
+
+  const isBakerEnabled = isModuleEnabled ? isModuleEnabled("baker_mode") : false;
+
+  useEffect(() => {
+    if (!isBakerEnabled && appMode === "baker") {
+      setAppMode("cafe");
+      try {
+        localStorage.setItem("seyalpro_app_mode", "cafe");
+      } catch {}
+    }
+  }, [isBakerEnabled, appMode]);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -241,11 +289,21 @@ export default function Home() {
     );
   }
 
-  // If Admin Logged In: Render PetPooja-inspired Executive Store Command Center with left slide navbar
+  // If Admin Logged In: Check if user switched to Baker / Simple Mode vs Full Cafe Command Center
   if (isAdmin) {
+    if (isBakerEnabled && appMode === "baker") {
+      return (
+        <SimpleBakerDashboardView
+          onSwitchToCafeMode={() => handleSwitchMode("cafe")}
+        />
+      );
+    }
+
     return (
       <div className="min-h-screen">
-        <AdminDashboardView baseItems={baseItems} />
+        <AdminDashboardView
+          baseItems={baseItems}
+        />
       </div>
     );
   }

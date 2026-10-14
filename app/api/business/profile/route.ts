@@ -18,6 +18,7 @@ export async function POST(request: Request) {
       address,
       phone,
       gstin,
+      upi_id,
       geofence_lat,
       geofence_lng,
       geofence_radius_meters,
@@ -36,14 +37,20 @@ export async function POST(request: Request) {
 
     // Prepare update payloads
     const fullPayload: any = {
-      name: name?.trim() || "Store",
       logo_url: logo_url || "/dummy-logo.svg",
       signature_url: signature_url || "/default-signature.svg",
       address: address?.trim() || "",
       phone: phone?.trim() || "",
       gstin: gstin?.trim() || "",
+      upi_id: upi_id?.trim() || "",
       updated_at: new Date().toISOString(),
     };
+
+    // SECURITY RULE: Store / Business name CANNOT be changed by regular clients/tenants.
+    // Only SeyalPro Super Admin is permitted to change store names to prevent tenant spoofing or subscription hijacking.
+    if (caller.isSuperAdmin && name?.trim()) {
+      fullPayload.name = name.trim();
+    }
 
     if (geofence_lat !== undefined) fullPayload.geofence_lat = geofence_lat !== null ? Number(geofence_lat) : null;
     if (geofence_lng !== undefined) fullPayload.geofence_lng = geofence_lng !== null ? Number(geofence_lng) : null;
@@ -62,10 +69,12 @@ export async function POST(request: Request) {
       console.warn("Full business profile update failed, falling back to core columns:", updateErr.message);
       // Fallback 1: update core columns + geofence columns (present in businesses table)
       const geoCorePayload: any = {
-        name: name?.trim() || "Store",
         logo_url: logo_url || "/dummy-logo.svg",
         updated_at: new Date().toISOString(),
       };
+      if (caller.isSuperAdmin && name?.trim()) {
+        geoCorePayload.name = name.trim();
+      }
       if (geofence_lat !== undefined) geoCorePayload.geofence_lat = geofence_lat !== null ? Number(geofence_lat) : null;
       if (geofence_lng !== undefined) geoCorePayload.geofence_lng = geofence_lng !== null ? Number(geofence_lng) : null;
       if (geofence_radius_meters !== undefined) geoCorePayload.geofence_radius_meters = Number(geofence_radius_meters) || 150;
@@ -79,12 +88,14 @@ export async function POST(request: Request) {
         .maybeSingle();
 
       if (geoErr) {
-        // Fallback 2: minimal name and logo only
-        const minimalPayload = {
-          name: name?.trim() || "Store",
+        // Fallback 2: minimal logo only (plus name only if Super Admin)
+        const minimalPayload: any = {
           logo_url: logo_url || "/dummy-logo.svg",
           updated_at: new Date().toISOString(),
         };
+        if (caller.isSuperAdmin && name?.trim()) {
+          minimalPayload.name = name.trim();
+        }
         const { data: minBiz, error: minErr } = await supa
           .from("businesses")
           .update(minimalPayload)
@@ -104,6 +115,7 @@ export async function POST(request: Request) {
         address: address || "",
         phone: phone || "",
         gstin: gstin || "",
+        upi_id: upi_id || (fallbackBiz?.upi_id ?? ""),
         geofence_lat: geofence_lat !== undefined ? (geofence_lat !== null ? Number(geofence_lat) : null) : (fallbackBiz?.geofence_lat ?? null),
         geofence_lng: geofence_lng !== undefined ? (geofence_lng !== null ? Number(geofence_lng) : null) : (fallbackBiz?.geofence_lng ?? null),
         geofence_radius_meters: geofence_radius_meters !== undefined ? Number(geofence_radius_meters) : (fallbackBiz?.geofence_radius_meters ?? 150),

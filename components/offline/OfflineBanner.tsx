@@ -9,14 +9,13 @@ import { useToast } from "@/components/ui/Toast";
 
 export function OfflineBanner() {
   const pathname = usePathname();
-  const isAuthPage = pathname === "/login" || pathname?.startsWith("/super-admin/login");
+  const isBillingPage = pathname === "/billing" || pathname?.startsWith("/billing");
 
   const { isOnline: syncEngineOnline, pendingCount, syncState, triggerSync } = useOfflineSync();
   const { toast } = useToast();
 
-  const [browserOnline, setBrowserOnline] = useState<boolean>(() => {
-    return typeof navigator !== "undefined" ? navigator.onLine : true;
-  });
+  const [browserOnline, setBrowserOnline] = useState<boolean>(true);
+  const [mounted, setMounted] = useState<boolean>(false);
   const [dismissed, setDismissed] = useState<boolean>(() => {
     if (typeof window !== "undefined") {
       return sessionStorage.getItem("offline_banner_dismissed") === "true";
@@ -25,28 +24,36 @@ export function OfflineBanner() {
   });
   const [isChecking, setIsChecking] = useState(false);
 
-  // Verify real reachability on initial mount if navigator initially reported false
+  // Debounce mount to prevent false-positives during initial page load & resource fetching
   useEffect(() => {
-    if (typeof navigator !== "undefined" && !navigator.onLine) {
-      fetch(`/api/health?t=${Date.now()}`, { method: "HEAD", cache: "no-store" })
-        .then((res) => {
-          if (res.ok) {
-            setBrowserOnline(true);
-          }
-        })
-        .catch(() => {});
-    }
-  }, []);
+    if (!isBillingPage) return;
 
-  // Directly track browser network state with event listeners & polling
+    const mountTimer = setTimeout(() => {
+      setMounted(true);
+      if (typeof navigator !== "undefined" && !navigator.onLine) {
+        fetch(`/api/health?t=${Date.now()}`, { method: "HEAD", cache: "no-store" })
+          .then((res) => {
+            if (res.ok) setBrowserOnline(true);
+            else setBrowserOnline(false);
+          })
+          .catch(() => setBrowserOnline(false));
+      }
+    }, 1500);
+
+    return () => clearTimeout(mountTimer);
+  }, [isBillingPage]);
+
+  // Directly track browser network state with event listeners & polling (only on billing)
   useEffect(() => {
+    if (!isBillingPage) return;
+
     function handleOnlineEvent() {
       setBrowserOnline(true);
       setDismissed(true);
     }
 
     function handleOfflineEvent() {
-      // Confirm with quick health check to prevent false-positives
+      // Confirm with health check first to avoid false positives during tab switches or refresh
       fetch(`/api/health?t=${Date.now()}`, { method: "HEAD", cache: "no-store" })
         .then((res) => {
           if (res.ok) {
@@ -54,13 +61,24 @@ export function OfflineBanner() {
           } else {
             setBrowserOnline(false);
             setDismissed(false);
-            sessionStorage.removeItem("offline_banner_dismissed");
           }
         })
         .catch(() => {
-          setBrowserOnline(false);
-          setDismissed(false);
-          sessionStorage.removeItem("offline_banner_dismissed");
+          // Double-check after 1.5s before showing offline banner
+          setTimeout(() => {
+            fetch(`/api/health?t=${Date.now()}`, { method: "HEAD", cache: "no-store" })
+              .then((res) => {
+                if (res.ok) setBrowserOnline(true);
+                else {
+                  setBrowserOnline(false);
+                  setDismissed(false);
+                }
+              })
+              .catch(() => {
+                setBrowserOnline(false);
+                setDismissed(false);
+              });
+          }, 1500);
         });
     }
 
@@ -72,9 +90,6 @@ export function OfflineBanner() {
         const currentOnline = navigator.onLine;
         if (currentOnline) {
           setBrowserOnline(true);
-          if (!dismissed) {
-            setDismissed(true);
-          }
         } else {
           // Verify with quick health check
           fetch(`/api/health?t=${Date.now()}`, { method: "HEAD", cache: "no-store" })
@@ -90,20 +105,19 @@ export function OfflineBanner() {
             });
         }
       }
-    }, 2500);
+    }, 4000);
 
     return () => {
       window.removeEventListener("online", handleOnlineEvent);
       window.removeEventListener("offline", handleOfflineEvent);
       clearInterval(timer);
     };
-  }, [dismissed]);
+  }, [isBillingPage]);
 
-  // Exactly one toast per genuine transition. Ref starts at the load-time value,
-  // so a page refresh never produces a toast. Never fire on login pages.
-  const prevOnlineRef = useRef<boolean>(browserOnline);
+  // Exactly one toast per genuine transition once mounted on billing
+  const prevOnlineRef = useRef<boolean>(true);
   useEffect(() => {
-    if (isAuthPage) return;
+    if (!isBillingPage || !mounted) return;
     if (prevOnlineRef.current === browserOnline) return;
     prevOnlineRef.current = browserOnline;
     toast(
@@ -115,11 +129,11 @@ export function OfflineBanner() {
           }
         : {
             title: "Working Offline 🟠",
-            description: "Your work is saved locally and will sync automatically.",
+            description: "Your offline billing orders are saved locally and will sync automatically.",
             variant: "info",
           }
     );
-  }, [browserOnline, isAuthPage, toast]);
+  }, [browserOnline, isBillingPage, mounted, toast]);
 
   function handleDismiss(e?: React.MouseEvent) {
     if (e) {
@@ -154,8 +168,8 @@ export function OfflineBanner() {
     }
   }
 
-  // If on login/auth page, or online by either hook or navigator, or user dismissed, DO NOT RENDER
-  if (isAuthPage || browserOnline || syncEngineOnline || dismissed) {
+  // Strictly gate to billing pages, mounted state, and verified offline state
+  if (!isBillingPage || !mounted || browserOnline || syncEngineOnline || dismissed) {
     return null;
   }
 

@@ -1,6 +1,7 @@
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { numberToIndianRupeesWords } from "./numberToWords";
+import { formatCafeName } from "./bakerUtils";
 
 export type InvoiceItem = {
   name: string;
@@ -361,7 +362,7 @@ export async function generateBillPdf(data: BillPdfData) {
   doc.setFontSize(8.5);
   doc.setFont(fontName, "bold");
   doc.setTextColor(15, 23, 42);
-  doc.text(businessName, leftMargin + 4, cardY + 11);
+  doc.text(formatCafeName(businessName || "Royal Baker"), leftMargin + 4, cardY + 11);
 
   doc.setFont(fontName, "normal");
   doc.setFontSize(7.5);
@@ -388,7 +389,7 @@ export async function generateBillPdf(data: BillPdfData) {
   doc.setFontSize(8.5);
   doc.setFont(fontName, "bold");
   doc.setTextColor(15, 23, 42);
-  doc.text(customerName, rightCardX + 4, cardY + 11);
+  doc.text(formatCafeName(customerName), rightCardX + 4, cardY + 11);
 
   doc.setFont(fontName, "normal");
   doc.setFontSize(7.5);

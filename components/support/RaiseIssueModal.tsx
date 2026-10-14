@@ -10,7 +10,7 @@ import { useToast } from "@/components/ui/Toast";
 import {
   LifeBuoy, Bug, AlertTriangle, CheckCircle2, Clock, UploadCloud, X,
   Image as ImageIcon, Loader2, Sparkles, Send, ShieldAlert, Plus,
-  Search, RefreshCw, MessageSquare, Check, Eye, ExternalLink, ChevronRight
+  Search, RefreshCw, MessageSquare, Check, Eye, ExternalLink, ChevronRight, Truck
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 
@@ -40,6 +40,9 @@ interface SupportTicket {
 }
 
 const QUICK_TOPICS = [
+  "B2B Delivery slip / Dispatch issue",
+  "Bakery product costing or catalog error",
+  "Store notification & advisory issue",
   "POS Thermal Printer error",
   "Daily Sales calculation mismatch",
   "GPS Timesheet clock-in issue",
@@ -50,6 +53,7 @@ const QUICK_TOPICS = [
 
 const CATEGORIES: Record<string, { label: string; icon: any }> = {
   bug: { label: "System Bug / Glitch", icon: Bug },
+  b2b_dispatch: { label: "B2B & Wholesale Hub", icon: Truck },
   pos_billing: { label: "POS & Billing", icon: LifeBuoy },
   timesheet_gps: { label: "Timesheet & GPS", icon: ShieldAlert },
   inventory_stock: { label: "Inventory / Stock", icon: LifeBuoy },

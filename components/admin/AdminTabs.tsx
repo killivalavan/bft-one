@@ -31,7 +31,7 @@ export function AdminTabs({ activeTab, onChange }: AdminTabsProps) {
                         onClick={() => onChange(t.id)}
                         className={className}
                     >
-                        <t.icon size={16} className={cn(active ? "text-[#2563EB]" : "text-[#64748B]")} />
+                        <t.icon size={16} className={cn("shrink-0", active ? "text-[#2563EB]" : "text-[#64748B]")} />
                         <span className="hidden sm:inline">{t.label}</span>
                     </button>
                 );

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { authenticateRequest } from "@/lib/auth/serverAuth";
+import { formatCafeName } from "@/lib/utils/bakerUtils";
 
 // GET: List all registered customer businesses
 export async function GET(request: Request) {
@@ -263,7 +264,7 @@ export async function PATCH(request: Request) {
     if (!id) return NextResponse.json({ error: "Business ID required" }, { status: 400 });
 
     const updates: any = { updated_at: new Date().toISOString() };
-    if (name?.trim()) updates.name = name.trim();
+    if (name?.trim()) updates.name = formatCafeName(name.trim());
     if (slug?.trim()) updates.slug = slug.toLowerCase().trim().replace(/[^a-z0-9-]/g, "-");
     if (typeof is_active === "boolean") updates.is_active = is_active;
     if (plan_type) updates.plan_type = plan_type;

@@ -13,15 +13,20 @@ import {
   Phone, MapPin, Receipt, Upload, RefreshCw,
   FileSignature, Building2, CheckCircle2, Crop,
   Navigation, Crosshair, ExternalLink, ShieldCheck, LocateFixed,
-  ClipboardPaste, Check, Loader2
+  ClipboardPaste, Check, Loader2, CreditCard
 } from "lucide-react";
 import { saveShopGeofence, parseCoordinatesInput, metersBetween } from "@/lib/geofence";
+import { useProfile } from "@/lib/hooks/useProfile";
+import { formatCafeName } from "@/lib/utils/bakerUtils";
+import { cn } from "@/lib/utils/cn";
 
 export function StoreSettings() {
   const { business, refreshBusiness } = useTenant();
   const { toast } = useToast();
+  const { flags } = useProfile();
+  const isSuperAdmin = !!flags?.isSuperAdmin;
 
-  const [name, setName] = useState(business?.name || "Brown fening tea");
+  const [name, setName] = useState(formatCafeName(business?.name || "Royal Baker"));
   const [logoUrl, setLogoUrl] = useState(business?.logo_url || "/dummy-logo.svg");
   const [signatureUrl, setSignatureUrl] = useState((business as any)?.signature_url || "/default-signature.svg");
   const [address, setAddress] = useState(
@@ -29,6 +34,7 @@ export function StoreSettings() {
   );
   const [phone, setPhone] = useState((business as any)?.phone || "+91 98765 43210");
   const [gstin, setGstin] = useState((business as any)?.gstin || "");
+  const [upiId, setUpiId] = useState((business as any)?.upi_id || "");
 
   // Store Geofence & Location state
   const isInitialRoot = !business?.id || business?.id === "a0000000-0000-0000-0000-000000000001";
@@ -81,12 +87,13 @@ export function StoreSettings() {
         }
       } catch { }
 
-      setName(business.name || localExtra.name || "Store");
+      setName(formatCafeName(business.name || localExtra.name || "Royal Baker"));
       setLogoUrl(business.logo_url || localExtra.logo_url || "/dummy-logo.svg");
       setSignatureUrl((business as any).signature_url || localExtra.signature_url || "/default-signature.svg");
       setAddress((business as any).address || localExtra.address || "");
       setPhone((business as any).phone || localExtra.phone || "");
       setGstin((business as any).gstin || localExtra.gstin || "");
+      setUpiId((business as any).upi_id || localExtra.upi_id || "");
 
       // Prioritize active business record from database, then tenant-scoped cache
       const isRootDefault = bizId === "a0000000-0000-0000-0000-000000000001";
@@ -473,12 +480,13 @@ export function StoreSettings() {
       const numRadius = Number(geofenceRadius) || 150;
 
       const updatedProfile = {
-        name: name.trim() || business.name,
+        name: isSuperAdmin ? formatCafeName(name.trim() || business.name) : business.name,
         logo_url: logoUrl.trim() || "/dummy-logo.svg",
         signature_url: signatureUrl.trim() || "/default-signature.svg",
         address: address.trim(),
         phone: phone.trim(),
         gstin: gstin.trim(),
+        upi_id: upiId.trim(),
         geofence_lat: numLat,
         geofence_lng: numLng,
         geofence_radius_meters: numRadius,
@@ -530,16 +538,22 @@ export function StoreSettings() {
 
       // 3. Best effort direct client update
       try {
+        const directUpdates: any = {
+          logo_url: updatedProfile.logo_url,
+          upi_id: updatedProfile.upi_id,
+          geofence_lat: updatedProfile.geofence_lat,
+          geofence_lng: updatedProfile.geofence_lng,
+          geofence_radius_meters: updatedProfile.geofence_radius_meters,
+          geofence_enabled: updatedProfile.geofence_enabled,
+        };
+        // Only Super Admin is permitted to update business name directly in DB
+        if (isSuperAdmin && updatedProfile.name) {
+          directUpdates.name = updatedProfile.name;
+        }
+
         await supabaseClient
           .from("businesses")
-          .update({
-            name: updatedProfile.name,
-            logo_url: updatedProfile.logo_url,
-            geofence_lat: updatedProfile.geofence_lat,
-            geofence_lng: updatedProfile.geofence_lng,
-            geofence_radius_meters: updatedProfile.geofence_radius_meters,
-            geofence_enabled: updatedProfile.geofence_enabled,
-          })
+          .update(directUpdates)
           .eq("id", business.id);
       } catch (_) { }
 
@@ -561,11 +575,11 @@ export function StoreSettings() {
       <Card className="border border-slate-200 shadow-sm rounded-2xl overflow-hidden bg-white">
         <CardHeader className="bg-slate-50 border-b border-slate-200 p-6">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-[#EFF6FF] text-[#2563EB] border border-[#2563EB]/20 flex items-center justify-center font-bold shadow-xs">
-              <Store className="w-5 h-5" />
+            <div className="w-10 h-10 rounded-xl bg-[#EFF6FF] text-[#2563EB] border border-[#2563EB]/20 flex items-center justify-center font-bold shadow-xs shrink-0">
+              <Store className="w-5 h-5 shrink-0" />
             </div>
-            <div>
-              <h2 className="text-lg font-bold text-slate-900">Store Profile, Logo &amp; Signature</h2>
+            <div className="min-w-0">
+              <h2 className="text-base sm:text-lg font-bold text-slate-900">Store Profile, Logo &amp; Signature</h2>
               <p className="text-xs text-slate-500">
                 Manage your store branding, official address, and authorised signature for PDF invoices
               </p>
@@ -692,16 +706,36 @@ export function StoreSettings() {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-zinc-700 flex items-center gap-1.5">
-                    <Store className="w-3.5 h-3.5 text-emerald-600" /> Store / Business Name
-                  </label>
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-zinc-700 flex items-center gap-1.5">
+                      <Store className="w-3.5 h-3.5 text-emerald-600" /> Store / Business Name
+                    </label>
+                    {!isSuperAdmin ? (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-50 text-amber-800 border border-amber-200 shadow-2xs">
+                        🔒 Locked (Super Admin Only)
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                        👑 Super Admin Editable
+                      </span>
+                    )}
+                  </div>
                   <Input
                     required
-                    placeholder="e.g. Brown fening tea"
-                    value={name}
+                    disabled={!isSuperAdmin}
+                    placeholder="e.g. Royal Baker"
+                    value={formatCafeName(name)}
                     onChange={(e) => setName(e.target.value)}
-                    className="bg-white text-xs h-10"
+                    className={cn(
+                      "bg-white text-xs h-10 font-bold",
+                      !isSuperAdmin && "bg-slate-100/90 text-slate-700 border-slate-200 cursor-not-allowed select-none opacity-90"
+                    )}
                   />
+                  {!isSuperAdmin && (
+                    <p className="text-[11px] text-slate-500 font-medium">
+                      Store identity is locked to your licensed SeyalPro ID. To update your registered store name, contact SeyalPro Super Admin.
+                    </p>
+                  )}
                 </div>
 
                 <div className="space-y-1.5">
@@ -745,12 +779,18 @@ export function StoreSettings() {
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-zinc-700">Currency Symbol</label>
+                    <label className="text-xs font-bold text-zinc-700 flex items-center gap-1.5">
+                      <CreditCard className="w-3.5 h-3.5 text-blue-600" /> Store UPI ID (Settlements &amp; Reminders)
+                    </label>
                     <Input
-                      disabled
-                      value={`${business?.currency_symbol || "₹"} (INR)`}
-                      className="bg-zinc-50 text-xs h-10 text-zinc-500"
+                      placeholder="e.g. royalbaker@okaxis or 9876543210@upi"
+                      value={upiId}
+                      onChange={(e) => setUpiId(e.target.value)}
+                      className="bg-white text-xs h-10 font-mono"
                     />
+                    <p className="text-[11px] text-zinc-500 font-medium">
+                      Used automatically in WhatsApp collection reminders, delivery slips, and customer statements.
+                    </p>
                   </div>
                 </div>
               </div>

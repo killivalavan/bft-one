@@ -1,0 +1,387 @@
+"use client";
+
+import React, { useState, useEffect, useMemo } from "react";
+import Link from "next/link";
+import { useTenant } from "@/lib/context/TenantContext";
+import { useToast } from "@/components/ui/Toast";
+import { cn } from "@/lib/utils/cn";
+import { supabaseClient } from "@/lib/supabaseClient";
+import { format } from "date-fns";
+import {
+  Receipt, Plus, Trash2, TrendingDown, DollarSign, Calendar,
+  PieChart, Search, ArrowRight, ShoppingBag
+} from "lucide-react";
+
+export interface BakerExpense {
+  id: string;
+  name: string;
+  amount: number;
+  category: "Flour & Sugar" | "Butter & Dairy" | "Chocolate & Cocoa" | "Packaging" | "Utilities & Gas" | "Other";
+  date: string;
+  notes?: string;
+}
+
+export const EXPENSE_CATEGORIES = [
+  "Flour & Sugar",
+  "Butter & Dairy",
+  "Chocolate & Cocoa",
+  "Packaging",
+  "Utilities & Gas",
+  "Other",
+] as const;
+
+export default function BakerExpensesPage() {
+  const { business } = useTenant();
+  const { toast } = useToast();
+  const bizId = business?.id || "default";
+
+  const [expenses, setExpenses] = useState<BakerExpense[]>([]);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [isModalOpen, setIsModalOpen] = useState(false);
+
+  // Form State
+  const [name, setName] = useState("");
+  const [amount, setAmount] = useState("");
+  const [category, setCategory] = useState<BakerExpense["category"]>("Flour & Sugar");
+  const [notes, setNotes] = useState("");
+
+  // Load from LocalStorage and Supabase daily_expenses
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(`bftone_baker_expenses_${bizId}`);
+      if (stored) {
+        setExpenses(JSON.parse(stored));
+      } else {
+        const initialExp: BakerExpense[] = [
+          { id: "exp-1", name: "Amul Butter (5kg bulk)", amount: 2400, category: "Butter & Dairy", date: format(new Date(), "MMM dd, yyyy") },
+          { id: "exp-2", name: "Callebaut Dark Chocolate (2.5kg)", amount: 3200, category: "Chocolate & Cocoa", date: format(new Date(), "MMM dd, yyyy") },
+          { id: "exp-3", name: "Kraft Brownie Boxes (100 pcs)", amount: 1100, category: "Packaging", date: format(new Date(), "MMM dd, yyyy") },
+        ];
+        setExpenses(initialExp);
+        localStorage.setItem(`bftone_baker_expenses_${bizId}`, JSON.stringify(initialExp));
+      }
+    } catch {}
+
+    if (business?.id) {
+      supabaseClient.from("daily_expenses").select("*").eq("business_id", business.id).then(({ data }) => {
+        if (data && data.length > 0) {
+          const mapped: BakerExpense[] = data.map((d: any) => ({
+            id: d.id,
+            name: d.item_name || "Ingredient",
+            amount: ((d.price_cents || 0) * (d.quantity || 1)) / 100,
+            category: "Flour & Sugar",
+            date: d.expense_date || format(new Date(), "MMM dd, yyyy"),
+          }));
+          setExpenses(mapped);
+        }
+      });
+    }
+  }, [bizId, business?.id]);
+
+  const saveExpenses = (updated: BakerExpense[]) => {
+    setExpenses(updated);
+    try {
+      localStorage.setItem(`bftone_baker_expenses_${bizId}`, JSON.stringify(updated));
+    } catch {}
+  };
+
+  const handleAddExpense = (e: React.FormEvent) => {
+    e.preventDefault();
+    const amt = parseFloat(amount);
+    if (!name.trim() || isNaN(amt) || amt <= 0) {
+      toast({ title: "Validation Error", description: "Please enter item name and valid amount.", variant: "error" });
+      return;
+    }
+
+    const newExp: BakerExpense = {
+      id: `exp-${Date.now()}`,
+      name: name.trim(),
+      amount: amt,
+      category,
+      date: format(new Date(), "MMM dd, yyyy"),
+      notes: notes.trim(),
+    };
+
+    const updated = [newExp, ...expenses];
+    saveExpenses(updated);
+
+    // Sync to Supabase daily_expenses
+    if (business?.id) {
+      supabaseClient.from("daily_expenses").insert({
+        business_id: business.id,
+        item_name: newExp.name,
+        category: newExp.category,
+        price_cents: Math.round(newExp.amount * 100),
+        quantity: 1,
+        expense_date: new Date().toISOString().split("T")[0],
+      }).then(() => {});
+    }
+
+    setIsModalOpen(false);
+    setName("");
+    setAmount("");
+    setNotes("");
+    toast({ title: "Expense Logged! 🧾", description: `₹${amt} logged for ${newExp.name}` });
+  };
+
+  const handleDeleteExpense = (id: string, expName: string) => {
+    const updated = expenses.filter((e) => e.id !== id);
+    saveExpenses(updated);
+    toast({ title: "Expense Deleted", description: `Removed ${expName}` });
+  };
+
+  // Metrics
+  const totalExpenses = expenses.reduce((acc, e) => acc + e.amount, 0);
+  const filteredExpenses = expenses.filter(
+    (e) =>
+      e.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      e.category.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  return (
+    <div className="min-h-screen bg-[#F8FAFC] pb-24">
+      {/* Top Header */}
+      <div className="bg-white border-b border-[#E2E8F0] sticky top-14 md:top-0 z-20 shadow-2xs">
+        <div className="max-w-6xl mx-auto px-4 py-3 sm:py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
+          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-rose-50 border border-rose-200 text-rose-600 flex items-center justify-center font-bold text-lg sm:text-xl shadow-2xs shrink-0">
+              💸
+            </div>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 whitespace-nowrap">
+                <h1 className="text-sm sm:text-xl font-extrabold text-[#0F172A] tracking-tight whitespace-nowrap">Baking & Ingredient Expenses</h1>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-rose-50 text-rose-700 border border-rose-200 shrink-0 whitespace-nowrap">
+                  {expenses.length} Entries
+                </span>
+              </div>
+              <p className="text-[11px] sm:text-xs text-[#64748B] hidden sm:block">Log butter, chocolate, flour, packaging boxes & operational costs</p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 shrink-0">
+            <Link
+              href="/b2b/reports"
+              className="px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-xl text-[10px] sm:text-xs font-bold bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 transition-all flex items-center gap-1.5 shadow-2xs shrink-0 whitespace-nowrap"
+            >
+              <span>View Net Profit</span>
+              <ArrowRight size={13} className="shrink-0" />
+            </Link>
+            <button
+              onClick={() => setIsModalOpen(true)}
+              className="px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-xl text-[10px] sm:text-xs font-extrabold bg-[#2563EB] hover:bg-blue-700 text-white transition-all shadow-xs flex items-center gap-1.5 cursor-pointer shrink-0 whitespace-nowrap"
+            >
+              <Plus size={14} className="shrink-0" />
+              <span>Log Expense</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div className="max-w-6xl mx-auto px-4 py-6 space-y-6">
+        {/* Metric Cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="p-4 rounded-2xl bg-white border border-[#E2E8F0] shadow-2xs flex items-center justify-between">
+            <div>
+              <p className="text-[11px] font-bold text-[#64748B] uppercase tracking-wider">Total Raw Costs</p>
+              <h3 className="text-2xl font-black text-[#0F172A] mt-0.5">₹{totalExpenses.toLocaleString("en-IN")}</h3>
+              <p className="text-xs text-rose-600 font-semibold mt-1">Deducted from gross sales</p>
+            </div>
+            <div className="w-10 h-10 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center font-bold">
+              <Receipt size={20} />
+            </div>
+          </div>
+
+          <div className="p-4 rounded-2xl bg-white border border-[#E2E8F0] shadow-2xs flex items-center justify-between">
+            <div>
+              <p className="text-[11px] font-bold text-[#64748B] uppercase tracking-wider">Top Category</p>
+              <h3 className="text-base font-black text-[#0F172A] mt-0.5">Chocolate & Dairy</h3>
+              <p className="text-xs text-[#64748B] font-semibold mt-1">Primary ingredient driver</p>
+            </div>
+            <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold">
+              <ShoppingBag size={20} />
+            </div>
+          </div>
+
+          <div className="p-4 rounded-2xl bg-white border border-[#E2E8F0] shadow-2xs flex items-center justify-between">
+            <div>
+              <p className="text-[11px] font-bold text-[#64748B] uppercase tracking-wider">Recent Expense</p>
+              <h3 className="text-base font-black text-[#0F172A] mt-0.5 truncate max-w-[170px]" title={expenses[0]?.name}>
+                {expenses[0]?.name || "None"}
+              </h3>
+              <p className="text-xs text-rose-600 font-bold mt-1">₹{expenses[0]?.amount || 0}</p>
+            </div>
+            <div className="w-10 h-10 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center font-bold">
+              <TrendingDown size={20} />
+            </div>
+          </div>
+        </div>
+
+        {/* Search */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-3.5 rounded-2xl border border-[#E2E8F0] shadow-2xs">
+          <div className="relative flex-1 max-w-md">
+            <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Search ingredient or packaging..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-9 pr-3.5 py-2 rounded-xl text-xs bg-slate-50 border border-slate-200 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
+            />
+          </div>
+          <span className="text-xs text-[#64748B] font-semibold">
+            Showing <strong className="text-[#0F172A]">{filteredExpenses.length}</strong> items
+          </span>
+        </div>
+
+        {/* Expense List Table */}
+        <div className="bg-white rounded-2xl border border-[#E2E8F0] shadow-xs overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="bg-[#F8FAFC] border-b border-[#E2E8F0] text-[11px] font-extrabold text-[#64748B] uppercase tracking-wider">
+                  <th className="py-3 px-4">Item / Description</th>
+                  <th className="py-3 px-4">Category</th>
+                  <th className="py-3 px-4">Date</th>
+                  <th className="py-3 px-4">Amount (₹)</th>
+                  <th className="py-3 px-4 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[#F1F5F9] text-xs font-semibold text-[#0F172A]">
+                {filteredExpenses.map((exp) => (
+                  <tr key={exp.id} className="hover:bg-slate-50/80 transition-colors">
+                    <td className="py-3.5 px-4">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-8 h-8 rounded-lg bg-rose-50 border border-rose-200 flex items-center justify-center text-rose-700 font-bold shrink-0">
+                          🧾
+                        </div>
+                        <div>
+                          <p className="font-extrabold text-[#0F172A]">{exp.name}</p>
+                          {exp.notes && <p className="text-[10px] text-slate-400">{exp.notes}</p>}
+                        </div>
+                      </div>
+                    </td>
+                    <td className="py-3.5 px-4">
+                      <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-extrabold bg-slate-100 text-slate-700 border border-slate-200">
+                        {exp.category}
+                      </span>
+                    </td>
+                    <td className="py-3.5 px-4 text-[#64748B] font-medium">{exp.date}</td>
+                    <td className="py-3.5 px-4 font-black text-rose-600 text-base">
+                      -₹{exp.amount.toLocaleString("en-IN")}
+                    </td>
+                    <td className="py-3.5 px-4 text-right">
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteExpense(exp.id, exp.name)}
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-all cursor-pointer"
+                        title="Delete"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+                {filteredExpenses.length === 0 && (
+                  <tr>
+                    <td colSpan={5} className="py-12 text-center text-[#64748B]">
+                      <p className="font-bold text-sm">No expenses found.</p>
+                      <p className="text-xs text-slate-400 mt-1">Click "+ Log Expense" to record raw material bills.</p>
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      {/* Add Expense Modal */}
+      {isModalOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-sm w-full border border-slate-200 shadow-2xl p-6 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+              <h3 className="font-extrabold text-base text-[#0F172A]">Log Baking Expense</h3>
+              <button
+                type="button"
+                onClick={() => setIsModalOpen(false)}
+                className="w-7 h-7 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleAddExpense} className="space-y-3">
+              <div>
+                <label className="text-xs font-bold text-[#0F172A] block mb-1">Item Name *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Amul Butter 5kg"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-[#0F172A] block mb-1">Total Bill Amount (₹) *</label>
+                <input
+                  type="number"
+                  step="1"
+                  min="1"
+                  required
+                  placeholder="e.g. 2400"
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 text-base font-black text-[#0F172A] focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-[#0F172A] block mb-1">Category</label>
+                <select
+                  value={category}
+                  onChange={(e) => setCategory(e.target.value as any)}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                >
+                  {EXPENSE_CATEGORIES.map((cat) => (
+                    <option key={cat} value={cat}>
+                      {cat}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-[#0F172A] block mb-1">Notes</label>
+                <input
+                  type="text"
+                  placeholder="Vendor name or bill receipt"
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div className="flex gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsModalOpen(false)}
+                  className="flex-1 py-2 rounded-xl text-xs font-bold text-slate-600 bg-slate-100"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 py-2 rounded-xl text-xs font-extrabold text-white bg-blue-600"
+                >
+                  Save Expense
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

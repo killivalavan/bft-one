@@ -18,7 +18,8 @@ import {
   Trash2, ArrowLeft, Building2, Store, Phone,
   Percent, ShieldCheck, Check, X, Save, Upload, Crop,
   CreditCard, ChevronUp, ChevronDown, ShieldAlert, Loader2, UserCheck, Users,
-  Tag, Receipt, PlusCircle, Sparkles
+  Tag, Receipt, PlusCircle, Sparkles, ArrowRightLeft, TrendingUp, BarChart3,
+  PieChart, Coins, Award, ExternalLink, Calendar, HelpCircle, PackageCheck, Boxes
 } from "lucide-react";
 import { SyncStatusBadge } from "@/components/offline/SyncStatusBadge";
 import {
@@ -112,11 +113,17 @@ const INITIAL_DEFAULT_CUSTOMERS: SavedCustomer[] = [
 export default function InvoicesPage() {
   const { user, loading: userLoading } = useUser();
   const { flags, loading: profileLoading } = useProfile();
-  const { business } = useTenant();
+  const { business, isModuleEnabled } = useTenant();
   const { toast } = useToast();
 
   // Mode: "list" (history view) or "builder" (editor view)
   const [view, setView] = useState<"list" | "builder">("list");
+  // Sub-tabs in List View: "invoices" | "analytics" | "profit"
+  const [listTab, setListTab] = useState<"invoices" | "analytics" | "profit">("invoices");
+  const [profitPeriod, setProfitPeriod] = useState<"month" | "all">("month");
+  const [expensesTotal, setExpensesTotal] = useState<number>(0);
+  const [salariesTotal, setSalariesTotal] = useState<number>(0);
+  const [loadingProfitData, setLoadingProfitData] = useState<boolean>(false);
 
   // Invoices list state
   const [invoices, setInvoices] = useState<SavedInvoice[]>([]);
@@ -779,6 +786,188 @@ export default function InvoicesPage() {
   const totalPaidSum = useMemo(() => invoices.filter(i => i.status === "paid").reduce((sum, i) => sum + i.totalAmount, 0), [invoices]);
   const totalUnpaidSum = useMemo(() => invoices.filter(i => i.status === "unpaid").reduce((sum, i) => sum + i.totalAmount, 0), [invoices]);
 
+  // B2B Bridge Check
+  const isBridgeEnabled = isModuleEnabled ? isModuleEnabled("b2b_bridge") : false;
+
+  // Store & Item Analytics Calculations (Derived dynamically from in-memory invoices)
+  const storeAnalytics = useMemo(() => {
+    const storesMap: Record<string, {
+      name: string;
+      phone?: string;
+      invoiceCount: number;
+      totalAmount: number;
+      paidAmount: number;
+      unpaidAmount: number;
+      totalUnits: number;
+      itemQuantities: Record<string, number>;
+      topItemName: string;
+      lastDate: string;
+    }> = {};
+
+    const itemsMap: Record<string, {
+      name: string;
+      totalUnits: number;
+      totalRevenue: number;
+      storesBreakdown: Record<string, { units: number; amount: number }>;
+      topStoreName: string;
+    }> = {};
+
+    invoices.forEach(inv => {
+      const storeKey = (inv.customerName || "General Store").trim();
+      if (!storesMap[storeKey]) {
+        storesMap[storeKey] = {
+          name: storeKey,
+          phone: inv.customerPhone,
+          invoiceCount: 0,
+          totalAmount: 0,
+          paidAmount: 0,
+          unpaidAmount: 0,
+          totalUnits: 0,
+          itemQuantities: {},
+          topItemName: "-",
+          lastDate: inv.date,
+        };
+      }
+
+      const st = storesMap[storeKey];
+      st.invoiceCount += 1;
+      st.totalAmount += inv.totalAmount || 0;
+      if (inv.status === "paid") st.paidAmount += inv.totalAmount || 0;
+      else st.unpaidAmount += inv.totalAmount || 0;
+      st.lastDate = inv.date;
+
+      (inv.items || []).forEach(it => {
+        const itName = (it.name || "Bakery Item").trim();
+        const qty = Number(it.qty) || 0;
+        const amt = Number(it.amount) || (qty * (Number(it.rate) || 0));
+
+        st.totalUnits += qty;
+        st.itemQuantities[itName] = (st.itemQuantities[itName] || 0) + qty;
+
+        if (!itemsMap[itName]) {
+          itemsMap[itName] = {
+            name: itName,
+            totalUnits: 0,
+            totalRevenue: 0,
+            storesBreakdown: {},
+            topStoreName: "-",
+          };
+        }
+        const im = itemsMap[itName];
+        im.totalUnits += qty;
+        im.totalRevenue += amt;
+        if (!im.storesBreakdown[storeKey]) {
+          im.storesBreakdown[storeKey] = { units: 0, amount: 0 };
+        }
+        im.storesBreakdown[storeKey].units += qty;
+        im.storesBreakdown[storeKey].amount += amt;
+      });
+    });
+
+    // Determine top item for each store
+    Object.values(storesMap).forEach(st => {
+      let topName = "-";
+      let maxQty = -1;
+      Object.entries(st.itemQuantities).forEach(([iName, qty]) => {
+        if (qty > maxQty) {
+          maxQty = qty;
+          topName = `${iName} (${qty} pcs)`;
+        }
+      });
+      st.topItemName = topName;
+    });
+
+    // Determine top store for each item
+    Object.values(itemsMap).forEach(im => {
+      let topStore = "-";
+      let maxQty = -1;
+      Object.entries(im.storesBreakdown).forEach(([sName, data]) => {
+        if (data.units > maxQty) {
+          maxQty = data.units;
+          topStore = `${sName} (${data.units} pcs)`;
+        }
+      });
+      im.topStoreName = topStore;
+    });
+
+    const storesList = Object.values(storesMap).sort((a, b) => b.totalAmount - a.totalAmount);
+    const itemsList = Object.values(itemsMap).sort((a, b) => b.totalUnits - a.totalUnits);
+    const totalDeliveredPieces = storesList.reduce((sum, s) => sum + s.totalUnits, 0);
+
+    return {
+      storesList,
+      itemsList,
+      totalStores: storesList.length,
+      totalDeliveredPieces,
+      topProduct: itemsList[0]?.name || "None yet",
+      topStorePartner: storesList[0]?.name || "None yet",
+    };
+  }, [invoices]);
+
+  // Fetch Expenses & Salary data for Profit Tracker
+  useEffect(() => {
+    if (listTab !== "profit" || !business?.id) return;
+    let isCancelled = false;
+
+    async function loadProfitStats() {
+      setLoadingProfitData(true);
+      try {
+        const bizId = business?.id;
+        // 1. Fetch Daily Expenses
+        const expQuery = supabaseClient
+          .from("daily_expenses")
+          .select("price_cents, quantity, expense_date")
+          .eq("business_id", bizId);
+
+        // 2. Fetch Fixed Monthly Expenses
+        const mExpQuery = supabaseClient
+          .from("monthly_expenses")
+          .select("amount_cents, is_active")
+          .eq("business_id", bizId);
+
+        // 3. Fetch Settled Salary Records
+        const salQuery = supabaseClient
+          .from("salary_settlements")
+          .select("settled_amount_cents, is_settled")
+          .eq("is_settled", true);
+
+        const [expRes, mExpRes, salRes] = await Promise.all([expQuery, mExpQuery, salQuery]);
+
+        if (isCancelled) return;
+
+        let dailyExpSum = 0;
+        if (expRes.data) {
+          dailyExpSum = expRes.data.reduce((sum: number, r: any) => {
+            const rowTotal = ((r.price_cents || 0) * (r.quantity || 1)) / 100;
+            return sum + rowTotal;
+          }, 0);
+        }
+
+        let monthlyExpSum = 0;
+        if (mExpRes.data) {
+          monthlyExpSum = mExpRes.data
+            .filter((r: any) => r.is_active !== false)
+            .reduce((sum: number, r: any) => sum + ((r.amount_cents || 0) / 100), 0);
+        }
+
+        let settledSalSum = 0;
+        if (salRes.data) {
+          settledSalSum = salRes.data.reduce((sum: number, r: any) => sum + ((r.settled_amount_cents || 0) / 100), 0);
+        }
+
+        setExpensesTotal(dailyExpSum + monthlyExpSum);
+        setSalariesTotal(settledSalSum);
+      } catch (e) {
+        console.error("Error loading profit data:", e);
+      } finally {
+        if (!isCancelled) setLoadingProfitData(false);
+      }
+    }
+
+    loadProfitStats();
+    return () => { isCancelled = true; };
+  }, [listTab, business?.id]);
+
   // Strict Phone Validation
   function handlePhoneChange(val: string, setter: (v: string) => void) {
     const cleaned = val.replace(/[^0-9+\s-]/g, "").slice(0, 15);
@@ -855,7 +1044,69 @@ export default function InvoicesPage() {
               </button>
             </div>
 
-            {/* Stat Cards */}
+            {/* View Navigation Switcher: Invoices | Store & Item Analytics | Profit & Margins */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-2.5 rounded-xl border border-[#E2E8F0] shadow-xs">
+              <div className="flex items-center gap-1.5 p-1 bg-[#F1F5F9] rounded-xl overflow-x-auto scrollbar-none w-full sm:w-auto">
+                <button
+                  type="button"
+                  onClick={() => setListTab("invoices")}
+                  className={cn(
+                    "px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap",
+                    listTab === "invoices"
+                      ? "bg-white text-[#0F172A] shadow-xs border border-slate-200"
+                      : "text-[#64748B] hover:text-[#0F172A] hover:bg-white/50"
+                  )}
+                >
+                  <FileText className="w-3.5 h-3.5 text-[#2563EB]" />
+                  <span>Invoices &amp; Bills ({invoices.length})</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setListTab("analytics")}
+                  className={cn(
+                    "px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap",
+                    listTab === "analytics"
+                      ? "bg-white text-[#0F172A] shadow-xs border border-slate-200"
+                      : "text-[#64748B] hover:text-[#0F172A] hover:bg-white/50"
+                  )}
+                >
+                  <Store className="w-3.5 h-3.5 text-indigo-600" />
+                  <span>Store &amp; Item Analytics</span>
+                  {storeAnalytics.totalStores > 0 && (
+                    <span className="px-1.5 py-0.5 rounded-full text-[10px] font-extrabold bg-indigo-100 text-indigo-700">
+                      {storeAnalytics.totalStores} stores
+                    </span>
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setListTab("profit")}
+                  className={cn(
+                    "px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap",
+                    listTab === "profit"
+                      ? "bg-white text-[#0F172A] shadow-xs border border-slate-200"
+                      : "text-[#64748B] hover:text-[#0F172A] hover:bg-white/50"
+                  )}
+                >
+                  <TrendingUp className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>Profit &amp; Margins</span>
+                </button>
+              </div>
+
+              {isBridgeEnabled && (
+                <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-emerald-50 border border-emerald-200 text-[11px] font-bold text-emerald-800 self-start sm:self-auto">
+                  <ArrowRightLeft className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                  <span>B2B Supply Bridge Active</span>
+                </div>
+              )}
+            </div>
+
+            {/* TAB 1: ALL INVOICES & BILLS (Original Untouched Experience) */}
+            {listTab === "invoices" && (
+              <>
+                {/* Stat Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div className="bg-white p-5 rounded-xl border border-[#E2E8F0] shadow-xs">
                 <span className="text-xs font-semibold text-[#64748B] uppercase tracking-wider">Total Invoiced</span>
@@ -1076,6 +1327,376 @@ export default function InvoicesPage() {
                 </table>
               </div>
             </div>
+          </>
+        )}
+
+            {/* TAB 2: STORE & ITEM PERFORMANCE ANALYTICS */}
+            {listTab === "analytics" && (
+              <div className="space-y-6 animate-in fade-in">
+                {/* 4 Summary Metric Cards */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                  <div className="bg-white p-5 rounded-xl border border-[#E2E8F0] shadow-xs">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold text-[#64748B] uppercase tracking-wider">Stores Supplied</span>
+                      <div className="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center">
+                        <Store className="w-4 h-4" />
+                      </div>
+                    </div>
+                    <div className="text-2xl font-bold text-[#0F172A] mt-2">{storeAnalytics.totalStores}</div>
+                    <p className="text-[11px] text-[#64748B] mt-0.5">Active retail partner stores</p>
+                  </div>
+
+                  <div className="bg-white p-5 rounded-xl border border-[#E2E8F0] shadow-xs">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold text-[#64748B] uppercase tracking-wider">Total Pieces Sold</span>
+                      <div className="w-8 h-8 rounded-lg bg-blue-50 text-[#2563EB] flex items-center justify-center">
+                        <PackageCheck className="w-4 h-4" />
+                      </div>
+                    </div>
+                    <div className="text-2xl font-bold text-[#0F172A] mt-2">
+                      {storeAnalytics.totalDeliveredPieces.toLocaleString()} <span className="text-xs font-semibold text-[#64748B]">pcs</span>
+                    </div>
+                    <p className="text-[11px] text-[#64748B] mt-0.5">Across all client stores</p>
+                  </div>
+
+                  <div className="bg-white p-5 rounded-xl border border-[#E2E8F0] shadow-xs">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold text-[#64748B] uppercase tracking-wider">Top-Selling Item</span>
+                      <div className="w-8 h-8 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center">
+                        <Award className="w-4 h-4" />
+                      </div>
+                    </div>
+                    <div className="text-lg font-bold text-[#0F172A] mt-2 truncate" title={storeAnalytics.topProduct}>
+                      {storeAnalytics.topProduct}
+                    </div>
+                    <p className="text-[11px] text-[#64748B] mt-0.5">Highest order volume</p>
+                  </div>
+
+                  <div className="bg-white p-5 rounded-xl border border-[#E2E8F0] shadow-xs">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold text-[#64748B] uppercase tracking-wider">#1 Store Partner</span>
+                      <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                        <TrendingUp className="w-4 h-4" />
+                      </div>
+                    </div>
+                    <div className="text-lg font-bold text-[#0F172A] mt-2 truncate" title={storeAnalytics.topStorePartner}>
+                      {storeAnalytics.topStorePartner}
+                    </div>
+                    <p className="text-[11px] text-[#64748B] mt-0.5">Highest gross revenue</p>
+                  </div>
+                </div>
+
+                {/* Section 1: Store Breakdown Table */}
+                <div className="bg-white rounded-xl border border-[#E2E8F0] shadow-xs overflow-hidden">
+                  <div className="p-4 sm:p-5 border-b border-[#E2E8F0] flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div>
+                      <h2 className="text-base font-bold text-[#0F172A]">Store-by-Store Sales &amp; Balance Dues</h2>
+                      <p className="text-xs text-[#64748B]">Detailed summary of pieces delivered, amount billed, and pending payments per store</p>
+                    </div>
+                    <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-[#EFF6FF] text-[#1E3A8A] w-fit">
+                      {storeAnalytics.storesList.length} Stores Tracked
+                    </span>
+                  </div>
+
+                  {storeAnalytics.storesList.length === 0 ? (
+                    <div className="p-10 text-center text-[#64748B] text-xs font-medium">
+                      No store sales found yet. Create invoices for your client stores to see analytics.
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left border-collapse">
+                        <thead>
+                          <tr className="bg-[#F8FAFC] border-b border-[#E2E8F0] text-[11px] font-bold text-[#64748B] uppercase tracking-wider">
+                            <th className="py-3 px-4">Store Name</th>
+                            <th className="py-3 px-4">Invoices</th>
+                            <th className="py-3 px-4">Pieces Supplied</th>
+                            <th className="py-3 px-4">Top Item Sold</th>
+                            <th className="py-3 px-4">Total Billed</th>
+                            <th className="py-3 px-4">Status &amp; Dues</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-[#E2E8F0] text-xs">
+                          {storeAnalytics.storesList.map(st => (
+                            <tr key={st.name} className="hover:bg-slate-50/70 transition-colors">
+                              <td className="py-3.5 px-4 font-bold text-[#0F172A]">
+                                <div className="flex items-center gap-2">
+                                  <div className="w-7 h-7 rounded-lg bg-indigo-50 text-indigo-700 flex items-center justify-center font-bold text-xs shrink-0">
+                                    {st.name.charAt(0).toUpperCase()}
+                                  </div>
+                                  <div>
+                                    <div className="font-bold text-[#0F172A]">{st.name}</div>
+                                    {st.phone && <div className="text-[11px] text-[#64748B] font-normal">{st.phone}</div>}
+                                  </div>
+                                </div>
+                              </td>
+                              <td className="py-3.5 px-4 font-semibold text-slate-700">{st.invoiceCount} bills</td>
+                              <td className="py-3.5 px-4">
+                                <span className="font-bold text-[#0F172A]">{st.totalUnits.toLocaleString()}</span>
+                                <span className="text-[11px] text-[#64748B] ml-1">pcs</span>
+                              </td>
+                              <td className="py-3.5 px-4">
+                                <span className="px-2 py-0.5 rounded-md text-[11px] font-semibold bg-amber-50 text-amber-800 border border-amber-200">
+                                  {st.topItemName}
+                                </span>
+                              </td>
+                              <td className="py-3.5 px-4 font-bold text-[#0F172A]">
+                                ₹{st.totalAmount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                              </td>
+                              <td className="py-3.5 px-4">
+                                {st.unpaidAmount > 0 ? (
+                                  <div className="inline-flex flex-col">
+                                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200 w-fit">
+                                      ₹{st.unpaidAmount.toLocaleString("en-IN", { minimumFractionDigits: 0 })} Due
+                                    </span>
+                                    <span className="text-[10px] text-emerald-700 font-semibold mt-0.5">
+                                      ₹{st.paidAmount.toLocaleString("en-IN", { minimumFractionDigits: 0 })} Paid
+                                    </span>
+                                  </div>
+                                ) : (
+                                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                                    All Paid (₹{st.paidAmount.toLocaleString("en-IN", { minimumFractionDigits: 0 })})
+                                  </span>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+
+                {/* Section 2: Item Distribution Cross-Matrix ("Which item sold much in which store") */}
+                <div className="bg-white rounded-xl border border-[#E2E8F0] shadow-xs p-5 space-y-4">
+                  <div className="border-b border-[#E2E8F0] pb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div>
+                      <h2 className="text-base font-bold text-[#0F172A]">Item Distribution Matrix (Which Item Sold Where)</h2>
+                      <p className="text-xs text-[#64748B]">See exactly how many pieces of Brownie, Jam Cake, and Tea Cake each store purchased</p>
+                    </div>
+                    <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-indigo-50 text-indigo-700 w-fit">
+                      {storeAnalytics.itemsList.length} Unique Bakery Items
+                    </span>
+                  </div>
+
+                  {storeAnalytics.itemsList.length === 0 ? (
+                    <div className="p-8 text-center text-[#64748B] text-xs">
+                      No items recorded in invoices yet.
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {storeAnalytics.itemsList.map(item => (
+                        <div key={item.name} className="p-4 rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] space-y-3">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <span className="text-lg">🧁</span>
+                              <div>
+                                <h3 className="font-bold text-sm text-[#0F172A]">{item.name}</h3>
+                                <p className="text-[11px] text-[#64748B]">Total: {item.totalUnits} pcs (₹{item.totalRevenue.toLocaleString("en-IN")})</p>
+                              </div>
+                            </div>
+                            <span className="px-2 py-1 rounded-lg text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200 flex items-center gap-1">
+                              <Award className="w-3 h-3 text-amber-600" />
+                              <span>Top: {item.topStoreName}</span>
+                            </span>
+                          </div>
+
+                          {/* Store-by-Store breakdown bars */}
+                          <div className="space-y-2 pt-1">
+                            {Object.entries(item.storesBreakdown)
+                              .sort((a, b) => b[1].units - a[1].units)
+                              .map(([stName, data]) => {
+                                const pct = item.totalUnits > 0 ? Math.round((data.units / item.totalUnits) * 100) : 0;
+                                return (
+                                  <div key={stName} className="space-y-1">
+                                    <div className="flex items-center justify-between text-xs">
+                                      <span className="font-semibold text-slate-800 truncate pr-2">{stName}</span>
+                                      <span className="font-bold text-[#0F172A] whitespace-nowrap">
+                                        {data.units} pcs <span className="text-[#64748B] font-normal">({pct}%)</span>
+                                      </span>
+                                    </div>
+                                    <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
+                                      <div
+                                        className="h-full bg-[#2563EB] rounded-full transition-all duration-300"
+                                        style={{ width: `${pct}%` }}
+                                      />
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* TAB 3: REAL PROFIT & MARGIN TRACKER */}
+            {listTab === "profit" && (
+              <div className="space-y-6 animate-in fade-in">
+                {/* Header with explanation */}
+                <div className="bg-white p-5 rounded-xl border border-[#E2E8F0] shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div>
+                    <h2 className="text-base font-bold text-[#0F172A] flex items-center gap-2">
+                      <TrendingUp className="w-5 h-5 text-emerald-600" />
+                      <span>Real Profit &amp; Margin Calculator</span>
+                    </h2>
+                    <p className="text-xs text-[#64748B] mt-0.5">
+                      Accurate net earnings connecting your Invoice Sales, Raw Material / Utility Expenses, and Helper Staff Salaries
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    {loadingProfitData && (
+                      <span className="flex items-center gap-1.5 text-xs text-[#64748B] font-semibold">
+                        <Loader2 className="w-3.5 h-3.5 animate-spin text-[#2563EB]" />
+                        Syncing financials...
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* 4 Financial Hero KPI Cards */}
+                {(() => {
+                  const grossRevenue = totalInvoicedSum;
+                  const cogsAndExpenses = expensesTotal;
+                  const staffWages = salariesTotal;
+                  const totalCosts = cogsAndExpenses + staffWages;
+                  const netProfit = grossRevenue - totalCosts;
+                  const netMarginPct = grossRevenue > 0 ? ((netProfit / grossRevenue) * 100).toFixed(1) : "0";
+                  const isProfitable = netProfit >= 0;
+
+                  return (
+                    <>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                        {/* 1. Gross Invoiced Revenue */}
+                        <div className="bg-white p-5 rounded-xl border border-[#E2E8F0] shadow-xs">
+                          <span className="text-xs font-semibold text-[#64748B] uppercase tracking-wider">Gross Invoiced Revenue</span>
+                          <div className="text-2xl font-bold text-[#0F172A] mt-1">
+                            ₹{grossRevenue.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                          </div>
+                          <p className="text-[11px] text-[#64748B] mt-0.5">{invoices.length} invoices generated</p>
+                        </div>
+
+                        {/* 2. Raw Material & Expenses */}
+                        <div className="bg-[#FFFBEB] p-5 rounded-xl border border-[#FEF3C7] shadow-xs">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-semibold text-[#B45309] uppercase tracking-wider">Baking &amp; Daily Costs</span>
+                            <Link href="/expenses" className="text-[11px] font-bold text-[#B45309] hover:underline flex items-center gap-1">
+                              <span>Log</span> <ExternalLink className="w-3 h-3" />
+                            </Link>
+                          </div>
+                          <div className="text-2xl font-bold text-[#B45309] mt-1">
+                            ₹{cogsAndExpenses.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                          </div>
+                          <p className="text-[11px] text-[#B45309] mt-0.5">Ingredients, gas, packaging &amp; bills</p>
+                        </div>
+
+                        {/* 3. Helper Staff Wages */}
+                        <div className="bg-[#F5F3FF] p-5 rounded-xl border border-[#EDE9FE] shadow-xs">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-semibold text-[#6D28D9] uppercase tracking-wider">Helper Staff Wages</span>
+                            <Link href="/admin" className="text-[11px] font-bold text-[#6D28D9] hover:underline flex items-center gap-1">
+                              <span>Manage</span> <ExternalLink className="w-3 h-3" />
+                            </Link>
+                          </div>
+                          <div className="text-2xl font-bold text-[#6D28D9] mt-1">
+                            ₹{staffWages.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                          </div>
+                          <p className="text-[11px] text-[#6D28D9] mt-0.5">Assistant baker, packager &amp; delivery</p>
+                        </div>
+
+                        {/* 4. Real Net Profit */}
+                        <div className={cn(
+                          "p-5 rounded-xl border shadow-xs transition-all",
+                          isProfitable
+                            ? "bg-[#F0FDF4] border-[#BBF7D0]"
+                            : "bg-[#FEF2F2] border-[#FECACA]"
+                        )}>
+                          <div className="flex items-center justify-between">
+                            <span className={cn(
+                              "text-xs font-semibold uppercase tracking-wider",
+                              isProfitable ? "text-[#15803D]" : "text-[#B91C1C]"
+                            )}>
+                              Real Net Take-Home Profit
+                            </span>
+                            <span className={cn(
+                              "px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase",
+                              isProfitable ? "bg-emerald-200/70 text-emerald-900" : "bg-rose-200/70 text-rose-900"
+                            )}>
+                              {netMarginPct}% Margin
+                            </span>
+                          </div>
+                          <div className={cn(
+                            "text-2xl font-extrabold mt-1",
+                            isProfitable ? "text-[#15803D]" : "text-[#B91C1C]"
+                          )}>
+                            ₹{netProfit.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                          </div>
+                          <p className={cn(
+                            "text-[11px] mt-0.5 font-medium",
+                            isProfitable ? "text-[#16A34A]" : "text-[#DC2626]"
+                          )}>
+                            Revenue minus all expenses &amp; wages
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Visual Financial Equation & Breakdown */}
+                      <div className="bg-white rounded-xl border border-[#E2E8F0] shadow-xs p-6 space-y-5">
+                        <h3 className="text-sm font-bold text-[#0F172A]">Profit Equation Breakdown</h3>
+                        
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
+                          <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-1">
+                            <span className="text-[11px] font-bold text-[#64748B] uppercase">1. Invoiced B2B Sales</span>
+                            <div className="text-lg font-bold text-[#0F172A]">₹{grossRevenue.toLocaleString("en-IN")}</div>
+                            <p className="text-[11px] text-[#64748B]">100% Topline Revenue</p>
+                          </div>
+
+                          <div className="p-4 rounded-xl bg-amber-50/50 border border-amber-200 space-y-1">
+                            <span className="text-[11px] font-bold text-amber-800 uppercase">2. Total Direct Costs</span>
+                            <div className="text-lg font-bold text-amber-900">
+                              - ₹{totalCosts.toLocaleString("en-IN")}
+                            </div>
+                            <p className="text-[11px] text-amber-700">
+                              ₹{cogsAndExpenses.toLocaleString("en-IN")} ingredients + ₹{staffWages.toLocaleString("en-IN")} wages
+                            </p>
+                          </div>
+
+                          <div className="p-4 rounded-xl bg-emerald-50/60 border border-emerald-200 space-y-1">
+                            <span className="text-[11px] font-bold text-emerald-800 uppercase">3. Baker's Take-Home</span>
+                            <div className="text-lg font-bold text-emerald-900">
+                              = ₹{netProfit.toLocaleString("en-IN")}
+                            </div>
+                            <p className="text-[11px] text-emerald-700">{netMarginPct}% retained in hand</p>
+                          </div>
+                        </div>
+
+                        {/* Quick Action Navigation */}
+                        <div className="flex flex-wrap items-center gap-3 pt-3 border-t border-[#E2E8F0]">
+                          <Link
+                            href="/expenses"
+                            className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-semibold rounded-lg transition-colors inline-flex items-center gap-1.5"
+                          >
+                            <Receipt className="w-3.5 h-3.5 text-amber-600" />
+                            <span>Add Ingredient / Delivery Bill in Expenses</span>
+                          </Link>
+
+                          <Link
+                            href="/admin"
+                            className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-semibold rounded-lg transition-colors inline-flex items-center gap-1.5"
+                          >
+                            <Users className="w-3.5 h-3.5 text-purple-600" />
+                            <span>Manage Helper Staff Wages in Admin</span>
+                          </Link>
+                        </div>
+                      </div>
+                    </>
+                  );
+                })()}
+              </div>
+            )}
           </div>
         )}
 
@@ -1478,6 +2099,18 @@ export default function InvoicesPage() {
                     </span>
                   </div>
 
+                  {/* B2B Bridge Partner Badge */}
+                  {isBridgeEnabled && (
+                    <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-emerald-50 border border-emerald-200/90 text-[11px] text-emerald-800">
+                      <ArrowRightLeft className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                      <span className="font-semibold">
+                        {billedToName.toLowerCase().includes("bft") || billedToName.toLowerCase().includes("tea") || billedToName.toLowerCase().includes("navalur")
+                          ? "Connected SeyalPro Cafe (BFT Navalur) — 1-Click stock inward & settlement active"
+                          : "B2B Supply Bridge active for connected partner cafes"}
+                      </span>
+                    </div>
+                  )}
+
                   {/* Clean Dropdown Selector */}
                   <div className="relative">
                     <button
@@ -1541,7 +2174,7 @@ export default function InvoicesPage() {
                               className="w-full text-left px-3 py-2 rounded-lg text-xs font-bold text-[#2563EB] hover:bg-blue-50 flex items-center gap-1.5 transition-colors cursor-pointer"
                             >
                               <Plus className="w-3.5 h-3.5" />
-                              <span>+ Add New Client</span>
+                              <span>Add New Client</span>
                             </button>
                           </div>
                         </div>
@@ -1900,7 +2533,7 @@ export default function InvoicesPage() {
                         onClick={() => setShowBankDetails(!showBankDetails)}
                         className="text-xs font-bold text-[#8B5CF6] hover:underline cursor-pointer"
                       >
-                        {showBankDetails ? "Hide" : "+ Add Bank Account"}
+                        {showBankDetails ? "Hide" : "Add Bank Account"}
                       </button>
                     </div>
 
@@ -1948,7 +2581,7 @@ export default function InvoicesPage() {
                         onClick={() => setShowUpiDetails(!showUpiDetails)}
                         className="text-xs font-bold text-[#8B5CF6] hover:underline cursor-pointer"
                       >
-                        {showUpiDetails ? "Hide" : "+ Add UPI ID"}
+                        {showUpiDetails ? "Hide" : "Add UPI ID"}
                       </button>
                     </div>
 
@@ -2106,7 +2739,7 @@ export default function InvoicesPage() {
                           onClick={() => setEnableGst(true)}
                           className="inline-flex items-center gap-1 px-2.5 py-1 rounded-[8px] text-[11px] font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-300 transition-colors cursor-pointer"
                         >
-                          <Percent className="w-3 h-3" /> + Add GST (+ ₹)
+                          <Percent className="w-3 h-3" /> Add GST (+ ₹)
                         </button>
                       )}
 
@@ -2115,7 +2748,7 @@ export default function InvoicesPage() {
                         onClick={() => addAdjustment("Discount", 0, "discount", "deduction")}
                         className="inline-flex items-center gap-1 px-2.5 py-1 rounded-[8px] text-[11px] font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-300 transition-colors cursor-pointer"
                       >
-                        <Tag className="w-3 h-3" /> + Add Discount (- ₹)
+                        <Tag className="w-3 h-3" /> Add Discount (- ₹)
                       </button>
 
                       <button
@@ -2123,7 +2756,7 @@ export default function InvoicesPage() {
                         onClick={() => addAdjustment("TDS Deduction", 0, "tds", "deduction")}
                         className="inline-flex items-center gap-1 px-2.5 py-1 rounded-[8px] text-[11px] font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-300 transition-colors cursor-pointer"
                       >
-                        <Receipt className="w-3 h-3" /> + Add TDS (- ₹)
+                        <Receipt className="w-3 h-3" /> Add TDS (- ₹)
                       </button>
 
                       <button
@@ -2131,7 +2764,7 @@ export default function InvoicesPage() {
                         onClick={() => addAdjustment("Extra Charge", 0, "custom", "addition")}
                         className="inline-flex items-center gap-1 px-2.5 py-1 rounded-[8px] text-[11px] font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 transition-colors cursor-pointer"
                       >
-                        <Plus className="w-3 h-3" /> + Add Extra Charge (+ ₹)
+                        <Plus className="w-3 h-3" /> Add Extra Charge (+ ₹)
                       </button>
 
                       <button
@@ -2139,7 +2772,7 @@ export default function InvoicesPage() {
                         onClick={() => addAdjustment("Custom Deduction", 0, "custom", "deduction")}
                         className="inline-flex items-center gap-1 px-2.5 py-1 rounded-[8px] text-[11px] font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-300 transition-colors cursor-pointer"
                       >
-                        <PlusCircle className="w-3 h-3" /> + Add Deduction (- ₹)
+                        <PlusCircle className="w-3 h-3" /> Add Deduction (- ₹)
                       </button>
                     </div>
 

@@ -6,6 +6,7 @@ import { supabaseClient } from "@/lib/supabaseClient";
 import { useUser } from "@/lib/hooks/useUser";
 import { useProfile } from "@/lib/hooks/useProfile";
 import { useTenant } from "@/lib/context/TenantContext";
+import { useUnreadNotificationsCount } from "@/lib/hooks/useUnreadNotificationsCount";
 import { cn } from "@/lib/utils/cn";
 import {
   Home, CalendarCheck2, CalendarDays, Coffee, Shield,
@@ -27,6 +28,7 @@ export default function Navbar({
   const { user, loading } = useUser();
   const { flags } = useProfile();
   const { business, isModuleEnabled } = useTenant();
+  const { unreadCount } = useUnreadNotificationsCount();
 
   const [userEmail, setUserEmail] = useState<string | undefined>(undefined);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -299,20 +301,28 @@ export default function Navbar({
             <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
               {!isFocusMode && (
                 <>
-                  {/* Notification Bell */}
-                  <Link
-                    href="/notifications"
-                    className={cn(
-                      "relative p-2 rounded-lg border transition-all",
-                      isSuperAdminView
-                        ? "text-slate-300 hover:text-white hover:bg-slate-800 border-slate-800"
-                        : "text-[#64748B] hover:text-[#0F172A] hover:bg-slate-100 border-[#E2E8F0]"
-                    )}
-                    title="Notifications"
-                  >
-                    <Bell size={18} />
-                    <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-[#2563EB] rounded-full ring-2 ring-white" />
-                  </Link>
+                  {/* Notification Bell (Only for store / cafe mode, hidden for B2B Supply) */}
+                  {!pathname?.startsWith("/b2b") && !pathname?.startsWith("/baker") && (
+                    <Link
+                      href="/notifications"
+                      className={cn(
+                        "relative p-2 rounded-lg border transition-all",
+                        isSuperAdminView
+                          ? "text-slate-300 hover:text-white hover:bg-slate-800 border-slate-800"
+                          : "text-[#64748B] hover:text-[#0F172A] hover:bg-slate-100 border-[#E2E8F0]"
+                      )}
+                      title={unreadCount > 0 ? `${unreadCount} unread notification${unreadCount === 1 ? "" : "s"}` : "Notifications"}
+                    >
+                      <Bell size={18} />
+                      {unreadCount > 0 ? (
+                        <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 bg-rose-600 text-white text-[10px] font-black rounded-full flex items-center justify-center ring-2 ring-white shadow-xs animate-in zoom-in-75">
+                          {unreadCount > 9 ? "9+" : unreadCount}
+                        </span>
+                      ) : (
+                        <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 bg-slate-300 rounded-full" />
+                      )}
+                    </Link>
+                  )}
 
                   {/* Support & Issues Hub strictly for Client Store Admins */}
                   {flags?.isAdmin && !flags?.isSuperAdmin && (

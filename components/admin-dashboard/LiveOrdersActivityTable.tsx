@@ -282,7 +282,7 @@ export function LiveOrdersActivityTable({
                       href="/billing"
                       className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-blue-600 text-white text-xs font-bold hover:bg-blue-700 transition-all shadow-xs"
                     >
-                      <span>+ Create Live POS Bill</span>
+                      <span>Create Live POS Bill</span>
                     </Link>
                   </div>
                 </td>

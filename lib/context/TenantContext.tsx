@@ -13,6 +13,7 @@ export interface Business {
   address?: string | null;
   phone?: string | null;
   gstin?: string | null;
+  upi_id?: string | null;
   currency_symbol: string;
   timezone: string;
   geofence_lat: number | null;
@@ -27,13 +28,14 @@ export interface Business {
 
 export const DEFAULT_BUSINESS: Business = {
   id: "a0000000-0000-0000-0000-000000000001",
-  name: "Brown fening tea",
+  name: "Brown Fening Tea",
   slug: "bft-navalur",
   logo_url: "/dummy-logo.svg",
   signature_url: "/default-signature.svg",
   address: "255, Rajiv Gandhi Salai (OMR), Navalur,\nChennai,\nTamil Nadu, India - 600130",
   phone: "+91 98765 43210",
   gstin: "",
+  upi_id: "",
   currency_symbol: "₹",
   timezone: "Asia/Kolkata",
   geofence_lat: 12.8439,
@@ -49,6 +51,8 @@ export const DEFAULT_BUSINESS: Business = {
     stock: true,
     salary: true,
     contacts: true,
+    b2b_bridge: false,
+    baker_mode: false,
   },
   plan_type: "pro",
   max_users: 50,
@@ -301,6 +305,7 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
       address: (raw.address as string) || localExtra.address || DEFAULT_BUSINESS.address,
       phone: (raw.phone as string) || localExtra.phone || DEFAULT_BUSINESS.phone,
       gstin: (raw.gstin as string) || localExtra.gstin || DEFAULT_BUSINESS.gstin,
+      upi_id: (raw.upi_id as string) || localExtra.upi_id || "",
       currency_symbol: raw.currency_symbol || "₹",
       timezone: raw.timezone || "Asia/Kolkata",
       geofence_lat: resolvedLat,
@@ -359,7 +364,14 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   function isModuleEnabled(moduleName: string): boolean {
-    if (!business?.enabled_modules) return true;
+    if (!business?.enabled_modules) {
+      if (moduleName === "baker_mode" || moduleName === "b2b_bridge") return false;
+      return true;
+    }
+    // Opt-in modules that are strictly disabled by default unless explicitly enabled by Super Admin
+    if (moduleName === "baker_mode" || moduleName === "b2b_bridge") {
+      return Boolean(business.enabled_modules[moduleName]);
+    }
     return business.enabled_modules[moduleName] !== false;
   }
 

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useProfile } from "@/lib/hooks/useProfile";
 import { useTenant } from "@/lib/context/TenantContext";
+import { useUnreadNotificationsCount } from "@/lib/hooks/useUnreadNotificationsCount";
 import Navbar from "@/components/Navbar";
 import { AdminSidebar } from "@/components/admin-dashboard/AdminSidebar";
 import { SeyalLogo } from "@/components/ui/SeyalLogo";
@@ -15,6 +16,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { flags } = useProfile();
   const { business } = useTenant();
+  const { unreadCount } = useUnreadNotificationsCount();
 
   // Always OPEN by default, user can toggle if required
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(() => {
@@ -122,17 +124,25 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 </div>
               </div>
 
-              {/* Mobile alerts icon trigger */}
-              <div className="flex items-center gap-1.5 shrink-0">
-                <Link
-                  href="/notifications"
-                  className="p-2 rounded-xl text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors relative"
-                  title="Alerts & Notifications"
-                >
-                  <Bell size={18} />
-                  <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-[#2563EB] rounded-full ring-2 ring-white" />
-                </Link>
-              </div>
+              {/* Mobile alerts icon trigger (hidden in B2B Supply mode) */}
+              {!pathname?.startsWith("/b2b") && !pathname?.startsWith("/baker") && (
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <Link
+                    href="/notifications"
+                    className="p-2 rounded-xl text-slate-700 hover:text-slate-900 hover:bg-slate-100 transition-colors relative"
+                    title={unreadCount > 0 ? `${unreadCount} unread alert${unreadCount === 1 ? "" : "s"}` : "Alerts & Notifications"}
+                  >
+                    <Bell size={20} className={unreadCount > 0 ? "text-slate-800" : "text-slate-600"} />
+                    {unreadCount > 0 ? (
+                      <span className="absolute -top-1 -right-1 min-w-[19px] h-[19px] px-1 bg-rose-600 text-white text-[10px] font-black rounded-full flex items-center justify-center ring-2 ring-white shadow-xs animate-pulse">
+                        {unreadCount > 9 ? "9+" : unreadCount}
+                      </span>
+                    ) : (
+                      <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 bg-slate-300 rounded-full" />
+                    )}
+                  </Link>
+                </div>
+              )}
             </header>
           )}
           <main className={cn(

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useUser } from "@/lib/hooks/useUser";
 import { useProfile } from "@/lib/hooks/useProfile";
+import { useTenant } from "@/lib/context/TenantContext";
 import { supabaseClient } from "@/lib/supabaseClient";
 import { cn } from "@/lib/utils/cn";
 import { SeyalLogo } from "@/components/ui/SeyalLogo";
@@ -34,15 +35,23 @@ import {
   User,
   LogOut,
   Wallet,
-  Megaphone
+  Megaphone,
+  Truck,
+  Package,
+  PackageCheck,
+  CreditCard,
+  Send,
+  PieChart,
+  Radio
 } from "lucide-react";
+import { useUnreadNotificationsCount } from "@/lib/hooks/useUnreadNotificationsCount";
 
 export interface NavItemConfig {
   id: string;
   label: string;
   href: string;
   icon: React.ComponentType<{ size?: number; className?: string }>;
-  category: "CORE" | "OPERATIONS" | "FINANCE" | "STAFF" | "ADMIN";
+  category: "CORE" | "OPERATIONS" | "FINANCE" | "STAFF" | "ADMIN" | "MANAGEMENT";
   badge?: string;
   adminOnly?: boolean;
   colorScheme?: "blue" | "emerald" | "amber" | "purple" | "cyan" | "rose" | "slate";
@@ -77,6 +86,9 @@ export function AdminSidebar({
   const router = useRouter();
   const { user, loading } = useUser();
   const { flags } = useProfile();
+  const { isModuleEnabled } = useTenant();
+  const isBakerModuleEnabled = isModuleEnabled ? isModuleEnabled("baker_mode") : false;
+  const { unreadCount } = useUnreadNotificationsCount();
 
   const [hoveredItem, setHoveredItem] = useState<string | null>(null);
   const [userEmail, setUserEmail] = useState<string | undefined>(() => {
@@ -106,6 +118,58 @@ export function AdminSidebar({
     }
     return false;
   });
+
+  const [appMode, setAppMode] = useState<"cafe" | "baker">(() => {
+    if (typeof window !== "undefined") {
+      const cached = localStorage.getItem("seyalpro_app_mode");
+      if (cached === "baker" || cached === "cafe") return cached;
+    }
+    return "cafe";
+  });
+
+  // Listen for external mode changes and dispatch mode changes
+  React.useEffect(() => {
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === "seyalpro_app_mode" && (e.newValue === "baker" || e.newValue === "cafe")) {
+        setAppMode(e.newValue);
+      }
+    };
+    const handleCustomEvent = (e: any) => {
+      if (e.detail?.mode === "baker" || e.detail?.mode === "cafe") {
+        setAppMode(e.detail.mode);
+      }
+    };
+    window.addEventListener("storage", handleStorage);
+    window.addEventListener("seyalpro_mode_change", handleCustomEvent);
+    return () => {
+      window.removeEventListener("storage", handleStorage);
+      window.removeEventListener("seyalpro_mode_change", handleCustomEvent);
+    };
+  }, []);
+
+  const handleToggleAppMode = (mode: "cafe" | "baker") => {
+    setAppMode(mode);
+    try {
+      localStorage.setItem("seyalpro_app_mode", mode);
+      window.dispatchEvent(new CustomEvent("seyalpro_mode_change", { detail: { mode } }));
+    } catch {}
+    if (mode === "baker" && pathname === "/") {
+      router.push("/b2b");
+    } else if (mode === "cafe" && (pathname.startsWith("/b2b") || pathname.startsWith("/baker"))) {
+      router.push("/");
+    }
+  };
+
+  // If Super Admin disabled baker_mode for this business, force revert to cafe mode
+  React.useEffect(() => {
+    if (!isBakerModuleEnabled && appMode === "baker") {
+      setAppMode("cafe");
+      try {
+        localStorage.setItem("seyalpro_app_mode", "cafe");
+        window.dispatchEvent(new CustomEvent("seyalpro_mode_change", { detail: { mode: "cafe" } }));
+      } catch {}
+    }
+  }, [isBakerModuleEnabled, appMode]);
 
   // Sync display email
   React.useEffect(() => {
@@ -250,7 +314,8 @@ export function AdminSidebar({
       href: "/notifications",
       icon: Bell,
       category: "OPERATIONS",
-      colorScheme: "slate",
+      badge: unreadCount > 0 ? (unreadCount > 9 ? "9+" : String(unreadCount)) : undefined,
+      colorScheme: unreadCount > 0 ? "rose" : "slate",
     },
     {
       id: "notice-board",
@@ -364,9 +429,108 @@ export function AdminSidebar({
     },
   ];
 
+  const bakerNavItems: NavItemConfig[] = [
+    {
+      id: "baker-dashboard",
+      label: "B2B Supply Hub",
+      href: "/b2b",
+      icon: LayoutDashboard,
+      category: "OPERATIONS",
+      colorScheme: "blue",
+    },
+    {
+      id: "baker-dispatch",
+      label: "Daily Dispatch Slips",
+      href: "/b2b/dispatch",
+      icon: Send,
+      category: "OPERATIONS",
+      badge: "Fast",
+      colorScheme: "blue",
+    },
+    {
+      id: "baker-products",
+      label: "Product Catalog",
+      href: "/b2b/products",
+      icon: Package,
+      category: "OPERATIONS",
+      colorScheme: "emerald",
+    },
+    {
+      id: "baker-customers",
+      label: "Client & Store Ledgers",
+      href: "/b2b/customers",
+      icon: Store,
+      category: "OPERATIONS",
+      colorScheme: "purple",
+    },
+    {
+      id: "baker-payments",
+      label: "Payment Tracking",
+      href: "/b2b/payments",
+      icon: CreditCard,
+      category: "FINANCE",
+      colorScheme: "emerald",
+    },
+    {
+      id: "baker-reports",
+      label: "Reports & Excel Export",
+      href: "/b2b/reports",
+      icon: PieChart,
+      category: "FINANCE",
+      colorScheme: "blue",
+    },
+    {
+      id: "baker-expenses",
+      label: "Operating Expenses",
+      href: "/b2b/expenses",
+      icon: Receipt,
+      category: "FINANCE",
+      colorScheme: "rose",
+    },
+    {
+      id: "baker-users",
+      label: "Users & Roles",
+      href: "/admin/users",
+      icon: Users,
+      category: "MANAGEMENT",
+      colorScheme: "blue",
+    },
+    {
+      id: "baker-broadcasts",
+      label: "Client Broadcasts",
+      href: "/b2b/broadcasts",
+      icon: Radio,
+      category: "MANAGEMENT",
+      badge: "SeyalPro",
+      colorScheme: "blue",
+    },
+    {
+      id: "baker-profile",
+      label: "Business Profile",
+      href: "/admin/store",
+      icon: Store,
+      category: "MANAGEMENT",
+      colorScheme: "slate",
+    },
+    {
+      id: "baker-support",
+      label: "Support & Issues",
+      href: "/b2b/support",
+      icon: LifeBuoy,
+      category: "MANAGEMENT",
+      colorScheme: "amber",
+    },
+  ];
+
+  // Baker Mode is active ONLY if enabled by Super Admin for this business AND toggled on
+  const isBakerActive = isBakerModuleEnabled && appMode === "baker";
+  const activeNavItems = isBakerActive ? bakerNavItems : navItems;
+
   const isItemActive = (item: NavItemConfig) => {
     if (item.id === "dashboard" && pathname === "/") return true;
+    if (item.id === "baker-dashboard" && (pathname === "/b2b" || pathname === "/baker")) return true;
     if (item.id === "admin-users" && (pathname === "/admin/users" || pathname === "/admin")) return true;
+    if (item.id === "baker-support" && (pathname === "/b2b/support" || pathname === "/baker/support" || pathname === "/admin/support")) return true;
     return pathname === item.href;
   };
 
@@ -376,7 +540,9 @@ export function AdminSidebar({
     if (onCloseMobile) onCloseMobile();
   };
 
-  const categories = ["CORE", "OPERATIONS", "STAFF", "FINANCE", "ADMIN"] as const;
+  const categories = isBakerActive
+    ? (["OPERATIONS", "FINANCE", "MANAGEMENT"] as const)
+    : (["CORE", "OPERATIONS", "STAFF", "FINANCE", "ADMIN"] as const);
 
   return (
     <>
@@ -415,7 +581,7 @@ export function AdminSidebar({
         </div>
 
         {/* Prominent Store Identity Badge in Mobile Drawer */}
-        <div className="px-3 pt-2.5 pb-1 shrink-0">
+        <div className="px-3 pt-2.5 pb-1 shrink-0 space-y-2">
           <div className="flex items-center gap-2.5 px-3 py-2 rounded-xl bg-slate-900/90 border border-slate-800 text-white shadow-2xs">
             <div className="w-7 h-7 rounded-lg bg-blue-600/20 border border-blue-500/30 flex items-center justify-center text-blue-400 shrink-0">
               <Store size={15} />
@@ -428,21 +594,53 @@ export function AdminSidebar({
                 </p>
               </div>
               <span className="text-[9.5px] font-semibold text-slate-400 uppercase tracking-wider block mt-0.5">
-                Connected Store
+                {isBakerActive ? "B2B Supply & Wholesale" : "Connected Store"}
               </span>
             </div>
           </div>
+
+          {/* Mode Switch Toggle Pill - Visible ONLY if enabled by Super Admin */}
+          {isBakerModuleEnabled && (
+            <div className="p-1 bg-slate-950/70 rounded-xl border border-slate-800/80 flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => handleToggleAppMode("cafe")}
+                className={cn(
+                  "flex-1 py-1.5 px-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer",
+                  appMode === "cafe"
+                    ? "bg-blue-600 text-white shadow-xs"
+                    : "text-slate-400 hover:text-white"
+                )}
+              >
+                <Coffee size={13} />
+                <span>Cafe POS</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleToggleAppMode("baker")}
+                className={cn(
+                  "flex-1 py-1.5 px-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer",
+                  appMode === "baker"
+                    ? "bg-blue-600 text-white shadow-xs font-extrabold"
+                    : "text-slate-400 hover:text-white"
+                )}
+              >
+                <Truck size={13} />
+                <span>B2B Supply</span>
+              </button>
+            </div>
+          )}
         </div>
 
-        {/* Mobile Nav Items with 48px touch targets */}
-        <div className="flex-1 overflow-y-auto py-2.5 px-2.5 space-y-2.5 scrollbar-none pb-[env(safe-area-inset-bottom,24px)]">
-          {categories.map((cat) => {
-            const itemsInCat = navItems.filter((item) => item.category === cat);
+        {/* Mobile Nav Items */}
+        <div className="flex-1 overflow-y-auto py-2.5 px-2.5 space-y-3 scrollbar-none pb-10">
+          {categories.map((cat, catIdx) => {
+            const itemsInCat = activeNavItems.filter((item) => item.category === cat);
             if (itemsInCat.length === 0) return null;
 
             return (
-              <div key={`mob-${cat}`} className="space-y-1">
-                <div className="px-2.5 pt-2 pb-0.5 flex items-center justify-between">
+              <div key={`mob-${cat}`} className={cn("space-y-1", catIdx > 0 && "pt-2 border-t border-slate-800/60")}>
+                <div className="px-2 pt-1 pb-1 flex items-center justify-between">
                   <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">
                     {cat}
                   </span>
@@ -450,6 +648,12 @@ export function AdminSidebar({
                     <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[8.5px] font-bold tracking-wider uppercase bg-amber-400/10 text-amber-300 border border-amber-400/25">
                       <Shield size={9} className="text-amber-400 shrink-0" />
                       <span>Admin Access</span>
+                    </span>
+                  )}
+                  {cat === "MANAGEMENT" && (
+                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[8.5px] font-bold tracking-wider uppercase bg-blue-500/10 text-blue-300 border border-blue-500/25">
+                      <Shield size={9} className="text-blue-400 shrink-0" />
+                      <span>Admin</span>
                     </span>
                   )}
                 </div>
@@ -463,15 +667,15 @@ export function AdminSidebar({
                       href={item.href}
                       onClick={() => handleNavClick(item)}
                       className={cn(
-                        "relative flex items-center min-h-[46px] px-3 py-2 rounded-xl font-semibold transition-all duration-150 justify-between text-sm active:scale-[0.98]",
+                        "relative flex items-center min-h-[42px] px-3 py-2 rounded-xl font-semibold transition-all duration-150 justify-between text-xs sm:text-sm active:scale-[0.98]",
                         isActive
                           ? "bg-blue-600 text-white font-bold shadow-md shadow-blue-900/30"
                           : "text-slate-300 hover:text-white hover:bg-slate-800/80"
                       )}
                     >
-                      <div className="flex items-center gap-3 min-w-0">
+                      <div className="flex items-center gap-2.5 min-w-0">
                         <Icon
-                          size={18}
+                          size={17}
                           className={cn(
                             "shrink-0",
                             isActive ? "text-white" : "text-slate-400"
@@ -495,8 +699,10 @@ export function AdminSidebar({
                       ) : item.badge ? (
                         <span
                           className={cn(
-                            "px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider shrink-0 border",
-                            isActive
+                            "px-1.5 py-0.5 rounded-full text-[9.5px] font-black uppercase tracking-wider shrink-0 border",
+                            (item.id === "notifications" || item.id === "baker-notifications") && unreadCount > 0
+                              ? "bg-rose-600 text-white border-rose-500 shadow-xs ring-2 ring-rose-400/40 animate-pulse"
+                              : isActive
                               ? "bg-blue-700/60 text-white border-blue-400/40"
                               : "bg-slate-800 text-slate-300 border-slate-700"
                           )}
@@ -606,7 +812,7 @@ export function AdminSidebar({
 
       {/* Prominent Store Identity Badge inside Desktop Sidebar */}
       {!isCollapsed ? (
-        <div className="px-2 pt-2 pb-1 shrink-0">
+        <div className="px-2 pt-2 pb-1 shrink-0 space-y-1.5">
           <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-xl bg-slate-900/90 border border-slate-800 text-white shadow-2xs">
             <div className="w-6 h-6 rounded-lg bg-blue-600/20 border border-blue-500/30 flex items-center justify-center text-blue-400 shrink-0">
               <Store size={13} />
@@ -620,9 +826,43 @@ export function AdminSidebar({
               </div>
             </div>
           </div>
+
+          {/* Mode Switch Toggle Pill for Desktop - Visible ONLY if enabled by Super Admin */}
+          {isBakerModuleEnabled && (
+            <div className="p-0.5 bg-slate-950/70 rounded-xl border border-slate-800/80 flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => handleToggleAppMode("cafe")}
+                className={cn(
+                  "flex-1 py-1 px-1.5 rounded-lg text-[11px] font-bold transition-all flex items-center justify-center gap-1 cursor-pointer",
+                  appMode === "cafe"
+                    ? "bg-blue-600 text-white shadow-xs"
+                    : "text-slate-400 hover:text-white"
+                )}
+                title="Cafe POS & Operations Mode"
+              >
+                <Coffee size={12} />
+                <span>Cafe POS</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleToggleAppMode("baker")}
+                className={cn(
+                  "flex-1 py-1 px-1.5 rounded-lg text-[11px] font-bold transition-all flex items-center justify-center gap-1 cursor-pointer",
+                  appMode === "baker"
+                    ? "bg-blue-600 text-white shadow-xs font-extrabold"
+                    : "text-slate-400 hover:text-white"
+                )}
+                title="B2B Supply & Wholesale Mode"
+              >
+                <Truck size={12} />
+                <span>B2B Supply</span>
+              </button>
+            </div>
+          )}
         </div>
       ) : (
-        <div className="py-1.5 flex justify-center shrink-0">
+        <div className="py-1.5 flex flex-col items-center gap-1.5 shrink-0">
           <div
             className="w-8 h-8 rounded-lg bg-slate-900/90 border border-slate-800 flex items-center justify-center text-blue-400 relative group cursor-default"
             title={`Store: ${storeName}`}
@@ -631,24 +871,44 @@ export function AdminSidebar({
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 absolute top-1 right-1" />
             <div className="absolute left-full top-1/2 -translate-y-1/2 ml-2.5 px-2.5 py-1.5 bg-slate-900 text-white text-xs rounded-lg shadow-xl border border-slate-700 whitespace-nowrap z-50 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity">
               <span className="font-bold">{storeName}</span>
-              <span className="text-[10px] text-slate-400 block">Connected Store</span>
+              <span className="text-[10px] text-slate-400 block">{isBakerActive ? "B2B Supply & Wholesale" : "Connected Store"}</span>
             </div>
           </div>
+
+          {/* Collapsed Mode Quick Switcher - Visible ONLY if enabled by Super Admin */}
+          {isBakerModuleEnabled && (
+            <button
+              type="button"
+              onClick={() => handleToggleAppMode(appMode === "cafe" ? "baker" : "cafe")}
+              className={cn(
+                "w-8 h-8 rounded-lg border flex items-center justify-center transition-all cursor-pointer relative group",
+                appMode === "baker"
+                  ? "bg-blue-600 text-white border-blue-500 shadow-xs"
+                  : "bg-slate-900 text-slate-400 border-slate-800 hover:text-white"
+              )}
+              title={`Current: ${appMode === "baker" ? "B2B Supply Mode" : "Cafe POS Mode"}. Click to toggle.`}
+            >
+              {appMode === "baker" ? <Truck size={14} /> : <Coffee size={14} />}
+              <div className="absolute left-full top-1/2 -translate-y-1/2 ml-2.5 px-2.5 py-1.5 bg-slate-900 text-white text-xs rounded-lg shadow-xl border border-slate-700 whitespace-nowrap z-50 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity">
+                <span className="font-bold">Switch to {appMode === "baker" ? "Cafe POS" : "B2B Supply"}</span>
+              </div>
+            </button>
+          )}
         </div>
       )}
 
       {/* Navigation Links Area - Completely Scroll-Free / Hidden Scrollbar */}
-      <div className="flex-1 overflow-y-auto overflow-x-hidden py-2 px-1.5 space-y-1.5 scrollbar-none [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
-        {categories.map((cat) => {
-          const itemsInCat = navItems.filter((item) => item.category === cat);
+      <div className="flex-1 overflow-y-auto overflow-x-hidden py-2 px-1.5 space-y-2 scrollbar-none pb-8 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+        {categories.map((cat, catIdx) => {
+          const itemsInCat = activeNavItems.filter((item) => item.category === cat);
           if (itemsInCat.length === 0) return null;
 
           return (
-            <div key={cat} className="space-y-0.5">
+            <div key={cat} className={cn("space-y-0.5", !isCollapsed && catIdx > 0 && "pt-1.5 border-t border-slate-800/60")}>
               {/* Category Header */}
               {!isCollapsed ? (
                 <div className="px-2 pt-1.5 pb-0.5 flex items-center justify-between">
-                  <span className="text-[9px] font-extrabold uppercase tracking-wider text-slate-500">
+                  <span className="text-[9px] font-extrabold uppercase tracking-wider text-slate-400">
                     {cat}
                   </span>
                   {cat === "ADMIN" && (
@@ -657,9 +917,15 @@ export function AdminSidebar({
                       <span>Admin Access</span>
                     </span>
                   )}
+                  {cat === "MANAGEMENT" && (
+                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[8px] font-bold tracking-wider uppercase bg-blue-500/10 text-blue-300 border border-blue-500/25">
+                      <Shield size={8} className="text-blue-400 shrink-0" />
+                      <span>Admin</span>
+                    </span>
+                  )}
                 </div>
               ) : (
-                <div className="h-px bg-slate-800/60 mx-1.5 my-0.5" />
+                <div className="h-px bg-slate-800/60 mx-1.5 my-1" />
               )}
 
               {/* Items */}
@@ -700,6 +966,16 @@ export function AdminSidebar({
                         />
                       )}
 
+                      {/* Prominent red alert count badge in collapsed mode */}
+                      {isCollapsed && (item.id === "notifications" || item.id === "baker-notifications") && unreadCount > 0 && (
+                        <span
+                          className="absolute -top-1 -right-1 min-w-[17px] h-[17px] px-1 bg-rose-600 text-white text-[9.5px] font-black rounded-full flex items-center justify-center ring-2 ring-[#0B132B] shadow-xs animate-pulse"
+                          title={`${unreadCount} unread alerts`}
+                        >
+                          {unreadCount > 9 ? "9+" : unreadCount}
+                        </span>
+                      )}
+
                       <div className="flex items-center gap-2.5 min-w-0">
                         <Icon
                           size={16}
@@ -731,8 +1007,10 @@ export function AdminSidebar({
                         ) : item.badge ? (
                           <span
                             className={cn(
-                              "px-1 py-0.2 rounded text-[8.5px] font-bold uppercase tracking-wider shrink-0 border",
-                              isActive
+                              "px-1.5 py-0.2 rounded-full text-[9px] font-black uppercase tracking-wider shrink-0 border",
+                              (item.id === "notifications" || item.id === "baker-notifications") && unreadCount > 0
+                                ? "bg-rose-600 text-white border-rose-500 shadow-xs ring-2 ring-rose-400/40 animate-pulse"
+                                : isActive
                                 ? "bg-blue-700/60 text-white border-blue-400/40"
                                 : "bg-slate-800 text-slate-300 border-slate-700"
                             )}
@@ -752,7 +1030,7 @@ export function AdminSidebar({
                             <Shield size={9} className="text-amber-400" />
                             Admin
                           </span>
-                        ) : item.category === "ADMIN" ? (
+                        ) : item.category === "ADMIN" || item.category === "MANAGEMENT" ? (
                           <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[8px] font-bold uppercase bg-amber-400/10 text-amber-300 border border-amber-400/25">
                             <Shield size={8} className="text-amber-400" />
                             Admin

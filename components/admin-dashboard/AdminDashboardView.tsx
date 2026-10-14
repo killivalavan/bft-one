@@ -29,7 +29,8 @@ import {
   Store,
   Clock,
   Receipt,
-  FileText
+  FileText,
+  Truck
 } from "lucide-react";
 import { LiveOrdersActivityTable } from "./LiveOrdersActivityTable";
 import { AdminOrderRecord } from "./OrderReceiptModal";
@@ -53,9 +54,10 @@ interface TopProductSummary {
 
 interface AdminDashboardViewProps {
   baseItems: DashboardItem[];
+  onSwitchToBakerMode?: () => void;
 }
 
-export function AdminDashboardView({ baseItems }: AdminDashboardViewProps) {
+export function AdminDashboardView({ baseItems, onSwitchToBakerMode }: AdminDashboardViewProps) {
   const { user } = useUser();
   const { flags } = useProfile();
   const { business } = useTenant();
@@ -384,13 +386,26 @@ export function AdminDashboardView({ baseItems }: AdminDashboardViewProps) {
               <span>Employee Hub</span>
             </Link>
 
+            {/* Switch to B2B Dispatch View */}
+            {onSwitchToBakerMode && (
+              <button
+                type="button"
+                onClick={onSwitchToBakerMode}
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 transition-all shadow-2xs cursor-pointer"
+                title="Switch to B2B Supply View"
+              >
+                <Truck size={13} className="text-blue-600" />
+                <span>B2B Supply</span>
+              </button>
+            )}
+
             {/* Quick "+ New POS Bill" Button */}
             <Link
               href="/billing"
               className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-extrabold shadow-xs transition-all active:scale-95"
             >
               <Plus size={16} />
-              <span>+ New POS Bill</span>
+              <span>New POS Bill</span>
             </Link>
 
             {/* Refresh */}

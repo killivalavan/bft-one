@@ -4,9 +4,13 @@ import { BellOff } from "lucide-react";
 interface NotificationListProps {
     notifications: Notification[];
     loading?: boolean;
+    currentUserId?: string;
+    onMarkAsRead?: (id: string) => void;
+    onDelete?: (id: string) => void;
+    canDelete?: boolean;
 }
 
-export function NotificationList({ notifications, loading }: NotificationListProps) {
+export function NotificationList({ notifications, loading, currentUserId, onMarkAsRead, onDelete, canDelete = false }: NotificationListProps) {
     if (loading) {
         return (
             <div className="space-y-3 animate-pulse">
@@ -34,7 +38,14 @@ export function NotificationList({ notifications, loading }: NotificationListPro
     return (
         <div className="space-y-3 animate-in fade-in slide-in-from-bottom-2 duration-500">
             {notifications.map((n) => (
-                <NotificationItem key={n.id} notification={n} />
+                <NotificationItem
+                    key={n.id}
+                    notification={n}
+                    currentUserId={currentUserId}
+                    onMarkAsRead={onMarkAsRead}
+                    onDelete={onDelete}
+                    canDelete={canDelete}
+                />
             ))}
         </div>
     );

@@ -36,6 +36,14 @@ function extractSubdomain(hostname: string): string | null {
 
 export function middleware(request: NextRequest) {
   const url = request.nextUrl.clone();
+
+  // 0. Backwards compatibility redirect: /baker/* -> /b2b/*
+  if (url.pathname === "/baker" || url.pathname.startsWith("/baker/")) {
+    const newPath = url.pathname.replace(/^\/baker/, "/b2b");
+    url.pathname = newPath;
+    return NextResponse.redirect(url, 307);
+  }
+
   // Vercel sets x-forwarded-host in production; fall back to host header
   const hostname = request.headers.get("x-forwarded-host")
     || request.headers.get("host")

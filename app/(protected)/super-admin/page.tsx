@@ -13,7 +13,7 @@ import {
   Check, Edit3, Coffee, Receipt, CalendarCheck2, Boxes, Contact, Eye, EyeOff,
   ChevronRight, KeyRound, Sparkle, Store, BarChart3, Layers, Trash2, Download,
   MapPin, Clock, DollarSign, LayoutGrid, List, AlertOctagon, CheckSquare, ShieldAlert,
-  LifeBuoy, Bug, MessageSquare, Tag, Image as ImageIcon, Send, FileText
+  LifeBuoy, Bug, MessageSquare, Tag, Image as ImageIcon, Send, FileText, Cake
 } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils/cn";
@@ -81,6 +81,8 @@ const MODULE_DEFINITIONS = [
   { key: "stock", label: "Stock Inventory", icon: Boxes, desc: "Inventory quantities, alerts & counts" },
   { key: "salary", label: "Payroll & Salary", icon: Wallet, desc: "Staff compensation & payslips" },
   { key: "contacts", label: "Contacts Directory", icon: Contact, desc: "Staff, emergency & vendor database" },
+  { key: "b2b_bridge", label: "B2B Supply Bridge", icon: ArrowRightLeft, desc: "Inter-tenant supplier delivery, auto-stock-in & payment sync" },
+  { key: "baker_mode", label: "Baker / Simple View", icon: Cake, desc: "Enable home baker & micro-supplier dispatches, pricing & store ledgers" },
 ];
 
 enum SuperAdminView {
@@ -175,12 +177,15 @@ export default function SuperAdminPage() {
     geofenceEnabled: true,
     modules: {
       billing: true,
+      invoices: true,
       sales: true,
       expenses: true,
       timesheet: true,
       stock: true,
       salary: true,
       contacts: true,
+      b2b_bridge: false,
+      baker_mode: false,
     } as Record<string, boolean>,
   });
 
@@ -682,6 +687,9 @@ export default function SuperAdminPage() {
         stock: biz.enabled_modules?.stock ?? true,
         salary: biz.enabled_modules?.salary ?? true,
         contacts: biz.enabled_modules?.contacts ?? true,
+        b2b_bridge: Boolean(biz.enabled_modules?.b2b_bridge),
+        baker_mode: Boolean(biz.enabled_modules?.baker_mode),
+        ...(biz.enabled_modules || {}),
       },
     });
   }
@@ -1984,7 +1992,9 @@ export default function SuperAdminPage() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto p-1 border border-[#E2E8F0] rounded-2xl bg-slate-50/50">
                   {MODULE_DEFINITIONS.map((m) => {
                     const Icon = m.icon;
-                    const isChecked = formData.modules[m.key] !== false;
+                    const isChecked = (m.key === "baker_mode" || m.key === "b2b_bridge")
+                      ? Boolean(formData.modules[m.key])
+                      : formData.modules[m.key] !== false;
                     return (
                       <label
                         key={m.key}
@@ -2169,7 +2179,9 @@ export default function SuperAdminPage() {
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-h-64 overflow-y-auto p-1">
                     {MODULE_DEFINITIONS.map((m) => {
                       const Icon = m.icon;
-                      const isEnabled = editFormData.enabled_modules[m.key] !== false;
+                      const isEnabled = (m.key === "baker_mode" || m.key === "b2b_bridge")
+                        ? Boolean(editFormData.enabled_modules[m.key])
+                        : editFormData.enabled_modules[m.key] !== false;
                       return (
                         <div
                           key={m.key}
