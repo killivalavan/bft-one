@@ -10,7 +10,7 @@ import { format } from "date-fns";
 import {
   Send, Plus, Minus, Download, Store, Package, Sparkles, CheckCircle2,
   Calendar, RefreshCw, AlertCircle, ArrowRight, Phone, MapPin, Search,
-  FileText, History, Check, Eye, Trash2, CreditCard
+  FileText, History, Check, Eye, Trash2, CreditCard, RotateCcw
 } from "lucide-react";
 import { generateBillPdf, BillPdfData } from "@/lib/utils/billPdf";
 import { putItem, STORES, LocalInvoice } from "@/lib/offline/db";
@@ -35,14 +35,20 @@ export default function BakerDispatchPage() {
   const tabParam = searchParams?.get("tab");
   const bizId = business?.id || "default";
 
-  // Tab State: "entry" | "history"
-  const [activeTab, setActiveTab] = useState<"entry" | "history">(() => {
-    return tabParam === "history" ? "history" : "entry";
+  // Tab State: "entry" (Delivery) | "return" (Return Intake) | "history" (Saved Slips)
+  const [activeTab, setActiveTab] = useState<"entry" | "return" | "history">(() => {
+    if (tabParam === "history") return "history";
+    if (tabParam === "return") return "return";
+    return "entry";
   });
+
+  const isReturnMode = activeTab === "return";
 
   useEffect(() => {
     if (tabParam === "history") {
       setActiveTab("history");
+    } else if (tabParam === "return") {
+      setActiveTab("return");
     } else if (tabParam === "entry") {
       setActiveTab("entry");
     }
@@ -273,25 +279,33 @@ export default function BakerDispatchPage() {
     toast({ title: "Café Added! 🏬", description: `${newSt.name} added to your store list.` });
   };
 
-  // Create & Save Delivery Slip
+  // Create & Save Delivery Slip / Return Slip
   const createDeliverySlip = async (): Promise<any | null> => {
     if (lineItems.length === 0) {
       toast({
         title: "No Items Selected",
-        description: "Please increment quantity for at least one bakery item.",
+        description: isReturnMode
+          ? "Please select quantity for at least one returned item."
+          : "Please increment quantity for at least one bakery item.",
         variant: "error",
       });
       return null;
     }
 
     setIsSaving(true);
-    const invNumber = `SLIP-${Date.now().toString().slice(-6)}`;
+    const invNumber = isReturnMode
+      ? `RET-${Date.now().toString().slice(-6)}`
+      : `SLIP-${Date.now().toString().slice(-6)}`;
     const dateStr = format(new Date(), "MMM dd, yyyy");
+
+    const slipTotal = isReturnMode ? -billTotalAmount : billTotalAmount;
+    const slipSubtotal = isReturnMode ? -billTotalAmount : billTotalAmount;
 
     const newInvoice = {
       id: `inv-${Date.now()}`,
       invoiceNumber: invNumber,
-      title: "DELIVERY SLIP",
+      title: isReturnMode ? "RETURN & CREDIT SLIP" : "DELIVERY SLIP",
+      isReturn: isReturnMode,
       date: dateStr,
       dueDate: dateStr,
       customerName: selectedStore.name,
@@ -303,12 +317,13 @@ export default function BakerDispatchPage() {
         qty: it.qty,
         unit: it.product.unit,
         rate: it.product.selling_price,
-        amount: it.total,
+        amount: isReturnMode ? -it.total : it.total,
+        isReturn: isReturnMode,
       })),
-      subtotal: billTotalAmount,
-      totalAmount: billTotalAmount,
+      subtotal: slipSubtotal,
+      totalAmount: slipTotal,
       status: "unpaid" as const,
-      paymentMode: "UPI",
+      paymentMode: isReturnMode ? "Account Credit" : "UPI",
       createdAt: new Date().toISOString(),
     };
 
@@ -338,7 +353,7 @@ export default function BakerDispatchPage() {
       additional_cents: 0,
       total_cents: Math.round(newInvoice.totalAmount * 100),
       status: "unpaid",
-      payment_mode: "UPI",
+      payment_mode: isReturnMode ? "Account Credit" : "UPI",
       created_at: newInvoice.createdAt,
     }).catch(() => {});
 
@@ -354,7 +369,7 @@ export default function BakerDispatchPage() {
         subtotal_cents: Math.round(newInvoice.subtotal * 100),
         total_cents: Math.round(newInvoice.totalAmount * 100),
         status: "unpaid",
-        payment_mode: "UPI",
+        payment_mode: isReturnMode ? "Account Credit" : "UPI",
       }).then(() => {});
     }
 
@@ -368,6 +383,9 @@ export default function BakerDispatchPage() {
     const slip = customSlip || (await createDeliverySlip());
     if (!slip) return;
 
+    const isRet = slip.isReturn || slip.totalAmount < 0 || (slip.title || "").includes("RETURN");
+    const absTotal = Math.abs(slip.totalAmount || 0);
+
     const items = slip.items || lineItems.map((it) => ({
       qty: it.qty,
       name: it.product.name,
@@ -376,18 +394,27 @@ export default function BakerDispatchPage() {
     }));
 
     let itemsText = items
-      .map((it: any) => `• *${it.qty}x ${capitalizeWords(it.name)}* @ ₹${it.rate} = ₹${(it.amount || it.qty * it.rate).toLocaleString("en-IN")}`)
+      .map((it: any) => `• *${it.qty}x ${capitalizeWords(it.name)}* @ ₹${it.rate} = ${isRet ? "-" : ""}₹${Math.abs(it.amount || it.qty * it.rate).toLocaleString("en-IN")}`)
       .join("\n");
 
-    const message = `📦 *DELIVERY SLIP - ${business?.name || "Dispatch Central"}*\n` +
-      `📅 *Date:* ${slip.date}\n` +
-      `🏬 *Store:* ${formatCafeName(slip.customerName)}\n` +
-      `📄 *Slip No:* ${slip.invoiceNumber}\n\n` +
-      `*Dispatched Items:*\n${itemsText}\n\n` +
-      `💵 *Total Amount:* ₹${slip.totalAmount.toLocaleString("en-IN")}\n` +
-      `📌 *Status:* ${slip.status === "paid" ? "Settled (Paid)" : "Pending Settlement"}\n` +
-      (business?.upi_id?.trim() ? `UPI ID: ${business.upi_id.trim()}\n\n` : "\n") +
-      `_Thank you for your business!_`;
+    const message = isRet
+      ? `🔄 *RETURN & CREDIT SLIP - ${business?.name || "B2B Central"}*\n` +
+        `📅 *Date:* ${slip.date}\n` +
+        `🏬 *Store:* ${formatCafeName(slip.customerName)}\n` +
+        `📄 *Return Slip No:* ${slip.invoiceNumber}\n\n` +
+        `*Returned / Expired Items Taken Back:*\n${itemsText}\n\n` +
+        `📉 *Total Deducted Amount:* -₹${absTotal.toLocaleString("en-IN")}\n` +
+        `📌 *Balance Adjustment:* Deducted from your outstanding due balance\n\n` +
+        `_Thank you! Items successfully received & credited._`
+      : `📦 *DELIVERY SLIP - ${business?.name || "Dispatch Central"}*\n` +
+        `📅 *Date:* ${slip.date}\n` +
+        `🏬 *Store:* ${formatCafeName(slip.customerName)}\n` +
+        `📄 *Slip No:* ${slip.invoiceNumber}\n\n` +
+        `*Dispatched Items:*\n${itemsText}\n\n` +
+        `💵 *Total Amount:* ₹${slip.totalAmount.toLocaleString("en-IN")}\n` +
+        `📌 *Status:* ${slip.status === "paid" ? "Settled (Paid)" : "Pending Settlement"}\n` +
+        (business?.upi_id?.trim() ? `UPI ID: ${business.upi_id.trim()}\n\n` : "\n") +
+        `_Thank you for your business!_`;
 
     const phoneClean = (slip.customerPhone || selectedStore.phone || "").replace(/[^0-9]/g, "");
     const waUrl = phoneClean
@@ -395,7 +422,10 @@ export default function BakerDispatchPage() {
       : `https://wa.me/?text=${encodeURIComponent(message)}`;
 
     window.open(waUrl, "_blank");
-    toast({ title: "WhatsApp Delivery Slip Generated! 📱", description: `Opened chat for ${formatCafeName(slip.customerName)}` });
+    toast({
+      title: isRet ? "Return Slip Shared on WhatsApp! 📱" : "WhatsApp Delivery Slip Generated! 📱",
+      description: `Opened chat for ${formatCafeName(slip.customerName)}`
+    });
     if (!customSlip) setQuantities({});
   };
 
@@ -404,33 +434,43 @@ export default function BakerDispatchPage() {
     const slip = customSlip || (await createDeliverySlip());
     if (!slip) return;
 
+    const isRet = slip.isReturn || slip.totalAmount < 0 || (slip.title || "").includes("RETURN");
+
     const pdfData: BillPdfData = {
       orderId: slip.invoiceNumber,
-      invoiceTitle: "DELIVERY SLIP",
+      invoiceTitle: isRet ? "RETURN & CREDIT SLIP" : (slip.title || "DELIVERY SLIP"),
       businessName: business?.name || "Dispatch Central",
       businessPhone: business?.phone || "+91 98765 43210",
       customerName: slip.customerName,
       customerPhone: slip.customerPhone,
       customerAddress: slip.customerAddress,
       date: slip.date,
-      items: slip.items,
-      subtotal: slip.subtotal || slip.totalAmount,
-      totalAmount: slip.totalAmount,
-      paymentMode: slip.status === "paid" ? "Settled (Paid)" : "Pending Settlement (UPI)",
+      items: (slip.items || []).map((it: any) => ({
+        ...it,
+        amount: Math.abs(it.amount || it.qty * it.rate),
+      })),
+      subtotal: Math.abs(slip.subtotal || slip.totalAmount),
+      totalAmount: Math.abs(slip.totalAmount),
+      paymentMode: isRet ? "Adjusted / Deducted from Balance" : (slip.status === "paid" ? "Settled (Paid)" : "Pending Settlement (UPI)"),
     };
 
     generateBillPdf(pdfData);
-    toast({ title: "PDF Slip Downloaded! 📥", description: `Saved slip ${slip.invoiceNumber}` });
+    toast({
+      title: isRet ? "Return Credit Slip Downloaded! 📥" : "PDF Slip Downloaded! 📥",
+      description: `Saved slip ${slip.invoiceNumber}`
+    });
     if (!customSlip) setQuantities({});
   };
 
-  // Submit & Record Delivery Slip (Opens Decision Modal)
+  // Submit & Record Delivery Slip / Return Slip (Opens Decision Modal)
   const handleRecordAndDispatch = async () => {
     const slip = await createDeliverySlip();
     if (!slip) return;
     toast({
-      title: "Delivery Slip Recorded! 📦",
-      description: `Slip ${slip.invoiceNumber} recorded for ${slip.customerName}.`,
+      title: isReturnMode ? "Return Slip Recorded! 🔄" : "Delivery Slip Recorded! 📦",
+      description: isReturnMode
+        ? `Return Slip ${slip.invoiceNumber} recorded. Amount deducted from ${slip.customerName}.`
+        : `Slip ${slip.invoiceNumber} recorded for ${slip.customerName}.`,
       variant: "success",
     });
     setQuantities({});
@@ -453,31 +493,46 @@ export default function BakerDispatchPage() {
       <div className="bg-white border-b border-[#E2E8F0] sticky top-14 md:top-0 z-20 shadow-2xs">
         <div className="max-w-5xl mx-auto px-4 py-3 sm:py-3.5 sm:flex sm:items-center sm:justify-between gap-4">
           <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
-            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-blue-600/10 border border-blue-500/20 text-blue-700 flex items-center justify-center font-bold text-lg sm:text-xl shadow-2xs shrink-0">
-              📦
+            <div className={cn(
+              "w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center font-bold text-lg sm:text-xl shadow-2xs shrink-0 transition-all",
+              isReturnMode
+                ? "bg-amber-500/10 border border-amber-500/20 text-amber-700"
+                : "bg-blue-600/10 border border-blue-500/20 text-blue-700"
+            )}>
+              {isReturnMode ? "🔄" : "📦"}
             </div>
             <div className="min-w-0">
               <div className="flex items-center gap-2 whitespace-nowrap">
                 <h1 className="text-sm sm:text-xl font-extrabold text-[#0F172A] tracking-tight whitespace-nowrap">
-                  Delivery Slips &amp; Sales
+                  {isReturnMode ? "Item Returns & Credit Slips" : "Delivery Slips & Sales"}
                 </h1>
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-blue-100 text-blue-800 border border-blue-200 shrink-0 whitespace-nowrap">
+                <span className={cn(
+                  "px-2 py-0.5 rounded-full text-[10px] font-extrabold border shrink-0 whitespace-nowrap",
+                  isReturnMode
+                    ? "bg-amber-100 text-amber-900 border-amber-200"
+                    : "bg-blue-100 text-blue-800 border-blue-200"
+                )}>
                   {savedInvoices.length} Slips Recorded
                 </span>
               </div>
               <p className="text-[11px] sm:text-xs text-[#64748B] hidden sm:block">
-                Select café, tap item counts, and dispatch or view past slips anytime
+                {isReturnMode
+                  ? "Select café, tap expired or returned items, and issue return credit slip"
+                  : "Select café, tap item counts, and dispatch or view past slips anytime"}
               </p>
             </div>
           </div>
 
-          {/* Tab Navigation Pill - tight on desktop, full 50/50 balance on mobile */}
-          <div className="mt-3 sm:mt-0 grid grid-cols-2 sm:flex sm:items-center gap-1 p-1 bg-slate-100 rounded-xl border border-slate-200 w-full sm:w-auto shrink-0 shadow-2xs">
+          {/* Tab Navigation Pill: Delivery Slip | Return (Expired) | Saved Slips */}
+          <div className="mt-3 sm:mt-0 grid grid-cols-3 sm:flex sm:items-center gap-1 p-1 bg-slate-100 rounded-xl border border-slate-200 w-full sm:w-auto shrink-0 shadow-2xs">
             <button
               type="button"
-              onClick={() => setActiveTab("entry")}
+              onClick={() => {
+                if (activeTab === "return") setQuantities({});
+                setActiveTab("entry");
+              }}
               className={cn(
-                "w-full sm:w-auto px-3.5 py-2 sm:py-1.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap",
+                "px-2.5 sm:px-3.5 py-2 sm:py-1.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap",
                 activeTab === "entry"
                   ? "bg-blue-600 text-white shadow-xs"
                   : "text-slate-600 hover:text-slate-900"
@@ -489,9 +544,26 @@ export default function BakerDispatchPage() {
 
             <button
               type="button"
+              onClick={() => {
+                if (activeTab === "entry") setQuantities({});
+                setActiveTab("return");
+              }}
+              className={cn(
+                "px-2.5 sm:px-3.5 py-2 sm:py-1.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap",
+                activeTab === "return"
+                  ? "bg-amber-600 text-white shadow-xs"
+                  : "text-slate-600 hover:text-amber-800 hover:bg-amber-50/50"
+              )}
+            >
+              <RotateCcw size={13} className="shrink-0" />
+              <span>Return (Expired)</span>
+            </button>
+
+            <button
+              type="button"
               onClick={() => setActiveTab("history")}
               className={cn(
-                "w-full sm:w-auto px-3.5 py-2 sm:py-1.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap",
+                "px-2.5 sm:px-3.5 py-2 sm:py-1.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap",
                 activeTab === "history"
                   ? "bg-blue-600 text-white shadow-xs"
                   : "text-slate-600 hover:text-slate-900"
@@ -507,30 +579,45 @@ export default function BakerDispatchPage() {
       <div className="max-w-5xl mx-auto px-4 py-6 space-y-6">
 
         {/* ======================================================== */}
-        {/* TAB 1: NEW QUICK SALES / DISPATCH ENTRY                  */}
+        {/* TAB 1 & 2: QUICK SALES ENTRY OR RETURN INTAKE ENTRY      */}
         {/* ======================================================== */}
-        {activeTab === "entry" ? (
+        {activeTab === "entry" || activeTab === "return" ? (
           <>
             {/* ==================================================== */}
-            {/* STEP 1: SELECT DELIVERY STORE / CAFÉ (UI-UX-PRO-MAX) */}
+            {/* STEP 1: SELECT STORE / CAFÉ                          */}
             {/* ==================================================== */}
             <div className="bg-white rounded-3xl border border-[#E2E8F0] shadow-xs overflow-hidden">
               {/* Step Header */}
               <div className="p-3.5 sm:p-5 border-b border-[#F1F5F9] bg-gradient-to-r from-slate-50/60 to-white flex items-center justify-between gap-2">
                 <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 flex-1">
-                  <span className="px-2 py-0.5 rounded-lg bg-blue-600 text-white text-[10px] font-black uppercase tracking-wider shrink-0">
+                  <span className={cn(
+                    "px-2 py-0.5 rounded-lg text-white text-[10px] font-black uppercase tracking-wider shrink-0",
+                    isReturnMode ? "bg-amber-600" : "bg-blue-600"
+                  )}>
                     Step 01
                   </span>
                   <h2 className="text-xs sm:text-base font-extrabold text-[#0F172A] tracking-tight truncate">
-                    <span className="hidden sm:inline">Select Delivery Store / Café</span>
-                    <span className="sm:hidden">Select Café</span>
+                    {isReturnMode ? (
+                      <>
+                        <span className="hidden sm:inline">Select Café / Store Returning Items</span>
+                        <span className="sm:hidden">Select Returning Café</span>
+                      </>
+                    ) : (
+                      <>
+                        <span className="hidden sm:inline">Select Delivery Store / Café</span>
+                        <span className="sm:hidden">Select Café</span>
+                      </>
+                    )}
                   </h2>
                 </div>
 
                 <button
                   type="button"
                   onClick={() => setIsAddStoreOpen(true)}
-                  className="px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-xl text-[11px] sm:text-xs font-extrabold bg-blue-600 hover:bg-blue-700 text-white transition-all flex items-center gap-1 sm:gap-1.5 cursor-pointer shadow-xs active:scale-95 shrink-0 whitespace-nowrap ml-auto"
+                  className={cn(
+                    "px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-xl text-[11px] sm:text-xs font-extrabold text-white transition-all flex items-center gap-1 sm:gap-1.5 cursor-pointer shadow-xs active:scale-95 shrink-0 whitespace-nowrap ml-auto",
+                    isReturnMode ? "bg-amber-600 hover:bg-amber-700" : "bg-blue-600 hover:bg-blue-700"
+                  )}
                 >
                   <Plus size={13} className="shrink-0" />
                   <span className="hidden sm:inline">Add Client / Store</span>
@@ -548,7 +635,10 @@ export default function BakerDispatchPage() {
                       placeholder="Search stores or clients by name or phone..."
                       value={storeSearch}
                       onChange={(e) => setStoreSearch(e.target.value)}
-                      className="w-full pl-8 pr-3 py-1.5 rounded-xl border border-slate-200 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/60"
+                      className={cn(
+                        "w-full pl-8 pr-3 py-1.5 rounded-xl border border-slate-200 text-xs font-medium focus:outline-none bg-slate-50/60",
+                        isReturnMode ? "focus:ring-2 focus:ring-amber-500" : "focus:ring-2 focus:ring-blue-500"
+                      )}
                     />
                   </div>
                   <div className="flex items-center gap-2 text-[11px] font-bold text-[#64748B] whitespace-nowrap">
@@ -573,7 +663,9 @@ export default function BakerDispatchPage() {
                           className={cn(
                             "relative p-4 rounded-2xl border transition-all cursor-pointer text-left flex flex-col justify-between gap-3 group select-none",
                             isSelected
-                              ? "bg-blue-50/40 border-blue-600 ring-2 ring-blue-600/30 shadow-xs"
+                              ? isReturnMode
+                                ? "bg-amber-50/40 border-amber-600 ring-2 ring-amber-600/30 shadow-xs"
+                                : "bg-blue-50/40 border-blue-600 ring-2 ring-blue-600/30 shadow-xs"
                               : "bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50/40"
                           )}
                         >
@@ -583,7 +675,9 @@ export default function BakerDispatchPage() {
                               <div className={cn(
                                 "w-9 h-9 rounded-xl flex items-center justify-center font-bold shrink-0 transition-all shadow-2xs",
                                 isSelected
-                                  ? "bg-blue-600 text-white"
+                                  ? isReturnMode
+                                    ? "bg-amber-600 text-white"
+                                    : "bg-blue-600 text-white"
                                   : "bg-slate-100 text-slate-700 group-hover:bg-slate-200"
                               )}>
                                 <Store size={16} />
@@ -612,7 +706,9 @@ export default function BakerDispatchPage() {
                             <div className={cn(
                               "w-5 h-5 rounded-full flex items-center justify-center shrink-0 text-[10px] font-black transition-all",
                               isSelected
-                                ? "bg-blue-600 text-white"
+                                ? isReturnMode
+                                  ? "bg-amber-600 text-white"
+                                  : "bg-blue-600 text-white"
                                 : "border border-slate-300 text-transparent group-hover:border-slate-400"
                             )}>
                               ✓
@@ -623,7 +719,7 @@ export default function BakerDispatchPage() {
                           <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[11px]">
                             {st.phone ? (
                               <span className="text-[#64748B] font-mono flex items-center gap-1 whitespace-nowrap font-semibold">
-                                <Phone size={10} className="text-blue-500" />
+                                <Phone size={10} className={isReturnMode ? "text-amber-500" : "text-blue-500"} />
                                 <span>{st.phone}</span>
                               </span>
                             ) : (
@@ -652,18 +748,32 @@ export default function BakerDispatchPage() {
                   </div>
                 </div>
 
-                {/* Selected Store Active Spotlight Banner - Styled with SeyalPro Clean Light Theme */}
-                <div className="p-3.5 rounded-2xl bg-blue-50/70 border border-blue-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
+                {/* Selected Store Active Spotlight Banner */}
+                <div className={cn(
+                  "p-3.5 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs transition-all",
+                  isReturnMode
+                    ? "bg-amber-50/70 border border-amber-200/80"
+                    : "bg-blue-50/70 border border-blue-200/80"
+                )}>
                   <div className="flex items-center gap-3 min-w-0 flex-1">
-                    <div className="w-9 h-9 rounded-xl bg-blue-600 text-white flex items-center justify-center font-bold shrink-0 shadow-2xs">
-                      <Store size={16} />
+                    <div className={cn(
+                      "w-9 h-9 rounded-xl flex items-center justify-center font-bold shrink-0 shadow-2xs text-white",
+                      isReturnMode ? "bg-amber-600" : "bg-blue-600"
+                    )}>
+                      {isReturnMode ? <RotateCcw size={16} /> : <Store size={16} />}
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-[10px] font-black uppercase tracking-wider text-blue-700">
-                          Active Recipient
+                        <span className={cn(
+                          "text-[10px] font-black uppercase tracking-wider",
+                          isReturnMode ? "text-amber-800" : "text-blue-700"
+                        )}>
+                          {isReturnMode ? "Returning Store (Balance will be credited)" : "Active Recipient"}
                         </span>
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                        <span className={cn(
+                          "w-1.5 h-1.5 rounded-full animate-pulse",
+                          isReturnMode ? "bg-amber-500" : "bg-emerald-500"
+                        )} />
                         {selectedStore.business_id ? (
                           <span className="inline-flex items-center gap-1 text-[9.5px] font-black px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 border border-blue-200">
                             ⚡ SeyalPro App Linked
@@ -679,8 +789,11 @@ export default function BakerDispatchPage() {
                           {formatCafeName(selectedStore.name)}
                         </span>
                         {selectedStore.phone && (
-                          <span className="font-semibold font-mono text-xs text-[#475569] whitespace-nowrap inline-flex items-center gap-1 bg-white/90 px-2 py-0.5 rounded-md border border-blue-200/80 shadow-2xs">
-                            <Phone size={10} className="text-blue-500 shrink-0" />
+                          <span className={cn(
+                            "font-semibold font-mono text-xs whitespace-nowrap inline-flex items-center gap-1 bg-white/90 px-2 py-0.5 rounded-md border shadow-2xs",
+                            isReturnMode ? "text-amber-900 border-amber-200/80" : "text-[#475569] border-blue-200/80"
+                          )}>
+                            <Phone size={10} className={isReturnMode ? "text-amber-500 shrink-0" : "text-blue-500 shrink-0"} />
                             {selectedStore.phone}
                           </span>
                         )}
@@ -691,7 +804,12 @@ export default function BakerDispatchPage() {
                   <div className="flex items-center gap-2 shrink-0 sm:self-center self-start">
                     <Link
                       href="/b2b/customers"
-                      className="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-white hover:bg-blue-50 text-blue-700 border border-blue-200 transition-all flex items-center gap-1 shadow-2xs cursor-pointer"
+                      className={cn(
+                        "px-3.5 py-1.5 rounded-xl text-xs font-bold bg-white transition-all flex items-center gap-1 shadow-2xs cursor-pointer border",
+                        isReturnMode
+                          ? "hover:bg-amber-50 text-amber-800 border-amber-200"
+                          : "hover:bg-blue-50 text-blue-700 border-blue-200"
+                      )}
                     >
                       <span>View Client Ledger →</span>
                     </Link>
@@ -708,26 +826,36 @@ export default function BakerDispatchPage() {
               <div className="border-b border-[#F1F5F9] pb-3">
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex items-center gap-2 min-w-0">
-                    <span className="px-2.5 py-0.5 rounded-lg bg-blue-600 text-white text-[10px] font-black uppercase tracking-wider shrink-0 whitespace-nowrap">
+                    <span className={cn(
+                      "px-2.5 py-0.5 rounded-lg text-white text-[10px] font-black uppercase tracking-wider shrink-0 whitespace-nowrap",
+                      isReturnMode ? "bg-amber-600" : "bg-blue-600"
+                    )}>
                       Step 02
                     </span>
                     <h2 className="text-base font-extrabold text-[#0F172A] whitespace-nowrap tracking-tight">
-                      Tap Item Quantities
+                      {isReturnMode ? "Tap Returned / Expired Quantities" : "Tap Item Quantities"}
                     </h2>
                   </div>
 
                   {/* Piece counter badge - compact on mobile, full on desktop */}
                   <div className="shrink-0 whitespace-nowrap">
-                    <span className="sm:hidden px-2.5 py-1 rounded-lg bg-blue-50 text-blue-700 border border-blue-200 text-xs font-black whitespace-nowrap">
-                      {totalUnitsDelivered} pcs
+                    <span className={cn(
+                      "sm:hidden px-2.5 py-1 rounded-lg text-xs font-black whitespace-nowrap border",
+                      isReturnMode
+                        ? "bg-amber-50 text-amber-800 border-amber-200"
+                        : "bg-blue-50 text-blue-700 border-blue-200"
+                    )}>
+                      {totalUnitsDelivered} {isReturnMode ? "returned pcs" : "pcs"}
                     </span>
                     <span className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-slate-50 border border-slate-200 text-xs font-semibold text-[#64748B] whitespace-nowrap">
-                      <strong className="text-[#0F172A] font-extrabold">{totalUnitsDelivered}</strong> total pieces selected
+                      <strong className="text-[#0F172A] font-extrabold">{totalUnitsDelivered}</strong> total {isReturnMode ? "returned pieces" : "pieces"} selected
                     </span>
                   </div>
                 </div>
                 <p className="text-xs text-[#64748B] mt-1 hidden sm:block">
-                  Set the exact pieces packed for dispatch
+                  {isReturnMode
+                    ? "Select exact pieces collected back from café due to expiry, damage, or unsold stock"
+                    : "Set the exact pieces packed for dispatch"}
                 </p>
               </div>
 
@@ -742,7 +870,9 @@ export default function BakerDispatchPage() {
                       className={cn(
                         "p-3.5 rounded-2xl border transition-all flex items-center justify-between gap-2",
                         qty > 0
-                          ? "bg-blue-50/40 border-blue-400 ring-1 ring-blue-300"
+                          ? isReturnMode
+                            ? "bg-amber-50/40 border-amber-400 ring-1 ring-amber-300"
+                            : "bg-blue-50/40 border-blue-400 ring-1 ring-blue-300"
                           : "bg-white border-slate-200 hover:border-slate-300"
                       )}
                     >
@@ -752,7 +882,12 @@ export default function BakerDispatchPage() {
                         </p>
                         <p className="text-[11px] text-[#64748B] font-semibold mt-0.5">
                           <strong className="text-[#0F172A]">₹{p.selling_price}</strong> / {p.unit}
-                          <span className="ml-1.5 text-emerald-600 text-[10px] font-bold">(+₹{p.unit_profit} profit)</span>
+                          {!isReturnMode && (
+                            <span className="ml-1.5 text-emerald-600 text-[10px] font-bold">(+₹{p.unit_profit} profit)</span>
+                          )}
+                          {isReturnMode && (
+                            <span className="ml-1.5 text-amber-700 text-[10px] font-bold">(Return rate)</span>
+                          )}
                         </p>
                       </div>
 
@@ -772,12 +907,20 @@ export default function BakerDispatchPage() {
                           value={qty || ""}
                           placeholder="0"
                           onChange={(e) => handleSetExactQty(p.id, e.target.value)}
-                          className="w-11 h-8 text-center rounded-xl border border-slate-200 text-xs font-black text-[#0F172A] focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          className={cn(
+                            "w-11 h-8 text-center rounded-xl border border-slate-200 text-xs font-black text-[#0F172A] focus:outline-none",
+                            isReturnMode ? "focus:ring-2 focus:ring-amber-500" : "focus:ring-2 focus:ring-blue-500"
+                          )}
                         />
                         <button
                           type="button"
                           onClick={() => handleQtyChange(p.id, 1)}
-                          className="w-8 h-8 rounded-xl bg-blue-600 hover:bg-blue-700 text-white flex items-center justify-center font-black cursor-pointer transition-all active:scale-95 shadow-2xs"
+                          className={cn(
+                            "w-8 h-8 rounded-xl text-white flex items-center justify-center font-black cursor-pointer transition-all active:scale-95 shadow-2xs",
+                            isReturnMode
+                              ? "bg-amber-600 hover:bg-amber-700"
+                              : "bg-blue-600 hover:bg-blue-700"
+                          )}
                         >
                           <Plus size={13} />
                         </button>
@@ -789,33 +932,41 @@ export default function BakerDispatchPage() {
             </div>
 
             {/* ==================================================== */}
-            {/* STEP 3: TOTAL & DISPATCH ACTIONS                     */}
+            {/* STEP 3: TOTAL & DISPATCH / RETURN ACTIONS            */}
             {/* ==================================================== */}
             <div className="bg-white p-5 rounded-3xl border border-[#E2E8F0] shadow-xs space-y-4">
               {/* Step 3 Header */}
               <div className="border-b border-[#F1F5F9] pb-3">
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex items-center gap-2 min-w-0">
-                    <span className="px-2.5 py-0.5 rounded-lg bg-blue-600 text-white text-[10px] font-black uppercase tracking-wider shrink-0 whitespace-nowrap">
+                    <span className={cn(
+                      "px-2.5 py-0.5 rounded-lg text-white text-[10px] font-black uppercase tracking-wider shrink-0 whitespace-nowrap",
+                      isReturnMode ? "bg-amber-600" : "bg-blue-600"
+                    )}>
                       Step 03
                     </span>
                     <h2 className="text-base font-extrabold text-[#0F172A] whitespace-nowrap tracking-tight">
-                      Review Total &amp; Dispatch
+                      {isReturnMode ? "Review Return Value & Deduct" : "Review Total & Dispatch"}
                     </h2>
                   </div>
 
                   {/* Total price - compact on mobile, full breakdown on desktop */}
                   <div className="text-right shrink-0 whitespace-nowrap">
                     <span className="hidden sm:block text-[10px] font-bold text-[#64748B] uppercase tracking-wider whitespace-nowrap">
-                      Gross Billed Total
+                      {isReturnMode ? "Total Return Credit (To Deduct)" : "Gross Billed Total"}
                     </span>
-                    <span className="text-lg sm:text-2xl font-black text-[#0F172A] whitespace-nowrap">
-                      ₹{billTotalAmount.toLocaleString("en-IN")}
+                    <span className={cn(
+                      "text-lg sm:text-2xl font-black whitespace-nowrap",
+                      isReturnMode ? "text-amber-700" : "text-[#0F172A]"
+                    )}>
+                      {isReturnMode ? `-₹${billTotalAmount.toLocaleString("en-IN")}` : `₹${billTotalAmount.toLocaleString("en-IN")}`}
                     </span>
                   </div>
                 </div>
                 <p className="text-xs text-[#64748B] mt-1 hidden sm:block">
-                  Preview line items, margins, and download or WhatsApp slip
+                  {isReturnMode
+                    ? "Preview returned items, total deducted credit, and issue return slip"
+                    : "Preview line items, margins, and download or WhatsApp slip"}
                 </p>
               </div>
 
@@ -830,53 +981,91 @@ export default function BakerDispatchPage() {
                           <span className="text-slate-400 ml-2">(@ ₹{it.product.selling_price})</span>
                         </div>
                         <div className="text-right">
-                          <span className="font-black text-[#0F172A]">₹{it.total.toLocaleString("en-IN")}</span>
-                          <span className="text-[10px] text-emerald-600 font-bold block">(+₹{it.profit} profit)</span>
+                          <span className={cn(
+                            "font-black",
+                            isReturnMode ? "text-amber-700" : "text-[#0F172A]"
+                          )}>
+                            {isReturnMode ? `-₹${it.total.toLocaleString("en-IN")}` : `₹${it.total.toLocaleString("en-IN")}`}
+                          </span>
+                          {!isReturnMode ? (
+                            <span className="text-[10px] text-emerald-600 font-bold block">(+₹{it.profit} profit)</span>
+                          ) : (
+                            <span className="text-[10px] text-amber-700 font-bold block">(returned item)</span>
+                          )}
                         </div>
                       </div>
                     ))}
                   </div>
 
-                  {/* Profit Banner */}
-                  <div className="p-3.5 rounded-2xl bg-emerald-50/90 border border-emerald-200/90 flex items-center justify-between gap-3 shadow-2xs">
-                    <div className="min-w-0">
-                      <span className="text-[10px] sm:text-[11px] font-extrabold text-emerald-800 uppercase tracking-wider block">
-                        Estimated Net Profit
-                      </span>
-                      <span className="text-base sm:text-lg font-black text-emerald-700">
-                        ₹{estimatedProfit.toLocaleString("en-IN")}
-                      </span>
+                  {/* Summary Banner: Return Deduction or Profit */}
+                  {isReturnMode ? (
+                    <div className="p-3.5 rounded-2xl bg-amber-50/90 border border-amber-200/90 flex items-center justify-between gap-3 shadow-2xs">
+                      <div className="min-w-0">
+                        <span className="text-[10px] sm:text-[11px] font-extrabold text-amber-800 uppercase tracking-wider block">
+                          Client Outstanding Balance Deduction
+                        </span>
+                        <span className="text-base sm:text-lg font-black text-amber-700">
+                          -₹{billTotalAmount.toLocaleString("en-IN")}
+                        </span>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <span className="text-xs font-black text-amber-800 px-3 py-1 rounded-full bg-amber-100 border border-amber-300/80 whitespace-nowrap inline-flex items-center shadow-2xs">
+                          Credit Return
+                        </span>
+                      </div>
                     </div>
-                    <div className="text-right shrink-0">
-                      <span className="text-xs font-black text-emerald-800 px-3 py-1 rounded-full bg-emerald-100 border border-emerald-300/80 whitespace-nowrap inline-flex items-center shadow-2xs">
-                        {overallMargin}% Margin
-                      </span>
+                  ) : (
+                    <div className="p-3.5 rounded-2xl bg-emerald-50/90 border border-emerald-200/90 flex items-center justify-between gap-3 shadow-2xs">
+                      <div className="min-w-0">
+                        <span className="text-[10px] sm:text-[11px] font-extrabold text-emerald-800 uppercase tracking-wider block">
+                          Estimated Net Profit
+                        </span>
+                        <span className="text-base sm:text-lg font-black text-emerald-700">
+                          ₹{estimatedProfit.toLocaleString("en-IN")}
+                        </span>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <span className="text-xs font-black text-emerald-800 px-3 py-1 rounded-full bg-emerald-100 border border-emerald-300/80 whitespace-nowrap inline-flex items-center shadow-2xs">
+                          {overallMargin}% Margin
+                        </span>
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </div>
               ) : (
                 <div className="py-8 text-center text-slate-400 text-xs font-semibold">
-                  Tap + on products in Step 2 to generate the delivery slip preview.
+                  {isReturnMode
+                    ? "Tap + on products in Step 2 to add items taken back as returns."
+                    : "Tap + on products in Step 2 to generate the delivery slip preview."}
                 </div>
               )}
 
-              {/* Single Clear Dispatch Action Button */}
+              {/* Single Clear Action Button */}
               <div className="pt-2">
                 <button
                   type="button"
                   disabled={lineItems.length === 0 || isSaving}
                   onClick={handleRecordAndDispatch}
-                  className="w-full py-3 sm:py-3.5 px-3 sm:px-6 rounded-2xl text-xs sm:text-sm font-extrabold bg-[#2563EB] hover:bg-blue-700 disabled:opacity-40 text-white flex items-center justify-center gap-2 sm:gap-2.5 shadow-md shadow-blue-500/20 transition-all active:scale-[0.99] cursor-pointer whitespace-nowrap"
+                  className={cn(
+                    "w-full py-3 sm:py-3.5 px-3 sm:px-6 rounded-2xl text-xs sm:text-sm font-extrabold disabled:opacity-40 text-white flex items-center justify-center gap-2 sm:gap-2.5 transition-all active:scale-[0.99] cursor-pointer whitespace-nowrap shadow-md",
+                    isReturnMode
+                      ? "bg-amber-600 hover:bg-amber-700 shadow-amber-500/20"
+                      : "bg-[#2563EB] hover:bg-blue-700 shadow-blue-500/20"
+                  )}
                 >
-                  <CheckCircle2 size={16} className="shrink-0" />
+                  {isReturnMode ? <RotateCcw size={16} className="shrink-0" /> : <CheckCircle2 size={16} className="shrink-0" />}
                   <span className="whitespace-nowrap">
                     {isSaving
-                      ? "Recording Delivery Slip..."
-                      : `Submit & Record Delivery Slip (₹${billTotalAmount.toLocaleString("en-IN")})`}
+                      ? isReturnMode ? "Recording Return Slip..." : "Recording Delivery Slip..."
+                      : isReturnMode
+                        ? `Submit & Record Return Slip (-₹${billTotalAmount.toLocaleString("en-IN")})`
+                        : `Submit & Record Delivery Slip (₹${billTotalAmount.toLocaleString("en-IN")})`}
                   </span>
                 </button>
                 <p className="text-center text-[11px] text-[#64748B] mt-2 font-medium">
-                  Submitting saves the delivery slip and opens options to share via WhatsApp or download the PDF
+                  {isReturnMode
+                    ? "Submitting records the return, automatically reduces this client's pending balance, and lets you WhatsApp or print the return receipt."
+                    : "Submitting saves the delivery slip and opens options to share via WhatsApp or download the PDF"}
                 </p>
               </div>
             </div>
@@ -904,11 +1093,12 @@ export default function BakerDispatchPage() {
               </div>
             </div>
 
-            {/* MOBILE VIEW: Vertical Card Feed (Zero horizontal scrolling; scroll vertically to view all details) */}
+            {/* MOBILE VIEW: Vertical Card Feed */}
             <div className="md:hidden space-y-3">
               {filteredHistory.map((slip) => {
                 const totalPieces = (slip.items || []).reduce((acc: number, it: any) => acc + (Number(it.qty) || 0), 0);
                 const formattedCustomer = formatCafeName(slip.customerName);
+                const isRet = slip.isReturn || slip.totalAmount < 0 || (slip.title || "").includes("RETURN");
 
                 return (
                   <div
@@ -918,15 +1108,27 @@ export default function BakerDispatchPage() {
                     {/* Header: Store Icon, Store Name, Slip #, Date, and Actions */}
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex items-center gap-2.5 min-w-0">
-                        <div className="w-9 h-9 rounded-xl bg-blue-50 border border-blue-200/80 flex items-center justify-center text-blue-700 shrink-0">
-                          <Store size={16} />
+                        <div className={cn(
+                          "w-9 h-9 rounded-xl border flex items-center justify-center shrink-0",
+                          isRet
+                            ? "bg-amber-50 border-amber-200/80 text-amber-700"
+                            : "bg-blue-50 border-blue-200/80 text-blue-700"
+                        )}>
+                          {isRet ? <RotateCcw size={16} /> : <Store size={16} />}
                         </div>
                         <div className="min-w-0">
                           <h4 className="font-extrabold text-sm text-[#0F172A] leading-snug truncate" title={formattedCustomer}>
                             {formattedCustomer}
                           </h4>
-                          <div className="flex items-center gap-2 mt-0.5 text-[11px]">
-                            <span className="font-mono font-bold text-blue-600">{slip.invoiceNumber}</span>
+                          <div className="flex items-center gap-2 mt-0.5 text-[11px] flex-wrap">
+                            <span className={cn("font-mono font-bold", isRet ? "text-amber-700" : "text-blue-600")}>
+                              {slip.invoiceNumber}
+                            </span>
+                            {isRet && (
+                              <span className="px-1.5 py-0.2 rounded text-[8.5px] font-black uppercase tracking-wider bg-amber-100 text-amber-800 border border-amber-200">
+                                Return
+                              </span>
+                            )}
                             <span className="text-slate-300">•</span>
                             <span className="text-[#64748B] font-medium">{slip.date}</span>
                           </div>
@@ -938,7 +1140,10 @@ export default function BakerDispatchPage() {
                         <button
                           type="button"
                           onClick={() => handleDownloadPdf(slip)}
-                          className="p-1.5 rounded-lg text-slate-600 hover:text-blue-600 hover:bg-blue-50 border border-slate-200/60 transition cursor-pointer"
+                          className={cn(
+                            "p-1.5 rounded-lg border border-slate-200/60 transition cursor-pointer",
+                            isRet ? "text-amber-700 hover:bg-amber-50" : "text-slate-600 hover:text-blue-600 hover:bg-blue-50"
+                          )}
                           title="Download PDF Slip"
                         >
                           <Download size={14} />
@@ -962,36 +1167,50 @@ export default function BakerDispatchPage() {
                       </div>
                     </div>
 
-                    {/* Delivered Items Summary Bar */}
+                    {/* Delivered / Returned Items Summary Bar */}
                     <div className="text-xs bg-slate-50/80 p-2 rounded-xl border border-slate-100 text-[#0F172A] flex items-center justify-between gap-2">
                       <span className="font-medium text-slate-600 text-[11px] truncate">
                         {(slip.items || []).slice(0, 3).map((it: any) => `${it.qty}x ${capitalizeWords(it.name)}`).join(", ")}
                         {(slip.items || []).length > 3 ? ` +${(slip.items || []).length - 3} more` : ""}
                       </span>
-                      <span className="px-1.5 py-0.5 rounded-md bg-blue-50 text-blue-700 font-extrabold text-[10px] shrink-0 border border-blue-200/60">
-                        {totalPieces} pcs
+                      <span className={cn(
+                        "px-1.5 py-0.5 rounded-md font-extrabold text-[10px] shrink-0 border",
+                        isRet
+                          ? "bg-amber-50 text-amber-800 border-amber-200/60"
+                          : "bg-blue-50 text-blue-700 border-blue-200/60"
+                      )}>
+                        {totalPieces} {isRet ? "returned pcs" : "pcs"}
                       </span>
                     </div>
 
                     {/* 3-Stat Financial Grid */}
                     <div className="grid grid-cols-3 gap-2 p-2.5 rounded-xl bg-slate-50 border border-slate-200/60 text-center">
                       <div className="min-w-0">
-                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block truncate">Total Bill</span>
-                        <span className="text-xs font-black text-[#0F172A] mt-0.5 block truncate">₹{(slip.totalAmount || 0).toLocaleString("en-IN")}</span>
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block truncate">
+                          {isRet ? "Deduction" : "Total Bill"}
+                        </span>
+                        <span className={cn(
+                          "text-xs font-black mt-0.5 block truncate",
+                          isRet ? "text-amber-700" : "text-[#0F172A]"
+                        )}>
+                          {isRet ? `-₹${Math.abs(slip.totalAmount || 0).toLocaleString("en-IN")}` : `₹${(slip.totalAmount || 0).toLocaleString("en-IN")}`}
+                        </span>
                       </div>
                       <div className="min-w-0 border-l border-slate-200">
                         <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block truncate">Total Qty</span>
-                        <span className="text-xs font-semibold text-slate-700 mt-0.5 block truncate">{totalPieces} units</span>
+                        <span className="text-xs font-semibold text-slate-700 mt-0.5 block truncate">
+                          {totalPieces} {isRet ? "returned" : "units"}
+                        </span>
                       </div>
                       <div className="min-w-0 border-l border-slate-200">
                         <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block truncate">Payment</span>
                         <span
                           className={cn(
                             "text-xs font-black mt-0.5 block truncate",
-                            slip.status === "paid" ? "text-emerald-700" : "text-rose-600"
+                            isRet ? "text-amber-700" : slip.status === "paid" ? "text-emerald-700" : "text-rose-600"
                           )}
                         >
-                          {slip.status === "paid" ? "Settled" : "Due"}
+                          {isRet ? "Credited" : slip.status === "paid" ? "Settled" : "Due"}
                         </span>
                       </div>
                     </div>
@@ -999,7 +1218,11 @@ export default function BakerDispatchPage() {
                     {/* Status Bar */}
                     <div className="flex items-center justify-between text-xs pt-1 border-t border-slate-100">
                       <span className="text-[11px] text-slate-400 font-medium">Slip Status</span>
-                      {slip.status === "paid" ? (
+                      {isRet ? (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-50 text-amber-800 border border-amber-200">
+                          🔄 Deducted from Balance
+                        </span>
+                      ) : slip.status === "paid" ? (
                         <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-50 text-emerald-700 border border-emerald-200">
                           ✓ Settled (Paid)
                         </span>
@@ -1015,8 +1238,8 @@ export default function BakerDispatchPage() {
 
               {filteredHistory.length === 0 && (
                 <div className="bg-white p-8 rounded-2xl border border-[#E2E8F0] text-center text-[#64748B]">
-                  <p className="font-bold text-sm">No delivery slips found.</p>
-                  <p className="text-xs text-slate-400 mt-1">Try another search or create a new delivery slip.</p>
+                  <p className="font-bold text-sm">No slips found.</p>
+                  <p className="text-xs text-slate-400 mt-1">Try another search or record a new delivery or return slip.</p>
                 </div>
               )}
             </div>
@@ -1030,7 +1253,7 @@ export default function BakerDispatchPage() {
                       <tr className="bg-[#F8FAFC] border-b border-[#E2E8F0] text-[11px] font-extrabold text-[#64748B] uppercase tracking-wider">
                         <th className="py-3 px-4 whitespace-nowrap">Slip #</th>
                         <th className="py-3 px-4 whitespace-nowrap">Date</th>
-                        <th className="py-3 px-4 whitespace-nowrap">Delivered Store</th>
+                        <th className="py-3 px-4 whitespace-nowrap">Store / Client</th>
                         <th className="py-3 px-4 whitespace-nowrap">Items Summary</th>
                         <th className="py-3 px-4 whitespace-nowrap">Total Amount</th>
                         <th className="py-3 px-4 whitespace-nowrap">Status</th>
@@ -1040,33 +1263,58 @@ export default function BakerDispatchPage() {
                     <tbody className="divide-y divide-[#F1F5F9] text-xs font-semibold text-[#0F172A]">
                       {filteredHistory.map((slip) => {
                         const totalPieces = (slip.items || []).reduce((acc: number, it: any) => acc + (Number(it.qty) || 0), 0);
+                        const isRet = slip.isReturn || slip.totalAmount < 0 || (slip.title || "").includes("RETURN");
 
                         return (
                           <tr key={slip.id} className="hover:bg-slate-50/80 transition-colors">
-                            <td className="py-3.5 px-4 font-mono font-bold text-blue-600 whitespace-nowrap">
-                              {slip.invoiceNumber}
+                            <td className="py-3.5 px-4 whitespace-nowrap">
+                              <div className="flex items-center gap-1.5 font-mono font-bold whitespace-nowrap">
+                                <span className={isRet ? "text-amber-700" : "text-blue-600"}>
+                                  {slip.invoiceNumber}
+                                </span>
+                                {isRet && (
+                                  <span className="px-1.5 py-0.2 rounded text-[8.5px] font-black uppercase tracking-wider bg-amber-100 text-amber-800 border border-amber-200">
+                                    Return
+                                  </span>
+                                )}
+                              </div>
                             </td>
                             <td className="py-3.5 px-4 text-slate-600 whitespace-nowrap">
                               {slip.date}
                             </td>
                             <td className="py-3.5 px-4 whitespace-nowrap">
                               <div className="flex items-center gap-1.5 font-extrabold text-sm text-[#0F172A] tracking-tight font-sans">
-                                <Store size={13} className="text-blue-500 shrink-0" />
+                                {isRet ? (
+                                  <RotateCcw size={13} className="text-amber-600 shrink-0" />
+                                ) : (
+                                  <Store size={13} className="text-blue-500 shrink-0" />
+                                )}
                                 <span>{formatCafeName(slip.customerName)}</span>
                               </div>
                             </td>
                             <td className="py-3.5 px-4 text-slate-600 whitespace-nowrap">
-                              <span className="font-bold text-[#0F172A]">{totalPieces} pcs</span>
+                              <span className="font-bold text-[#0F172A]">
+                                {totalPieces} {isRet ? "returned pcs" : "pcs"}
+                              </span>
                               <span className="text-slate-400 text-[11px] ml-1.5">
                                 ({(slip.items || []).slice(0, 2).map((it: any) => `${it.qty}x ${capitalizeWords(it.name)}`).join(", ")}
                                 {(slip.items || []).length > 2 ? "..." : ""})
                               </span>
                             </td>
-                            <td className="py-3.5 px-4 font-black text-[#0F172A] text-sm whitespace-nowrap">
-                              ₹{(slip.totalAmount || 0).toLocaleString("en-IN")}
+                            <td className="py-3.5 px-4 whitespace-nowrap">
+                              <span className={cn(
+                                "text-sm font-black whitespace-nowrap",
+                                isRet ? "text-amber-700" : "text-[#0F172A]"
+                              )}>
+                                {isRet ? `-₹${Math.abs(slip.totalAmount || 0).toLocaleString("en-IN")}` : `₹${(slip.totalAmount || 0).toLocaleString("en-IN")}`}
+                              </span>
                             </td>
                             <td className="py-3.5 px-4 whitespace-nowrap">
-                              {slip.status === "paid" ? (
+                              {isRet ? (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-50 text-amber-800 border border-amber-200 whitespace-nowrap">
+                                  🔄 Credit Deducted
+                                </span>
+                              ) : slip.status === "paid" ? (
                                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-50 text-emerald-700 border border-emerald-200 whitespace-nowrap">
                                   ✓ Settled
                                 </span>
@@ -1136,145 +1384,201 @@ export default function BakerDispatchPage() {
       {/* ==================================================== */}
       {/* INSTANT SLIP CREATED MODAL (ANSWERS "WHERE CAN I SEE")*/}
       {/* ==================================================== */}
-      {createdSlipModal && (
-        <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in">
-          <div className="bg-white rounded-3xl max-w-md w-full border border-slate-200 shadow-2xl p-6 space-y-5 animate-in zoom-in-95">
-            <div className="text-center space-y-1">
-              <div className="w-12 h-12 rounded-2xl bg-emerald-50 border border-emerald-100 text-emerald-600 flex items-center justify-center mx-auto shadow-2xs">
-                <CheckCircle2 size={24} />
-              </div>
-              <h3 className="font-black text-lg text-[#0F172A]">Delivery Slip Recorded! 📦</h3>
-              <p className="text-xs text-[#64748B]">
-                Slip <strong className="font-mono text-blue-600">{createdSlipModal.invoiceNumber}</strong> saved for <strong className="text-[#0F172A]">{createdSlipModal.customerName}</strong>.
-              </p>
-            </div>
+      {createdSlipModal && (() => {
+        const isRet = createdSlipModal.isReturn || createdSlipModal.totalAmount < 0 || (createdSlipModal.title || "").includes("RETURN");
+        const absTotal = Math.abs(createdSlipModal.totalAmount || 0);
 
-            <div className="p-4 rounded-2xl bg-slate-50 border border-slate-100 space-y-2 text-xs">
-              <div className="flex justify-between text-slate-600">
-                <span>Date:</span>
-                <span className="font-semibold text-slate-800">{createdSlipModal.date}</span>
+        return (
+          <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in">
+            <div className="bg-white rounded-3xl max-w-md w-full border border-slate-200 shadow-2xl p-6 space-y-5 animate-in zoom-in-95">
+              <div className="text-center space-y-1">
+                <div className={cn(
+                  "w-12 h-12 rounded-2xl border flex items-center justify-center mx-auto shadow-2xs",
+                  isRet
+                    ? "bg-amber-50 border-amber-200 text-amber-700"
+                    : "bg-emerald-50 border-emerald-100 text-emerald-600"
+                )}>
+                  {isRet ? <RotateCcw size={24} /> : <CheckCircle2 size={24} />}
+                </div>
+                <h3 className="font-black text-lg text-[#0F172A]">
+                  {isRet ? "Return Slip Recorded! 🔄" : "Delivery Slip Recorded! 📦"}
+                </h3>
+                <p className="text-xs text-[#64748B]">
+                  {isRet ? "Return Slip " : "Slip "}
+                  <strong className={cn("font-mono", isRet ? "text-amber-700" : "text-blue-600")}>
+                    {createdSlipModal.invoiceNumber}
+                  </strong>{" "}
+                  saved for <strong className="text-[#0F172A]">{createdSlipModal.customerName}</strong>.
+                </p>
               </div>
-              <div className="flex justify-between text-slate-600">
-                <span>Billed Amount:</span>
-                <span className="font-black text-[#0F172A] text-sm">₹{createdSlipModal.totalAmount.toLocaleString("en-IN")}</span>
-              </div>
-              <div className="flex justify-between text-slate-600">
-                <span>Items:</span>
-                <span className="font-semibold text-slate-800">{createdSlipModal.items?.length || 0} product types</span>
-              </div>
-            </div>
 
-            <div className="space-y-2">
+              <div className="p-4 rounded-2xl bg-slate-50 border border-slate-100 space-y-2 text-xs">
+                <div className="flex justify-between text-slate-600">
+                  <span>Date:</span>
+                  <span className="font-semibold text-slate-800">{createdSlipModal.date}</span>
+                </div>
+                <div className="flex justify-between text-slate-600">
+                  <span>{isRet ? "Credit Deducted:" : "Billed Amount:"}</span>
+                  <span className={cn(
+                    "font-black text-sm",
+                    isRet ? "text-amber-700" : "text-[#0F172A]"
+                  )}>
+                    {isRet ? `-₹${absTotal.toLocaleString("en-IN")}` : `₹${absTotal.toLocaleString("en-IN")}`}
+                  </span>
+                </div>
+                <div className="flex justify-between text-slate-600">
+                  <span>Items:</span>
+                  <span className="font-semibold text-slate-800">
+                    {createdSlipModal.items?.length || 0} product types {isRet ? "(returned)" : ""}
+                  </span>
+                </div>
+
+                {isRet && (
+                  <div className="mt-2 pt-2 border-t border-slate-200/60 text-[11px] text-amber-800 font-semibold flex items-center gap-1.5">
+                    <RotateCcw size={13} className="shrink-0 text-amber-700" />
+                    <span>₹{absTotal.toLocaleString("en-IN")} credited &amp; deducted from client ledger.</span>
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleSendWhatsApp(createdSlipModal);
+                    setCreatedSlipModal(null);
+                  }}
+                  className="w-full py-2.5 rounded-xl text-xs font-extrabold bg-[#16A34A] hover:bg-[#15803D] text-white flex items-center justify-center gap-2 cursor-pointer shadow-xs"
+                >
+                  <Send size={14} />
+                  <span>{isRet ? "Share Return Slip on WhatsApp" : "Share Slip on WhatsApp Now"}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleDownloadPdf(createdSlipModal);
+                    setCreatedSlipModal(null);
+                  }}
+                  className={cn(
+                    "w-full py-2.5 rounded-xl text-xs font-extrabold text-white flex items-center justify-center gap-2 cursor-pointer shadow-xs",
+                    isRet ? "bg-amber-600 hover:bg-amber-700" : "bg-blue-600 hover:bg-blue-700"
+                  )}
+                >
+                  <Download size={14} />
+                  <span>{isRet ? "Download Return Credit PDF" : "Download Printable PDF"}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCreatedSlipModal(null);
+                    setActiveTab("history");
+                  }}
+                  className="w-full py-2.5 rounded-xl text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 transition cursor-pointer flex items-center justify-center gap-1.5"
+                >
+                  <History size={14} />
+                  <span>View All Saved Slips History</span>
+                </button>
+              </div>
+
               <button
                 type="button"
-                onClick={() => {
-                  handleSendWhatsApp(createdSlipModal);
-                  setCreatedSlipModal(null);
-                }}
-                className="w-full py-2.5 rounded-xl text-xs font-extrabold bg-[#16A34A] hover:bg-[#15803D] text-white flex items-center justify-center gap-2 cursor-pointer shadow-xs"
+                onClick={() => setCreatedSlipModal(null)}
+                className="w-full text-center text-xs font-semibold text-slate-400 hover:text-slate-600 pt-1 cursor-pointer"
               >
-                <Send size={14} />
-                <span>Share Slip on WhatsApp Now</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  handleDownloadPdf(createdSlipModal);
-                  setCreatedSlipModal(null);
-                }}
-                className="w-full py-2.5 rounded-xl text-xs font-extrabold bg-blue-600 hover:bg-blue-700 text-white flex items-center justify-center gap-2 cursor-pointer shadow-xs"
-              >
-                <Download size={14} />
-                <span>Download Printable PDF</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setCreatedSlipModal(null);
-                  setActiveTab("history");
-                }}
-                className="w-full py-2.5 rounded-xl text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 transition cursor-pointer flex items-center justify-center gap-1.5"
-              >
-                <History size={14} />
-                <span>View All Saved Slips History</span>
+                {isRet ? "Close & Record Another Return" : "Close & Create Another Slip"}
               </button>
             </div>
-
-            <button
-              type="button"
-              onClick={() => setCreatedSlipModal(null)}
-              className="w-full text-center text-xs font-semibold text-slate-400 hover:text-slate-600 pt-1 cursor-pointer"
-            >
-              Close &amp; Create Another Slip
-            </button>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* ==================================================== */}
       {/* VIEW SLIP DETAILS MODAL                              */}
       {/* ==================================================== */}
-      {viewingSlipDetails && (
-        <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in">
-          <div className="bg-white rounded-3xl max-w-lg w-full border border-slate-200 shadow-2xl p-6 space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div>
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Slip Details</span>
-                <h3 className="font-black text-base text-[#0F172A]">{viewingSlipDetails.invoiceNumber}</h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setViewingSlipDetails(null)}
-                className="w-7 h-7 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center font-bold cursor-pointer"
-              >
-                ✕
-              </button>
-            </div>
+      {viewingSlipDetails && (() => {
+        const isRet = viewingSlipDetails.isReturn || viewingSlipDetails.totalAmount < 0 || (viewingSlipDetails.title || "").includes("RETURN");
+        const absTotal = Math.abs(viewingSlipDetails.totalAmount || 0);
 
-            <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-100 space-y-1 text-xs">
-              <p><strong className="text-slate-700">Delivered To:</strong> {viewingSlipDetails.customerName}</p>
-              <p><strong className="text-slate-700">Date:</strong> {viewingSlipDetails.date}</p>
-              <p><strong className="text-slate-700">Phone:</strong> {viewingSlipDetails.customerPhone || "N/A"}</p>
-              <p><strong className="text-slate-700">Status:</strong> {viewingSlipDetails.status === "paid" ? "Settled (Paid)" : "Pending Dues"}</p>
-            </div>
-
-            <div className="divide-y divide-slate-100 rounded-xl border border-slate-200 max-h-48 overflow-y-auto">
-              {(viewingSlipDetails.items || []).map((it: any, idx: number) => (
-                <div key={idx} className="p-2.5 flex items-center justify-between text-xs">
-                  <span>{it.qty}x {capitalizeWords(it.name)}</span>
-                  <span className="font-bold text-[#0F172A]">₹{((it.amount || it.qty * it.rate) || 0).toLocaleString("en-IN")}</span>
+        return (
+          <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in">
+            <div className="bg-white rounded-3xl max-w-lg w-full border border-slate-200 shadow-2xl p-6 space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                      {isRet ? "Return & Credit Slip" : "Delivery Slip Details"}
+                    </span>
+                    {isRet && (
+                      <span className="px-1.5 py-0.2 rounded text-[8.5px] font-black uppercase tracking-wider bg-amber-100 text-amber-800 border border-amber-200">
+                        Return Note
+                      </span>
+                    )}
+                  </div>
+                  <h3 className={cn("font-black text-base", isRet ? "text-amber-800" : "text-[#0F172A]")}>
+                    {viewingSlipDetails.invoiceNumber}
+                  </h3>
                 </div>
-              ))}
-            </div>
+                <button
+                  type="button"
+                  onClick={() => setViewingSlipDetails(null)}
+                  className="w-7 h-7 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center font-bold cursor-pointer"
+                >
+                  ✕
+                </button>
+              </div>
 
-            <div className="flex justify-between items-center text-sm font-black pt-1">
-              <span>Total Amount:</span>
-              <span className="text-base text-blue-600">₹{(viewingSlipDetails.totalAmount || 0).toLocaleString("en-IN")}</span>
-            </div>
+              <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-100 space-y-1 text-xs">
+                <p><strong className="text-slate-700">{isRet ? "Client / Café:" : "Delivered To:"}</strong> {viewingSlipDetails.customerName}</p>
+                <p><strong className="text-slate-700">Date:</strong> {viewingSlipDetails.date}</p>
+                <p><strong className="text-slate-700">Phone:</strong> {viewingSlipDetails.customerPhone || "N/A"}</p>
+                <p><strong className="text-slate-700">Status:</strong> {isRet ? "Deducted from Outstanding Balance" : viewingSlipDetails.status === "paid" ? "Settled (Paid)" : "Pending Dues"}</p>
+              </div>
 
-            <div className="flex gap-2 pt-2">
-              <button
-                type="button"
-                onClick={() => handleDownloadPdf(viewingSlipDetails)}
-                className="flex-1 py-2.5 rounded-xl text-xs font-extrabold bg-blue-600 hover:bg-blue-700 text-white flex items-center justify-center gap-1.5 cursor-pointer shadow-xs"
-              >
-                <Download size={14} />
-                <span>Download PDF</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => handleSendWhatsApp(viewingSlipDetails)}
-                className="flex-1 py-2.5 rounded-xl text-xs font-extrabold bg-[#16A34A] hover:bg-[#15803D] text-white flex items-center justify-center gap-1.5 cursor-pointer shadow-xs"
-              >
-                <Send size={14} />
-                <span>WhatsApp</span>
-              </button>
+              <div className="divide-y divide-slate-100 rounded-xl border border-slate-200 max-h-48 overflow-y-auto">
+                {(viewingSlipDetails.items || []).map((it: any, idx: number) => (
+                  <div key={idx} className="p-2.5 flex items-center justify-between text-xs">
+                    <span>{it.qty}x {capitalizeWords(it.name)}</span>
+                    <span className={cn("font-bold", isRet ? "text-amber-700" : "text-[#0F172A]")}>
+                      {isRet ? "-" : ""}₹{Math.abs((it.amount || it.qty * it.rate) || 0).toLocaleString("en-IN")}
+                    </span>
+                  </div>
+                ))}
+              </div>
+
+              <div className="flex justify-between items-center text-sm font-black pt-1">
+                <span>{isRet ? "Total Deducted Amount:" : "Total Amount:"}</span>
+                <span className={cn("text-base", isRet ? "text-amber-700" : "text-blue-600")}>
+                  {isRet ? `-₹${absTotal.toLocaleString("en-IN")}` : `₹${absTotal.toLocaleString("en-IN")}`}
+                </span>
+              </div>
+
+              <div className="flex gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => handleDownloadPdf(viewingSlipDetails)}
+                  className={cn(
+                    "flex-1 py-2.5 rounded-xl text-xs font-extrabold text-white flex items-center justify-center gap-1.5 cursor-pointer shadow-xs",
+                    isRet ? "bg-amber-600 hover:bg-amber-700" : "bg-blue-600 hover:bg-blue-700"
+                  )}
+                >
+                  <Download size={14} />
+                  <span>{isRet ? "Download Return PDF" : "Download PDF"}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSendWhatsApp(viewingSlipDetails)}
+                  className="flex-1 py-2.5 rounded-xl text-xs font-extrabold bg-[#16A34A] hover:bg-[#15803D] text-white flex items-center justify-center gap-1.5 cursor-pointer shadow-xs"
+                >
+                  <Send size={14} />
+                  <span>WhatsApp</span>
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* ==================================================== */}
       {/* ADD CAFÉ MODAL (WITH 10-DIGIT INDIA PHONE VALIDATION) */}

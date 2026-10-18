@@ -698,7 +698,7 @@ export default function BakerBroadcastsPage() {
                       No SeyalPro Connected Stores
                     </p>
                     <p className="text-[11px] text-amber-850 leading-relaxed">
-                      None of your registered client stores are linked to a SeyalPro account yet. Link them in <Link href="/b2b/customers" className="underline font-bold text-blue-700">Client &amp; Store Ledgers</Link> to enable live in-app notifications.
+                      None of your registered clients are linked to a SeyalPro account yet. Link them in <Link href="/b2b/customers" className="underline font-bold text-blue-700">Client Ledgers</Link> to enable live in-app notifications.
                     </p>
                   </div>
                 </div>

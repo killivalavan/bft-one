@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useMemo, useRef } from "react";
+import Link from "next/link";
 import { supabaseClient } from "@/lib/supabaseClient";
 import { useCart, totalCents, CartItem } from "@/store/cart";
 import { useToast } from "@/components/ui/Toast";
@@ -12,8 +13,9 @@ import {
   CreditCard, QrCode, Banknote, Printer, Download, FileText,
   Grid, List, ArrowRight,
   Hash, Coffee, Zap, CheckCircle2, Phone, MessageCircle, Copy, Check, ExternalLink,
-  Boxes
+  Boxes, Lock, Shield
 } from "lucide-react";
+import { BoldFilledLock } from "@/components/ui/BoldFilledLock";
 import { generateBillPdf } from "@/lib/utils/billPdf";
 import { InvoiceDetailsModal } from "@/components/billing/InvoiceDetailsModal";
 import { SyncStatusBadge } from "@/components/offline/SyncStatusBadge";
@@ -259,7 +261,7 @@ const DUMMY_PRODUCTS: Product[] = [
   },
 ];
 
-export default function BillingPage() {
+function RetailBillingView() {
   const { toast } = useToast();
   const { business } = useTenant();
   const { flags } = useProfile();
@@ -1911,4 +1913,67 @@ ${order.taxCents > 0 ? `🏛️ *GST (5%):* ₹${(order.taxCents / 100).toFixed(
       `}</style>
     </div>
   );
+}
+
+function LockedCafePosView() {
+  return (
+    <div className="min-h-[calc(100vh-68px)] flex items-center justify-center p-4 bg-slate-50">
+      <div className="max-w-md w-full bg-white border border-slate-200/90 rounded-3xl p-6 sm:p-8 text-center space-y-5 shadow-xl animate-in zoom-in-95 text-[#0F172A]">
+        <div className="relative inline-block">
+          <div className="w-20 h-20 rounded-3xl bg-blue-50 border border-blue-200/60 flex items-center justify-center text-blue-600 mx-auto shadow-inner">
+            <Coffee size={38} />
+          </div>
+          <div className="absolute -bottom-1 -right-1 w-7 h-7 rounded-full bg-amber-50 border border-amber-300 flex items-center justify-center text-amber-500 shadow-md">
+            <BoldFilledLock size={14} />
+          </div>
+        </div>
+
+        <div className="space-y-1.5">
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider bg-amber-50 text-amber-700 border border-amber-200/80">
+            <BoldFilledLock size={11} className="text-amber-500" />
+            <span>Retail POS Locked</span>
+          </div>
+          <h2 className="text-xl sm:text-2xl font-black text-[#0F172A]">
+            Cafe POS is Locked
+          </h2>
+          <p className="text-xs sm:text-sm text-slate-500 leading-relaxed max-w-sm mx-auto">
+            This workspace is configured exclusively for <strong>B2B Supply &amp; Wholesale</strong>. Retail billing, table management, and consumer receipts are locked to keep your system fast and responsive.
+          </p>
+        </div>
+
+        <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/80 text-left text-xs text-slate-600 flex items-start gap-2.5">
+          <Shield size={16} className="text-blue-600 shrink-0 mt-0.5" />
+          <p className="leading-snug">
+            To activate retail counter billing alongside B2B wholesale, contact your Super Administrator from the SeyalPro Command Center.
+          </p>
+        </div>
+
+        <div className="flex flex-col sm:flex-row items-center gap-2.5 pt-1">
+          <Link
+            href="/b2b"
+            className="w-full py-3 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 active:scale-[0.98] text-xs sm:text-sm font-bold text-white transition-all shadow-md shadow-blue-600/20 text-center cursor-pointer"
+          >
+            Go to B2B Supply Hub
+          </Link>
+          <Link
+            href="/b2b/dispatch"
+            className="w-full py-3 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 active:scale-[0.98] text-xs sm:text-sm font-bold text-slate-700 transition-all border border-slate-200 text-center cursor-pointer"
+          >
+            Daily Dispatch Slips
+          </Link>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default function BillingPage() {
+  const { isModuleEnabled } = useTenant();
+  const isBakerEnabled = isModuleEnabled ? isModuleEnabled("baker_mode") : false;
+
+  if (isBakerEnabled) {
+    return <LockedCafePosView />;
+  }
+
+  return <RetailBillingView />;
 }

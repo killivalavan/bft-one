@@ -28,6 +28,7 @@ import {
 import { formatCafeName } from "@/lib/utils/bakerUtils";
 import { capitalizeWords } from "./products/page";
 import { fetchB2BClients, B2B_CUSTOMERS_UPDATED_EVENT } from "@/lib/services/b2bClients";
+import StoreActivityMonitor from "@/components/baker/StoreActivityMonitor";
 
 interface InvoiceRecord {
   id: string;
@@ -306,9 +307,9 @@ export default function HomeBakerDashboardPage() {
 
           <Link
             href="/b2b/products"
-            className="p-3 sm:p-3.5 rounded-2xl bg-white border border-[#E2E8F0] hover:border-indigo-300 hover:shadow-xs transition-all flex items-center gap-2.5 sm:gap-3 group"
+            className="p-3 sm:p-3.5 rounded-2xl bg-white border border-[#E2E8F0] hover:border-blue-300 hover:shadow-xs transition-all flex items-center gap-2.5 sm:gap-3 group"
           >
-            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center group-hover:scale-105 transition-transform shrink-0">
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center group-hover:scale-105 transition-transform shrink-0">
               <Package size={16} />
             </div>
             <div className="min-w-0">
@@ -319,9 +320,9 @@ export default function HomeBakerDashboardPage() {
 
           <Link
             href="/b2b/customers"
-            className="p-3 sm:p-3.5 rounded-2xl bg-white border border-[#E2E8F0] hover:border-purple-300 hover:shadow-xs transition-all flex items-center gap-2.5 sm:gap-3 group"
+            className="p-3 sm:p-3.5 rounded-2xl bg-white border border-[#E2E8F0] hover:border-blue-300 hover:shadow-xs transition-all flex items-center gap-2.5 sm:gap-3 group"
           >
-            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center group-hover:scale-105 transition-transform shrink-0">
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center group-hover:scale-105 transition-transform shrink-0">
               <Store size={16} />
             </div>
             <div className="min-w-0">
@@ -429,7 +430,7 @@ export default function HomeBakerDashboardPage() {
               <p className="text-[10px] sm:text-[11px] font-bold text-[#64748B] uppercase tracking-wider truncate">
                 Dispatched Units
               </p>
-              <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold shrink-0">
+              <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center font-bold shrink-0">
                 <Boxes size={15} />
               </div>
             </div>
@@ -437,12 +438,17 @@ export default function HomeBakerDashboardPage() {
               <h3 className="text-lg sm:text-2xl font-black text-[#0F172A] tabular-nums tracking-tight">
                 {totalDeliveredPieces} pcs
               </h3>
-              <p className="text-[10px] sm:text-xs text-indigo-600 font-semibold mt-0.5 truncate">
+              <p className="text-[10px] sm:text-xs text-blue-600 font-semibold mt-0.5 truncate">
                 Across all partner slips
               </p>
             </div>
           </div>
         </div>
+
+        {/* ========================================================= */}
+        {/* STORE RE-ORDER & ACTIVITY MONITOR (NOT ORDERING / DROPS)  */}
+        {/* ========================================================= */}
+        <StoreActivityMonitor invoices={invoices} stores={stores} />
 
         {/* ========================================================= */}
         {/* INTERACTIVE VISUAL INTELLIGENCE HUB (RECHARTS GRAPHS)     */}
@@ -518,7 +524,7 @@ export default function HomeBakerDashboardPage() {
                     : "text-slate-600 hover:text-slate-900"
                 )}
               >
-                <TrendingUp size={13} className="text-indigo-600 shrink-0" />
+                <TrendingUp size={13} className="text-blue-600 shrink-0" />
                 <span>Velocity Trend</span>
               </button>
             </div>

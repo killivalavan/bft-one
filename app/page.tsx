@@ -63,7 +63,12 @@ export default function Home() {
   const isBakerEnabled = isModuleEnabled ? isModuleEnabled("baker_mode") : false;
 
   useEffect(() => {
-    if (!isBakerEnabled && appMode === "baker") {
+    if (isBakerEnabled && appMode !== "baker") {
+      setAppMode("baker");
+      try {
+        localStorage.setItem("seyalpro_app_mode", "baker");
+      } catch {}
+    } else if (!isBakerEnabled && appMode === "baker") {
       setAppMode("cafe");
       try {
         localStorage.setItem("seyalpro_app_mode", "cafe");
@@ -83,12 +88,15 @@ export default function Home() {
     if (user?.email) {
       setUserEmail(user.email);
       try { localStorage.setItem('bftone_display_email', user.email); } catch { }
-      preloadBillingCache(supabaseClient);
+      // Do not preload heavy retail billing cache for B2B Supply accounts
+      if (!isBakerEnabled) {
+        preloadBillingCache(supabaseClient);
+      }
     } else if (user === null) {
       setUserEmail(null);
       try { localStorage.removeItem('bftone_display_email'); } catch { }
     }
-  }, [user]);
+  }, [user, isBakerEnabled]);
 
   const isAdmin = Boolean(
     flags?.isAdmin ||
@@ -289,9 +297,9 @@ export default function Home() {
     );
   }
 
-  // If Admin Logged In: Check if user switched to Baker / Simple Mode vs Full Cafe Command Center
+  // If Admin Logged In: Check if user is in B2B Supply Mode vs Full Cafe Command Center
   if (isAdmin) {
-    if (isBakerEnabled && appMode === "baker") {
+    if (isBakerEnabled) {
       return (
         <SimpleBakerDashboardView
           onSwitchToCafeMode={() => handleSwitchMode("cafe")}

@@ -90,7 +90,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   if (showSidebar) {
     return (
-      <div className={cn("min-h-screen flex bg-[#F8FAFC]", isBillingPage && "h-screen max-h-screen overflow-hidden")}>
+      <div className={cn("min-h-screen flex bg-[#0B132B]", isBillingPage && "h-screen max-h-screen overflow-hidden")}>
         {/* Full-Height Left Sidebar on Desktop & Off-Canvas Drawer on Mobile */}
         <AdminSidebar
           isCollapsed={isSidebarCollapsed}
@@ -101,17 +101,23 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         />
 
         {/* Right Main Column: Zero top navbar on desktop; minimal drawer trigger on mobile */}
-        <div className={cn("flex-1 flex flex-col min-w-0", isBillingPage ? "h-screen max-h-screen overflow-hidden" : "min-h-screen")}>
+        <div
+          className={cn(
+            "flex-1 flex flex-col min-w-0 bg-[#F8FAFC] transition-transform duration-250 ease-out will-change-transform",
+            isBillingPage ? "h-screen max-h-screen overflow-hidden" : "min-h-screen",
+            isMobileDrawerOpen && "md:transform-none transform scale-[0.97] origin-left rounded-2xl md:rounded-none overflow-hidden shadow-2xl"
+          )}
+        >
           {!isBillingPage && (
             <header className="md:hidden sticky top-0 z-30 flex items-center justify-between h-14 px-3 sm:px-4 bg-white/95 backdrop-blur-md border-b border-slate-200/80 shadow-2xs shrink-0">
               <div className="flex items-center gap-2.5 min-w-0">
                 <button
                   onClick={() => setIsMobileDrawerOpen(true)}
-                  className="w-9 h-9 rounded-xl bg-slate-100 hover:bg-slate-200 active:scale-95 text-[#0F172A] flex items-center justify-center transition-all border border-slate-200/80 shadow-2xs shrink-0"
+                  className="w-9 h-9 rounded-xl bg-slate-100 hover:bg-slate-200 active:scale-90 text-[#0F172A] flex items-center justify-center transition-all border border-slate-200/80 shadow-2xs shrink-0 cursor-pointer group"
                   title="Open Navigation Menu"
                   aria-label="Open Navigation Menu"
                 >
-                  <PanelLeftOpen size={18} className="text-[#2563EB]" />
+                  <PanelLeftOpen size={18} className="text-[#2563EB] group-hover:scale-110 group-active:scale-95 transition-transform" />
                 </button>
                 <div className="flex items-center gap-2 min-w-0">
                   <SeyalLogo size={26} showWordmark theme="light" />

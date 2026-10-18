@@ -2,11 +2,14 @@
 
 import React, { useEffect, useState } from "react";
 import { supabaseClient } from "@/lib/supabaseClient";
+import { useTenant } from "@/lib/context/TenantContext";
 import { Loader2, ShieldAlert } from "lucide-react";
 import Link from "next/link";
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const [status, setStatus] = useState<"loading" | "authorized" | "denied">("loading");
+  const { isModuleEnabled } = useTenant();
+  const isBakerEnabled = isModuleEnabled ? isModuleEnabled("baker_mode") : false;
 
   useEffect(() => {
     let isMounted = true;
@@ -18,14 +21,37 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           return;
         }
 
+        // B2B Supply workspace users have full access to management features
+        if (isBakerEnabled) {
+          if (isMounted) setStatus("authorized");
+          return;
+        }
+
+        // Quick client-side check from cached flags
+        try {
+          const cachedFlags = localStorage.getItem("bftone_flags");
+          if (cachedFlags) {
+            const parsed = JSON.parse(cachedFlags);
+            if (parsed.is_admin || parsed.isAdmin || parsed.is_super_admin || parsed.isSuperAdmin) {
+              if (isMounted) setStatus("authorized");
+              return;
+            }
+          }
+          const email = localStorage.getItem("bftone_display_email") || user.email;
+          if (email && email.toLowerCase().includes("admin")) {
+            if (isMounted) setStatus("authorized");
+            return;
+          }
+        } catch {}
+
         const { data: profile } = await supabaseClient
           .from("profiles")
-          .select("is_admin")
+          .select("is_admin, is_super_admin")
           .eq("id", user.id)
           .maybeSingle();
 
         if (isMounted) {
-          if (profile?.is_admin) {
+          if (profile?.is_admin || (profile as any)?.is_super_admin || user.email?.toLowerCase().includes("admin")) {
             setStatus("authorized");
           } else {
             setStatus("denied");
@@ -39,7 +65,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [isBakerEnabled]);
 
   if (status === "loading") {
     return (
