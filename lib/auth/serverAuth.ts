@@ -19,11 +19,21 @@ export interface AuthFailure {
   errorResponse: NextResponse;
 }
 
-// In-memory rate limiter for traffic control on sensitive endpoints
+// In-memory rate limiter for traffic control on sensitive endpoints with automatic eviction
 const rateLimitMap = new Map<string, { count: number; resetTime: number }>();
 
 export function checkRateLimit(key: string, limit = 60, windowMs = 60000): boolean {
   const now = Date.now();
+
+  // Periodic eviction to prevent unbounded memory growth
+  if (rateLimitMap.size > 200) {
+    for (const [k, v] of rateLimitMap.entries()) {
+      if (now > v.resetTime) {
+        rateLimitMap.delete(k);
+      }
+    }
+  }
+
   const record = rateLimitMap.get(key);
 
   if (!record || now > record.resetTime) {
@@ -43,7 +53,7 @@ export function checkRateLimit(key: string, limit = 60, windowMs = 60000): boole
  * Validates request authentication and resolves the caller's tenant context.
  * Supports:
  * - Authorization: Bearer <token>
- * - Cookie: sb-access-token or custom auth token
+ * - Cookie: sb-access-token, sb-<project>-auth-token, or chunked auth tokens
  */
 export async function authenticateRequest(
   request: Request,
@@ -76,14 +86,41 @@ export async function authenticateRequest(
   // Fallback to cookie if present
   if (!token) {
     const cookieHeader = request.headers.get("cookie") || "";
-    const match = cookieHeader.match(/sb-access-token=([^;]+)/) ||
-      cookieHeader.match(/sb-[a-z]+-auth-token=([^;]+)/);
-    if (match) {
+    
+    // Check for chunked supabase cookies first (sb-*-auth-token.0, sb-*-auth-token.1)
+    const chunkRegex = /sb-[a-zA-Z0-9_-]+-auth-token\.(\d+)=([^;]+)/g;
+    const chunks: { index: number; value: string }[] = [];
+    let chunkMatch: RegExpExecArray | null;
+    while ((chunkMatch = chunkRegex.exec(cookieHeader)) !== null) {
+      chunks.push({ index: parseInt(chunkMatch[1], 10), value: chunkMatch[2] });
+    }
+
+    if (chunks.length > 0) {
+      chunks.sort((a, b) => a.index - b.index);
+      const combined = chunks.map((c) => c.value).join("");
       try {
-        const parsed = JSON.parse(decodeURIComponent(match[1]));
+        const decoded = decodeURIComponent(combined);
+        const parsed = JSON.parse(decoded);
         token = Array.isArray(parsed) ? parsed[0] : (parsed.access_token || parsed);
       } catch {
-        token = match[1];
+        token = combined;
+      }
+    }
+
+    // Standard unchunked cookies
+    if (!token) {
+      const match =
+        cookieHeader.match(/sb-access-token=([^;]+)/) ||
+        cookieHeader.match(/sb-[a-zA-Z0-9_-]+-auth-token=([^;]+)/);
+
+      if (match) {
+        try {
+          const decoded = decodeURIComponent(match[1]);
+          const parsed = JSON.parse(decoded);
+          token = Array.isArray(parsed) ? parsed[0] : (parsed.access_token || parsed);
+        } catch {
+          token = match[1];
+        }
       }
     }
   }

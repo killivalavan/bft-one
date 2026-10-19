@@ -487,7 +487,7 @@ export async function generateBillPdf(data: BillPdfData) {
   doc.text(wordsLines, leftMargin, totalsY + 9);
 
   // Bank / UPI details box under words if available
-  let leftBottomY = totalsY + 12 + wordsLines.length * 4;
+  const leftBottomY = totalsY + 12 + wordsLines.length * 4;
   if (bankDetails?.bankName || upiDetails?.upiId) {
     doc.setFillColor(239, 246, 255); // #EFF6FF
     doc.setDrawColor(219, 234, 254); // #DBEAFE

@@ -4,20 +4,18 @@ import { supabaseAdmin } from "@/lib/supabaseServer";
 
 export async function POST(req: Request) {
   try {
-    const supa = supabaseAdmin();
+    const auth = await authenticateRequest(req, { requireAdmin: true });
+    if ("errorResponse" in auth) {
+      return auth.errorResponse;
+    }
+
+    const { user: caller, supa } = auth;
     const body = await req.json().catch(() => ({}));
-    const auth = await authenticateRequest(req);
 
-    let businessId = body.business_id;
-
-    if (!("errorResponse" in auth)) {
-      businessId = businessId || auth.user.businessId;
-    }
-
-    if (!businessId) {
-      const { data: firstBiz } = await supa.from("businesses").select("id").limit(1).maybeSingle();
-      businessId = firstBiz?.id || "a0000000-0000-0000-0000-000000000001";
-    }
+    // Only Super Admin can seed on behalf of another business
+    const businessId = caller.isSuperAdmin && body.business_id
+      ? body.business_id
+      : caller.businessId;
 
     // Clean up existing records for this business so clean seed applies
     await Promise.all([

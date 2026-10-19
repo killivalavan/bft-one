@@ -24,18 +24,21 @@ export const useCart = create<State>((set) => ({
     if (!cur) return s;
     const qty = Math.max(0, (cur.qty || 0) - 1);
     if (qty === 0) {
-      const { [product_id]: _drop, ...rest } = s.items;
+      const rest = { ...s.items };
+      delete rest[product_id];
       return { items: rest };
     }
     return { items: { ...s.items, [product_id]: { ...cur, qty } } };
   }),
   removeItem: (product_id) => set((s) => {
-    const { [product_id]: _drop, ...rest } = s.items;
+    const rest = { ...s.items };
+    delete rest[product_id];
     return { items: rest };
   }),
   setQty: (product_id, qty, itemInfo) => set((s) => {
     if (qty <= 0) {
-      const { [product_id]: _drop, ...rest } = s.items;
+      const rest = { ...s.items };
+      delete rest[product_id];
       return { items: rest };
     }
     const cur = s.items[product_id] || { product_id, name: "Item", price_cents: 0, qty: 0 };

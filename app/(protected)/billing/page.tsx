@@ -1969,9 +1969,9 @@ function LockedCafePosView() {
 
 export default function BillingPage() {
   const { isModuleEnabled } = useTenant();
-  const isBakerEnabled = isModuleEnabled ? isModuleEnabled("baker_mode") : false;
+  const isBillingEnabled = isModuleEnabled ? isModuleEnabled("billing") : true;
 
-  if (isBakerEnabled) {
+  if (!isBillingEnabled) {
     return <LockedCafePosView />;
   }
 

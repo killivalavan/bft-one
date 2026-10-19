@@ -1,4 +1,4 @@
-import { differenceInDays, differenceInMonths, differenceInYears, addYears, format, parseISO } from "date-fns";
+import { differenceInDays, addYears, format } from "date-fns";
 
 export interface EmployeeProfileData {
   id: string;
@@ -189,7 +189,6 @@ export function computeMilestones(joiningDateStr?: string | null): {
 
   const milestones: CareerMilestone[] = [];
   let nextMilestoneItem: CareerMilestone | null = null;
-  let prevMilestoneDate = joinDate;
 
   for (const cfg of milestoneConfigs) {
     const targetDate = addYears(joinDate, cfg.targetYears);

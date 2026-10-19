@@ -23,6 +23,10 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: "Target user not found" }, { status: 404 });
     }
 
+    if (targetProfile.is_super_admin) {
+      return NextResponse.json({ error: "Forbidden: Platform Super Admin accounts cannot be deleted." }, { status: 403 });
+    }
+
     if (!caller.isSuperAdmin && targetProfile.business_id && targetProfile.business_id !== caller.businessId) {
       return NextResponse.json({ error: "Unauthorized: Cannot delete users belonging to another business." }, { status: 403 });
     }

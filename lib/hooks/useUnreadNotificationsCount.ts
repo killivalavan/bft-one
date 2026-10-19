@@ -116,10 +116,13 @@ export function useUnreadNotificationsCount() {
   );
 
   useEffect(() => {
-    fetchUnreadCount();
+    Promise.resolve().then(() => {
+      fetchUnreadCount();
+    });
 
-    const handleReadEvent = (e: any) => {
-      const detail = e.detail;
+    const handleReadEvent = (e: Event) => {
+      const customEvent = e as CustomEvent<{ mark_all?: boolean; userId?: string }>;
+      const detail = customEvent.detail;
       if (detail?.mark_all && detail?.userId === userId) {
         setUnreadCount(0);
       } else {
@@ -144,7 +147,7 @@ export function useUnreadNotificationsCount() {
           schema: "public",
           table: "notifications",
         },
-        (payload: any) => {
+        (payload: { new?: { business_id?: string } }) => {
           if (!bizId || payload.new?.business_id === bizId) {
             setUnreadCount((prev) => prev + 1);
           }

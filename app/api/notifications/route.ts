@@ -1,32 +1,29 @@
 import { NextResponse } from "next/server";
-import { supabaseAdmin } from "@/lib/supabaseServer";
+import { authenticateRequest } from "@/lib/auth/serverAuth";
 
 export async function DELETE(req: Request) {
   try {
+    const auth = await authenticateRequest(req);
+    if ("errorResponse" in auth) {
+      return auth.errorResponse;
+    }
+
+    const { user: caller, supa } = auth;
+
+    // Only store admins or super admin can delete/clear notifications
+    if (!caller.isAdmin && !caller.isSuperAdmin) {
+      return NextResponse.json(
+        { error: "Forbidden: Only store admins have permission to delete or clear notifications." },
+        { status: 403 }
+      );
+    }
+
     const body = await req.json().catch(() => ({}));
-    const { id, clear_all, business_id, filter, user_id } = body;
+    const { id, clear_all, filter } = body;
 
-    if (!business_id) {
-      return NextResponse.json({ error: "business_id is required" }, { status: 400 });
-    }
-
-    const supa = supabaseAdmin();
-
-    // Verify user is an admin if user_id is provided
-    if (user_id) {
-      const { data: profile } = await supa
-        .from("profiles")
-        .select("is_admin, is_super_admin, email")
-        .eq("id", user_id)
-        .maybeSingle();
-
-      if (profile && !profile.is_admin && !profile.is_super_admin && profile.email !== "admin@seyalpro.com") {
-        return NextResponse.json(
-          { error: "Forbidden: Only store admins have permission to delete or clear notifications." },
-          { status: 403 }
-        );
-      }
-    }
+    const business_id = caller.isSuperAdmin && body.business_id
+      ? body.business_id
+      : caller.businessId;
 
     if (id) {
       // Delete single notification strictly matching this store's business_id
@@ -71,14 +68,19 @@ export async function DELETE(req: Request) {
 
 export async function PATCH(req: Request) {
   try {
-    const body = await req.json().catch(() => ({}));
-    const { id, user_id, business_id, mark_all, status = "read" } = body;
-
-    if (!user_id || !business_id) {
-      return NextResponse.json({ error: "user_id and business_id are required" }, { status: 400 });
+    const auth = await authenticateRequest(req);
+    if ("errorResponse" in auth) {
+      return auth.errorResponse;
     }
 
-    const supa = supabaseAdmin();
+    const { user: caller, supa } = auth;
+    const body = await req.json().catch(() => ({}));
+    const { id, mark_all, status = "read" } = body;
+
+    const user_id = caller.id;
+    const business_id = caller.isSuperAdmin && body.business_id
+      ? body.business_id
+      : caller.businessId;
 
     if (id) {
       // Mark single notification as read or unread for this specific user
@@ -87,7 +89,7 @@ export async function PATCH(req: Request) {
         .select("id, meta")
         .eq("id", id)
         .eq("business_id", business_id)
-        .single();
+        .maybeSingle();
 
       if (fErr || !notif) {
         return NextResponse.json({ error: fErr?.message || "Notification not found" }, { status: 404 });
@@ -108,7 +110,8 @@ export async function PATCH(req: Request) {
       const { error: uErr } = await supa
         .from("notifications")
         .update({ meta: updatedMeta })
-        .eq("id", id);
+        .eq("id", id)
+        .eq("business_id", business_id);
 
       if (uErr) {
         return NextResponse.json({ error: uErr.message }, { status: 500 });
@@ -130,10 +133,10 @@ export async function PATCH(req: Request) {
 
       for (const n of notifs || []) {
         const currentMeta = (n.meta && typeof n.meta === "object") ? n.meta : {};
-        const currentReadBy: string[] = Array.isArray(currentMeta.read_by) ? currentMeta.read_by : [];
+        const currentReadBy: string[] = Array.isArray(currentMeta.read_by) ? [...currentMeta.read_by] : [];
         if (!currentReadBy.includes(user_id)) {
           const updatedMeta = { ...currentMeta, read_by: [...currentReadBy, user_id] };
-          await supa.from("notifications").update({ meta: updatedMeta }).eq("id", n.id);
+          await supa.from("notifications").update({ meta: updatedMeta }).eq("id", n.id).eq("business_id", business_id);
         }
       }
 
@@ -146,4 +149,3 @@ export async function PATCH(req: Request) {
     return NextResponse.json({ error: err?.message || "Internal server error" }, { status: 500 });
   }
 }
-

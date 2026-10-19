@@ -1,13 +1,17 @@
 import { NextResponse } from "next/server";
-import { supabaseAdmin } from "@/lib/supabaseServer";
+import { authenticateRequest } from "@/lib/auth/serverAuth";
 
 export async function POST(req: Request) {
   try {
+    const auth = await authenticateRequest(req);
+    if ("errorResponse" in auth) {
+      return auth.errorResponse;
+    }
+
+    const { user: caller, supa } = auth;
     const body = await req.json().catch(() => ({}));
     const {
-      sender_business_id,
       sender_name = "Central Kitchen",
-      target_type = "all",
       target_store_ids = [],
       title,
       message,
@@ -17,11 +21,14 @@ export async function POST(req: Request) {
       discount_rate,
     } = body;
 
-    if (!title || !message) {
+    // Enforce authenticated caller's businessId to prevent sender impersonation
+    const sender_business_id = caller.isSuperAdmin && body.sender_business_id
+      ? body.sender_business_id
+      : caller.businessId;
+
+    if (!title?.trim() || !message?.trim()) {
       return NextResponse.json({ error: "Title and message are required" }, { status: 400 });
     }
-
-    const supa = supabaseAdmin();
 
     // Fetch all active businesses
     const { data: allBusinesses, error: bErr } = await supa
@@ -33,12 +40,9 @@ export async function POST(req: Request) {
     }
 
     const businesses = allBusinesses || [];
-    const { target_store_names = [] } = body;
 
-    // Target businesses resolution: strictly match only the baker's chosen client store(s)
+    // Target businesses resolution: strictly match only the chosen client store(s)
     let targetBusinesses: { id: string; name: string }[] = [];
-
-    // Filter requested IDs
     const candidateIds: string[] = Array.isArray(target_store_ids) ? target_store_ids : [];
 
     for (const tId of candidateIds) {
@@ -65,7 +69,6 @@ export async function POST(req: Request) {
       }
     }
 
-    // Capitalize sender business name neatly (e.g. "royal baker" -> "Royal Baker")
     const formattedSenderName = senderDisplayName
       ? senderDisplayName
           .split(" ")

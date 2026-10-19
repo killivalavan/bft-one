@@ -1,15 +1,39 @@
 import { NextResponse } from 'next/server';
+import { authenticateRequest, checkRateLimit } from '@/lib/auth/serverAuth';
 
 export async function POST(req: Request) {
   try {
-    const body = await req.json();
-    const { phone, message, orderId } = body;
+    const auth = await authenticateRequest(req);
+    if ("errorResponse" in auth) {
+      return auth.errorResponse;
+    }
 
-    if (!phone || !message) {
-      return NextResponse.json({ error: 'Phone and message are required' }, { status: 400 });
+    const { user: caller } = auth;
+
+    // Rate limit per store/caller (max 30 messages per minute)
+    if (!checkRateLimit(`wa_${caller.id}`, 30, 60000)) {
+      return NextResponse.json(
+        { error: "Too many messages sent. Please wait a minute before sending again." },
+        { status: 429 }
+      );
+    }
+
+    const body = await req.json().catch(() => ({}));
+    const { phone, message } = body;
+
+    if (!phone || typeof phone !== 'string' || !message || typeof message !== 'string') {
+      return NextResponse.json({ error: 'Valid phone and message are required' }, { status: 400 });
     }
 
     const cleanPhone = phone.replace(/[^0-9]/g, '');
+    if (cleanPhone.length < 10 || cleanPhone.length > 15) {
+      return NextResponse.json({ error: 'Invalid phone number format. Must be 10-15 digits.' }, { status: 400 });
+    }
+
+    if (message.length > 2000) {
+      return NextResponse.json({ error: 'Message text exceeds maximum length of 2000 characters.' }, { status: 400 });
+    }
+
     const formattedPhone = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
 
     // 1. Check if WhatsApp Cloud API / Gateway is configured

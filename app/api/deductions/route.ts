@@ -1,17 +1,18 @@
 import { NextResponse } from "next/server";
 import { authenticateRequest } from "@/lib/auth/serverAuth";
-import { supabaseAdmin } from "@/lib/supabaseServer";
 
 export async function GET(request: Request) {
   try {
     const auth = await authenticateRequest(request);
-    let businessId = "a0000000-0000-0000-0000-000000000001";
-    let supa = supabaseAdmin();
-
-    if (!("errorResponse" in auth)) {
-      businessId = auth.user.businessId;
-      supa = auth.supa;
+    if ("errorResponse" in auth) {
+      return auth.errorResponse;
     }
+
+    const { user: caller, supa } = auth;
+    const url = new URL(request.url);
+    const requestedUserId = url.searchParams.get("userId");
+
+    const businessId = caller.businessId;
 
     let query = supa
       .from("salary_entries")
@@ -27,16 +28,23 @@ export async function GET(request: Request) {
       `)
       .eq("kind", "deduction");
 
-    // Scope to tenant business if column exists
-    try {
+    // Non-admin staff users can strictly access only their own deductions
+    if (!caller.isAdmin && !caller.isSuperAdmin) {
+      query = query.eq("user_id", caller.id);
+    } else if (requestedUserId) {
+      query = query.eq("user_id", requestedUserId);
+    }
+
+    // Tenant scoping
+    if (!caller.isSuperAdmin) {
       query = query.or(`business_id.eq.${businessId},business_id.is.null`);
-    } catch {}
+    }
 
     const { data, error } = await query.order("entry_date", { ascending: false });
 
     if (error) {
-      // Fallback query if business_id not yet created in DB
-      const { data: fallbackData, error: fbErr } = await supa
+      // Fallback query scoped strictly to caller's identity/business
+      let fallbackQuery = supa
         .from("salary_entries")
         .select(`
           id,
@@ -47,8 +55,15 @@ export async function GET(request: Request) {
           user_id,
           profiles!inner(id, email)
         `)
-        .eq("kind", "deduction")
-        .order("entry_date", { ascending: false });
+        .eq("kind", "deduction");
+
+      if (!caller.isAdmin && !caller.isSuperAdmin) {
+        fallbackQuery = fallbackQuery.eq("user_id", caller.id);
+      } else if (requestedUserId) {
+        fallbackQuery = fallbackQuery.eq("user_id", requestedUserId);
+      }
+
+      const { data: fallbackData, error: fbErr } = await fallbackQuery.order("entry_date", { ascending: false });
 
       if (fbErr) return NextResponse.json({ error: fbErr.message }, { status: 500 });
       return formatDeductions(fallbackData || []);

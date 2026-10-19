@@ -94,6 +94,7 @@ export function AdminSidebar({
   const { flags } = useProfile();
   const { isModuleEnabled } = useTenant();
   const isBakerModuleEnabled = isModuleEnabled ? isModuleEnabled("baker_mode") : false;
+  const isBillingEnabled = isModuleEnabled ? isModuleEnabled("billing") : true;
   const { unreadCount } = useUnreadNotificationsCount();
 
   const [hoveredItem, setHoveredItem] = useState<string | null>(null);
@@ -135,25 +136,26 @@ export function AdminSidebar({
       const cached = localStorage.getItem("seyalpro_app_mode");
       if (cached === "baker" || cached === "cafe") return cached;
     }
-    return isBakerModuleEnabled ? "baker" : "cafe";
+    if (isBakerModuleEnabled && !isBillingEnabled) return "baker";
+    return "cafe";
   });
 
   // Keep appMode synchronized with tenant module configuration
   React.useEffect(() => {
-    if (isBakerModuleEnabled && appMode !== "baker") {
+    if (isBakerModuleEnabled && !isBillingEnabled && appMode !== "baker") {
       setAppMode("baker");
       try {
         localStorage.setItem("seyalpro_app_mode", "baker");
         window.dispatchEvent(new CustomEvent("seyalpro_mode_change", { detail: { mode: "baker" } }));
       } catch {}
-    } else if (!isBakerModuleEnabled && appMode !== "cafe") {
+    } else if (!isBakerModuleEnabled && isBillingEnabled && appMode !== "cafe") {
       setAppMode("cafe");
       try {
         localStorage.setItem("seyalpro_app_mode", "cafe");
         window.dispatchEvent(new CustomEvent("seyalpro_mode_change", { detail: { mode: "cafe" } }));
       } catch {}
     }
-  }, [isBakerModuleEnabled, appMode]);
+  }, [isBakerModuleEnabled, isBillingEnabled, appMode]);
 
   // Listen for external mode changes and dispatch mode changes
   React.useEffect(() => {
@@ -176,8 +178,8 @@ export function AdminSidebar({
   }, []);
 
   const handleToggleAppMode = (mode: "cafe" | "baker") => {
-    // If B2B is enabled for this store, Cafe POS is locked
-    if (isBakerModuleEnabled && mode === "cafe") {
+    // If billing is disabled for this store, Cafe POS is locked
+    if (!isBillingEnabled && mode === "cafe") {
       setLockedModalInfo({ isOpen: true, type: "cafe" });
       return;
     }
@@ -475,6 +477,19 @@ export function AdminSidebar({
       badge: "Fast",
       colorScheme: "blue",
     },
+    ...(isBillingEnabled
+      ? [
+          {
+            id: "baker-billing",
+            label: "Billing / POS",
+            href: "/billing",
+            icon: Coffee,
+            category: "OPERATIONS" as const,
+            badge: "POS",
+            colorScheme: "blue" as const,
+          },
+        ]
+      : []),
     {
       id: "baker-products",
       label: "Product Catalog",
@@ -550,8 +565,8 @@ export function AdminSidebar({
     },
   ];
 
-  // Baker Mode is active if enabled by Super Admin for this business
-  const isBakerActive = Boolean(isBakerModuleEnabled);
+  // Baker Mode is active if B2B is enabled AND (either cafe billing is disabled or user switched to baker mode)
+  const isBakerActive = isBakerModuleEnabled && (!isBillingEnabled || appMode === "baker");
   const activeNavItems = isBakerActive ? bakerNavItems : navItems;
 
   const isItemActive = (item: NavItemConfig) => {
@@ -657,7 +672,7 @@ export function AdminSidebar({
             >
               <Coffee size={13} />
               <span>Cafe POS</span>
-              {isBakerActive && <BoldFilledLock size={11} className="text-amber-400 shrink-0" />}
+              {!isBillingEnabled && <BoldFilledLock size={11} className="text-amber-400 shrink-0" />}
             </button>
             <button
               type="button"
@@ -671,7 +686,7 @@ export function AdminSidebar({
             >
               <Truck size={13} />
               <span>B2B Supply</span>
-              {!isBakerActive && <BoldFilledLock size={11} className="text-amber-400 shrink-0" />}
+              {!isBakerModuleEnabled && <BoldFilledLock size={11} className="text-amber-400 shrink-0" />}
             </button>
           </div>
         </div>
@@ -889,11 +904,11 @@ export function AdminSidebar({
                   ? "bg-blue-600 text-white shadow-xs"
                   : "text-slate-400 hover:text-white"
               )}
-              title={!isBakerActive ? "Cafe POS & Operations Mode" : "Cafe POS is locked for this B2B account"}
+              title={isBillingEnabled ? "Cafe POS & Operations Mode" : "Cafe POS is locked (disabled for this store)"}
             >
               <Coffee size={12} />
               <span>Cafe POS</span>
-              {isBakerActive && <BoldFilledLock size={10} className="text-amber-400 shrink-0" />}
+              {!isBillingEnabled && <BoldFilledLock size={10} className="text-amber-400 shrink-0" />}
             </button>
             <button
               type="button"
@@ -904,11 +919,11 @@ export function AdminSidebar({
                   ? "bg-blue-600 text-white shadow-xs font-extrabold"
                   : "text-slate-400 hover:text-white"
               )}
-              title={isBakerActive ? "B2B Supply & Wholesale Mode" : "B2B Supply is locked for this Cafe account"}
+              title={isBakerModuleEnabled ? "B2B Supply & Wholesale Mode" : "B2B Supply is locked (disabled for this store)"}
             >
               <Truck size={12} />
               <span>B2B Supply</span>
-              {!isBakerActive && <BoldFilledLock size={10} className="text-amber-400 shrink-0" />}
+              {!isBakerModuleEnabled && <BoldFilledLock size={10} className="text-amber-400 shrink-0" />}
             </button>
           </div>
         </div>
@@ -931,16 +946,34 @@ export function AdminSidebar({
             type="button"
             onClick={() => handleToggleAppMode(isBakerActive ? "cafe" : "baker")}
             className="w-8 h-8 rounded-lg border flex items-center justify-center transition-all cursor-pointer relative group bg-slate-900 text-slate-400 border-slate-800 hover:text-white hover:border-slate-700"
-            title={isBakerActive ? "Cafe POS is locked. Click for details." : "B2B Supply is locked. Click for details."}
+            title={
+              isBakerActive
+                ? isBillingEnabled
+                  ? "Switch to Cafe POS"
+                  : "Cafe POS is locked"
+                : isBakerModuleEnabled
+                ? "Switch to B2B Supply"
+                : "B2B Supply is locked"
+            }
           >
             {isBakerActive ? <Coffee size={14} /> : <Truck size={14} />}
-            <span className="w-2.5 h-2.5 rounded-full bg-amber-500/20 border border-amber-400/40 flex items-center justify-center absolute -top-1 -right-1 text-amber-300">
-              <BoldFilledLock size={7} />
-            </span>
+            {((isBakerActive && !isBillingEnabled) || (!isBakerActive && !isBakerModuleEnabled)) && (
+              <span className="w-2.5 h-2.5 rounded-full bg-amber-500/20 border border-amber-400/40 flex items-center justify-center absolute -top-1 -right-1 text-amber-300">
+                <BoldFilledLock size={7} />
+              </span>
+            )}
             <div className="absolute left-full top-1/2 -translate-y-1/2 ml-2.5 px-2.5 py-1.5 bg-slate-900 text-white text-xs rounded-lg shadow-xl border border-slate-700 whitespace-nowrap z-50 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity">
               <span className="font-bold flex items-center gap-1.5">
-                <BoldFilledLock size={11} className="text-amber-400" />
-                {isBakerActive ? "Unlock Cafe POS" : "Unlock B2B Supply"}
+                {((isBakerActive && !isBillingEnabled) || (!isBakerActive && !isBakerModuleEnabled)) && (
+                  <BoldFilledLock size={11} className="text-amber-400" />
+                )}
+                {isBakerActive
+                  ? isBillingEnabled
+                    ? "Switch to Cafe POS"
+                    : "Cafe POS Locked"
+                  : isBakerModuleEnabled
+                  ? "Switch to B2B Supply"
+                  : "B2B Supply Locked"}
               </span>
             </div>
           </button>

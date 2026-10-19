@@ -61,20 +61,21 @@ export default function Home() {
   }, []);
 
   const isBakerEnabled = isModuleEnabled ? isModuleEnabled("baker_mode") : false;
+  const isBillingEnabled = isModuleEnabled ? isModuleEnabled("billing") : true;
 
   useEffect(() => {
-    if (isBakerEnabled && appMode !== "baker") {
+    if (isBakerEnabled && !isBillingEnabled && appMode !== "baker") {
       setAppMode("baker");
       try {
         localStorage.setItem("seyalpro_app_mode", "baker");
       } catch {}
-    } else if (!isBakerEnabled && appMode === "baker") {
+    } else if (!isBakerEnabled && isBillingEnabled && appMode === "baker") {
       setAppMode("cafe");
       try {
         localStorage.setItem("seyalpro_app_mode", "cafe");
       } catch {}
     }
-  }, [isBakerEnabled, appMode]);
+  }, [isBakerEnabled, isBillingEnabled, appMode]);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -88,15 +89,15 @@ export default function Home() {
     if (user?.email) {
       setUserEmail(user.email);
       try { localStorage.setItem('bftone_display_email', user.email); } catch { }
-      // Do not preload heavy retail billing cache for B2B Supply accounts
-      if (!isBakerEnabled) {
+      // Preload retail billing cache if billing is enabled
+      if (isBillingEnabled) {
         preloadBillingCache(supabaseClient);
       }
     } else if (user === null) {
       setUserEmail(null);
       try { localStorage.removeItem('bftone_display_email'); } catch { }
     }
-  }, [user, isBakerEnabled]);
+  }, [user, isBillingEnabled]);
 
   const isAdmin = Boolean(
     flags?.isAdmin ||
@@ -299,7 +300,7 @@ export default function Home() {
 
   // If Admin Logged In: Check if user is in B2B Supply Mode vs Full Cafe Command Center
   if (isAdmin) {
-    if (isBakerEnabled) {
+    if (isBakerEnabled && (!isBillingEnabled || appMode === "baker")) {
       return (
         <SimpleBakerDashboardView
           onSwitchToCafeMode={() => handleSwitchMode("cafe")}

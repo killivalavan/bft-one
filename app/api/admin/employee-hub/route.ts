@@ -16,6 +16,18 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Action is required" }, { status: 400 });
     }
 
+    // Helper: Verify target user belongs to caller's business
+    async function verifyUserBelongsToBusiness(targetUserId: string): Promise<boolean> {
+      if (caller.isSuperAdmin) return true;
+      const { data: p } = await supa
+        .from("profiles")
+        .select("business_id")
+        .eq("id", targetUserId)
+        .maybeSingle();
+      if (!p) return false;
+      return !p.business_id || p.business_id === caller.businessId;
+    }
+
     // 1. UPDATE EMPLOYEE PROFILE & INCREMENT POLICY
     if (action === "update_profile") {
       const {
@@ -34,6 +46,10 @@ export async function POST(request: Request) {
 
       if (!userId) {
         return NextResponse.json({ error: "userId is required" }, { status: 400 });
+      }
+
+      if (!(await verifyUserBelongsToBusiness(userId))) {
+        return NextResponse.json({ error: "Forbidden: Cannot modify employee of another business." }, { status: 403 });
       }
 
       const updates: any = {};
@@ -77,6 +93,10 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: "Missing required increment fields" }, { status: 400 });
       }
 
+      if (!(await verifyUserBelongsToBusiness(userId))) {
+        return NextResponse.json({ error: "Forbidden: Cannot add increment for employee of another business." }, { status: 403 });
+      }
+
       // Record in employee_increments
       const { data: incRow, error: incErr } = await supa
         .from("employee_increments")
@@ -117,16 +137,21 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: "incrementId is required" }, { status: 400 });
       }
 
-      const { data: targetInc } = await supa
-        .from("employee_increments")
-        .select("*")
-        .eq("id", incrementId)
-        .single();
+      let query = supa.from("employee_increments").select("*").eq("id", incrementId);
+      if (!caller.isSuperAdmin) {
+        query = query.eq("business_id", caller.businessId);
+      }
+      const { data: targetInc } = await query.maybeSingle();
 
-      const { error: delErr } = await supa
-        .from("employee_increments")
-        .delete()
-        .eq("id", incrementId);
+      if (!targetInc) {
+        return NextResponse.json({ error: "Increment record not found or access denied." }, { status: 404 });
+      }
+
+      let delQuery = supa.from("employee_increments").delete().eq("id", incrementId);
+      if (!caller.isSuperAdmin) {
+        delQuery = delQuery.eq("business_id", caller.businessId);
+      }
+      const { error: delErr } = await delQuery;
 
       if (delErr) {
         return NextResponse.json({ error: delErr.message }, { status: 500 });
@@ -171,6 +196,10 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: "Missing achievement fields" }, { status: 400 });
       }
 
+      if (!(await verifyUserBelongsToBusiness(userId))) {
+        return NextResponse.json({ error: "Forbidden: Cannot award achievement to employee of another business." }, { status: 403 });
+      }
+
       const { data: achRow, error: achErr } = await supa
         .from("employee_achievements")
         .upsert(
@@ -203,10 +232,11 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: "achievementId required" }, { status: 400 });
       }
 
-      const { error } = await supa
-        .from("employee_achievements")
-        .delete()
-        .eq("id", achievementId);
+      let delQuery = supa.from("employee_achievements").delete().eq("id", achievementId);
+      if (!caller.isSuperAdmin) {
+        delQuery = delQuery.eq("business_id", caller.businessId);
+      }
+      const { error } = await delQuery;
 
       if (error) {
         return NextResponse.json({ error: error.message }, { status: 500 });
@@ -270,12 +300,11 @@ export async function POST(request: Request) {
       if (updates.targetAudienceType !== undefined) dbUpdates.target_audience_type = updates.targetAudienceType;
       if (updates.targetAudienceValue !== undefined) dbUpdates.target_audience_value = updates.targetAudienceValue;
 
-      const { data: updatedNotice, error } = await supa
-        .from("employee_notices")
-        .update(dbUpdates)
-        .eq("id", noticeId)
-        .select()
-        .single();
+      let upQuery = supa.from("employee_notices").update(dbUpdates).eq("id", noticeId);
+      if (!caller.isSuperAdmin) {
+        upQuery = upQuery.eq("business_id", caller.businessId);
+      }
+      const { data: updatedNotice, error } = await upQuery.select().single();
 
       if (error) {
         return NextResponse.json({ error: error.message }, { status: 500 });
@@ -291,10 +320,11 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: "noticeId required" }, { status: 400 });
       }
 
-      const { error } = await supa
-        .from("employee_notices")
-        .delete()
-        .eq("id", noticeId);
+      let delQuery = supa.from("employee_notices").delete().eq("id", noticeId);
+      if (!caller.isSuperAdmin) {
+        delQuery = delQuery.eq("business_id", caller.businessId);
+      }
+      const { error } = await delQuery;
 
       if (error) {
         return NextResponse.json({ error: error.message }, { status: 500 });

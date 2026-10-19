@@ -312,6 +312,7 @@ export default function Navbar({
                           : "text-[#64748B] hover:text-[#0F172A] hover:bg-slate-100 border-[#E2E8F0]"
                       )}
                       title={unreadCount > 0 ? `${unreadCount} unread notification${unreadCount === 1 ? "" : "s"}` : "Notifications"}
+                      aria-label={unreadCount > 0 ? `${unreadCount} unread notifications` : "Notifications"}
                     >
                       <Bell size={18} />
                       {unreadCount > 0 ? (
@@ -330,6 +331,7 @@ export default function Navbar({
                       onClick={() => setIssueModalOpen(true)}
                       className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#EFF6FF] hover:bg-[#DBEAFE] text-[#1E40AF] border border-[#BFDBFE] text-xs font-semibold transition-all shadow-xs active:scale-95"
                       title="View raised issues or report a new bug to SeyalPro"
+                      aria-label="Support and Issues"
                     >
                       <LifeBuoy size={14} className="text-[#2563EB]" />
                       <span className="hidden md:inline">Support & Issues</span>
@@ -340,6 +342,8 @@ export default function Navbar({
                   <div className="relative" ref={menuRef}>
                     <button
                       onClick={() => setMenuOpen(!menuOpen)}
+                      aria-label="User account menu"
+                      aria-expanded={menuOpen}
                       className={cn(
                         "flex items-center gap-2 p-1.5 sm:pl-3 rounded-lg border transition-all focus:outline-none focus:ring-2",
                         isSuperAdminView

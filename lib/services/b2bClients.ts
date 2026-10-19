@@ -1,4 +1,5 @@
 import { BakerCustomerStore, DEFAULT_BAKER_SAMPLE_STORES, sanitizeBakerStores } from "@/lib/utils/bakerUtils";
+import { getAuthHeaders } from "@/lib/auth/clientAuth";
 
 export const B2B_CUSTOMERS_UPDATED_EVENT = "bftone_customers_updated";
 
@@ -21,7 +22,8 @@ export async function fetchB2BClients(bizId: string): Promise<BakerCustomerStore
   } catch {}
 
   try {
-    const res = await fetch(`/api/b2b/clients?business_id=${bizId}`);
+    const headers = await getAuthHeaders();
+    const res = await fetch(`/api/b2b/clients?business_id=${bizId}`, { headers });
     if (res.ok) {
       const data = await res.json();
       const serverClients: BakerCustomerStore[] = sanitizeBakerStores(data.clients || []);
@@ -45,7 +47,7 @@ export async function fetchB2BClients(bizId: string): Promise<BakerCustomerStore
           // Push local custom clients to server in background
           fetch(`/api/b2b/clients`, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers,
             body: JSON.stringify({
               business_id: bizId,
               action: "sync",
@@ -92,9 +94,10 @@ export async function saveB2BClient(
 
   // Persist to server
   try {
+    const headers = await getAuthHeaders();
     const res = await fetch(`/api/b2b/clients`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers,
       body: JSON.stringify({
         business_id: bizId,
         id: newClient.id,
@@ -146,9 +149,10 @@ export async function updateB2BClient(
 
   // Persist to server
   try {
+    const headers = await getAuthHeaders();
     await fetch(`/api/b2b/clients`, {
       method: "PUT",
-      headers: { "Content-Type": "application/json" },
+      headers,
       body: JSON.stringify({
         business_id: bizId,
         id: updatedClient.id,
@@ -182,8 +186,10 @@ export async function deleteB2BClient(bizId: string, clientId: string): Promise<
 
   // Persist to server
   try {
+    const headers = await getAuthHeaders();
     await fetch(`/api/b2b/clients?business_id=${bizId}&id=${clientId}`, {
       method: "DELETE",
+      headers,
     });
   } catch (err) {
     console.error("deleteB2BClient server persistence error:", err);

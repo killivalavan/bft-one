@@ -1,20 +1,18 @@
 import { NextResponse } from "next/server";
 import { authenticateRequest } from "@/lib/auth/serverAuth";
-import { supabaseAdmin } from "@/lib/supabaseServer";
 
 // Body: { items: Array<{ product_id:string; qty:number }> }
 export async function POST(req: Request) {
   try {
     const auth = await authenticateRequest(req);
-    let supa = supabaseAdmin();
-    let callerBusinessId = "a0000000-0000-0000-0000-000000000001";
-
-    if (!("errorResponse" in auth)) {
-      supa = auth.supa;
-      callerBusinessId = auth.user.businessId;
+    if ("errorResponse" in auth) {
+      return auth.errorResponse;
     }
 
-    const body = await req.json().catch(()=>({})) as { items?: Array<{ product_id:string; qty:number }> };
+    const { user, supa } = auth;
+    const callerBusinessId = user.businessId;
+
+    const body = (await req.json().catch(() => ({}))) as { items?: Array<{ product_id: string; qty: number }> };
     const items = Array.isArray(body.items) ? body.items : [];
     if (items.length === 0) return NextResponse.json({ ok: true, skipped: true });
 
@@ -29,14 +27,14 @@ export async function POST(req: Request) {
 
     // Fetch stocks and products
     const [{ data: stocks }, { data: prods }] = await Promise.all([
-      supa.from('product_stocks').select('product_id,max_qty,available_qty,notify_at_count').in('product_id', ids),
-      supa.from('products').select('id,name').in('id', ids)
+      supa.from("product_stocks").select("product_id,max_qty,available_qty,notify_at_count").in("product_id", ids),
+      supa.from("products").select("id,name").in("id", ids),
     ]);
-    const nameById = new Map<string,string>((prods||[]).map((p:any)=>[p.id,p.name]));
-    const stockById = new Map<string, any>((stocks||[]).map((s:any)=>[s.product_id, s]));
+    const nameById = new Map<string, string>((prods || []).map((p: any) => [p.id, p.name]));
+    const stockById = new Map<string, any>((stocks || []).map((s: any) => [s.product_id, s]));
 
     const updates: any[] = [];
-    const notifs: Array<{ product_id:string|null; message:string; kind:string; meta:any }> = [];
+    const notifs: Array<{ business_id: string; product_id: string | null; message: string; kind: string; meta: any }> = [];
 
     for (const pid of ids) {
       const useQty = usage.get(pid) || 0;
@@ -50,35 +48,48 @@ export async function POST(req: Request) {
       // notifications
       const custom = (s.notify_at_count ?? null) as number | null;
       const lowThreshold = custom && custom > 0 ? custom : null;
-      const name = nameById.get(pid) || 'Product';
+      const name = nameById.get(pid) || "Product";
       // Low-stock only when a custom threshold is present
       if (lowThreshold !== null) {
         if (before > lowThreshold && after <= lowThreshold && after > 0) {
-          notifs.push({ product_id: pid, kind: 'stock', message: `Low stock: ${name} remaining ${after} (threshold ${lowThreshold})`, meta: { remaining: after, threshold: lowThreshold } });
+          notifs.push({
+            business_id: callerBusinessId,
+            product_id: pid,
+            kind: "stock",
+            message: `Low stock: ${name} remaining ${after} (threshold ${lowThreshold})`,
+            meta: { remaining: after, threshold: lowThreshold },
+          });
         }
       }
       // Out-of-stock always when crossing to zero
       if (before > 0 && after === 0) {
-        notifs.push({ product_id: pid, kind: 'stock', message: `Out of stock: ${name}`, meta: { remaining: after, max } });
+        notifs.push({
+          business_id: callerBusinessId,
+          product_id: pid,
+          kind: "stock",
+          message: `Out of stock: ${name}`,
+          meta: { remaining: after, max },
+        });
       }
     }
 
     // Upsert updates
     if (updates.length > 0) {
-      const { error: upErr } = await supa.from('product_stocks').upsert(updates, { onConflict: 'product_id' });
+      const { error: upErr } = await supa.from("product_stocks").upsert(updates, { onConflict: "product_id" });
       if (upErr) return NextResponse.json({ error: upErr.message }, { status: 500 });
     }
     // Insert notifications
     if (notifs.length > 0) {
-      await supa.from('notifications').insert(notifs as any);
+      await supa.from("notifications").insert(notifs as any);
     }
 
     // Recipe BOM Auto-Deduction for Inventory Items
     try {
       const { data: recipes } = await supa
-        .from('item_recipes')
-        .select('product_id, inventory_item_id, quantity_required, waste_factor_pct')
-        .in('product_id', ids);
+        .from("item_recipes")
+        .select("product_id, inventory_item_id, quantity_required, waste_factor_pct")
+        .in("product_id", ids)
+        .eq("business_id", callerBusinessId);
 
       if (recipes && recipes.length > 0) {
         const invDeductions = new Map<string, number>();
@@ -93,9 +104,10 @@ export async function POST(req: Request) {
         const invIds = Array.from(invDeductions.keys());
         if (invIds.length > 0) {
           const { data: invItems } = await supa
-            .from('inventory_items')
-            .select('id, current_stock, cost_per_unit')
-            .in('id', invIds);
+            .from("inventory_items")
+            .select("id, current_stock, cost_per_unit")
+            .in("id", invIds)
+            .eq("business_id", callerBusinessId);
 
           if (invItems) {
             for (const item of invItems) {
@@ -103,29 +115,31 @@ export async function POST(req: Request) {
               const cur = Number(item.current_stock) || 0;
               const next = Math.max(0, cur - deduct);
               await supa
-                .from('inventory_items')
+                .from("inventory_items")
                 .update({ current_stock: next, updated_at: new Date().toISOString() })
-                .eq('id', item.id);
+                .eq("id", item.id)
+                .eq("business_id", callerBusinessId);
 
-              await supa.from('stock_ledger').insert({
+              await supa.from("stock_ledger").insert({
                 business_id: callerBusinessId,
                 inventory_item_id: item.id,
-                transaction_type: 'POS_CONSUMPTION',
+                transaction_type: "POS_CONSUMPTION",
                 quantity_delta: -deduct,
                 balance_after: next,
                 unit_cost: item.cost_per_unit,
-                reason: 'POS Order Auto-Deduction (Recipe BOM)',
+                reason: "POS Order Auto-Deduction (Recipe BOM)",
+                created_by: user.id,
               });
             }
           }
         }
       }
     } catch (recipeErr) {
-      console.error('Recipe auto-deduction error:', recipeErr);
+      console.error("Recipe auto-deduction error:", recipeErr);
     }
 
     return NextResponse.json({ ok: true, updated: updates.length, notified: notifs.length });
-  } catch (e:any) {
-    return NextResponse.json({ error: e?.message || 'unknown' }, { status: 500 });
+  } catch (e: any) {
+    return NextResponse.json({ error: e?.message || "unknown" }, { status: 500 });
   }
 }

@@ -204,7 +204,10 @@ export default function SuperAdminPage() {
 
   function handleSwitchWorkspace(slug: string, name: string) {
     document.cookie = `tenant_slug=${slug}; path=/; max-age=${60 * 60 * 24 * 30}; SameSite=Lax`;
-    try { localStorage.removeItem("bftone_tenant_cache"); } catch {}
+    try {
+      localStorage.removeItem("bftone_tenant_cache");
+      localStorage.removeItem("seyalpro_app_mode");
+    } catch {}
     toast({
       title: `Switched to ${name}`,
       description: `Active workspace is now ${name}. Loading...`,
@@ -767,6 +770,7 @@ export default function SuperAdminPage() {
         variant: "success",
       });
 
+      try { localStorage.removeItem("bftone_tenant_cache"); } catch {}
       setEditingBiz(null);
       await loadBusinessesData(true);
     } catch (e: any) {

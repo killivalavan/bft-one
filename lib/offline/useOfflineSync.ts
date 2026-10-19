@@ -37,17 +37,19 @@ export function useOfflineSync() {
     };
   }, [business?.id]);
 
+  const businessId = business?.id;
+
   // Master data warmup & periodic sync heartbeat
   useEffect(() => {
-    if (business?.id && typeof navigator !== "undefined" && navigator.onLine) {
-      pullCloudMasterData(business.id);
+    if (businessId && typeof navigator !== "undefined" && navigator.onLine) {
+      pullCloudMasterData(businessId);
     }
 
     const interval = setInterval(() => {
-      if (typeof navigator !== "undefined" && navigator.onLine && business?.id) {
+      if (typeof navigator !== "undefined" && navigator.onLine && businessId) {
         checkServerReachability().then((reachable) => {
           if (reachable && report.pendingCount > 0) {
-            processSyncQueue(business.id);
+            processSyncQueue(businessId);
           }
         });
       }
@@ -56,17 +58,17 @@ export function useOfflineSync() {
     return () => {
       clearInterval(interval);
     };
-  }, [business?.id, report.pendingCount]);
+  }, [businessId, report.pendingCount]);
 
   const triggerSync = useCallback(async () => {
-    if (!business?.id) return;
-    return await processSyncQueue(business.id);
-  }, [business?.id]);
+    if (!businessId) return;
+    return await processSyncQueue(businessId);
+  }, [businessId]);
 
   const warmupData = useCallback(async () => {
-    if (!business?.id) return;
-    return await pullCloudMasterData(business.id);
-  }, [business?.id]);
+    if (!businessId) return;
+    return await pullCloudMasterData(businessId);
+  }, [businessId]);
 
   return {
     ...report,

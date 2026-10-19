@@ -1,13 +1,16 @@
 import { NextResponse } from "next/server";
-import { supabaseAdmin } from "@/lib/supabaseServer";
+import { authenticateRequest } from "@/lib/auth/serverAuth";
 
 export async function GET(req: Request) {
   try {
-    const { searchParams } = new URL(req.url);
-    const senderBusinessId = searchParams.get("sender_business_id") || "";
-    const query = (searchParams.get("q") || "").trim().toLowerCase();
+    const auth = await authenticateRequest(req);
+    if ("errorResponse" in auth) {
+      return auth.errorResponse;
+    }
 
-    const supa = supabaseAdmin();
+    const { user: caller, supa } = auth;
+    const { searchParams } = new URL(req.url);
+    const query = (searchParams.get("q") || "").trim().toLowerCase();
 
     // Query active businesses on SeyalPro
     const { data: businesses, error } = await supa
@@ -19,8 +22,8 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    // Filter out the baker's own business
-    let partnerStores = (businesses || []).filter((b) => b.id !== senderBusinessId);
+    // Filter out the caller's own business
+    let partnerStores = (businesses || []).filter((b) => b.id !== caller.businessId);
 
     // If search term provided, filter by name, slug, or phone
     if (query) {

@@ -1,16 +1,28 @@
 import { NextResponse } from "next/server";
-import { supabaseAdmin } from "@/lib/supabaseServer";
+import { authenticateRequest } from "@/lib/auth/serverAuth";
 
 export async function GET(req: Request) {
   try {
-    const { searchParams } = new URL(req.url);
-    const businessId = searchParams.get("business_id");
-
-    if (!businessId || businessId === "default") {
-      return NextResponse.json({ ok: true, clients: [] });
+    const auth = await authenticateRequest(req);
+    if ("errorResponse" in auth) {
+      return auth.errorResponse;
     }
 
-    const supa = supabaseAdmin();
+    const { user: caller, supa } = auth;
+    const { searchParams } = new URL(req.url);
+    const requestedBizId = searchParams.get("business_id");
+
+    const businessId = requestedBizId && requestedBizId !== "default"
+      ? requestedBizId
+      : caller.businessId;
+
+    // Tenant boundary check: only Super Admin can inspect another business's clients
+    if (!caller.isSuperAdmin && businessId !== caller.businessId) {
+      return NextResponse.json(
+        { error: "Forbidden: Cannot access clients belonging to another business." },
+        { status: 403 }
+      );
+    }
 
     // 1. Try dedicated b2b_clients table
     const { data: tableData, error: tableError } = await supa
@@ -54,14 +66,27 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   try {
-    const body = await req.json();
-    const { business_id, action } = body;
-
-    if (!business_id || business_id === "default") {
-      return NextResponse.json({ error: "Valid business_id is required" }, { status: 400 });
+    const auth = await authenticateRequest(req);
+    if ("errorResponse" in auth) {
+      return auth.errorResponse;
     }
 
-    const supa = supabaseAdmin();
+    const { user: caller, supa } = auth;
+    const body = await req.json().catch(() => ({}));
+    const { action } = body;
+
+    const targetBizId = body.business_id && body.business_id !== "default"
+      ? body.business_id
+      : caller.businessId;
+
+    if (!caller.isSuperAdmin && targetBizId !== caller.businessId) {
+      return NextResponse.json(
+        { error: "Forbidden: Cannot modify clients for another business." },
+        { status: 403 }
+      );
+    }
+
+    const business_id = targetBizId;
 
     // Handle bulk sync
     if (action === "sync" && Array.isArray(body.clients)) {
@@ -145,7 +170,7 @@ export async function POST(req: Request) {
     };
 
     // 1. Try table insert
-    const { data: inserted, error: insertError } = await supa
+    const { error: insertError } = await supa
       .from("b2b_clients")
       .insert({
         id: clientId,
@@ -201,14 +226,32 @@ export async function POST(req: Request) {
 
 export async function PUT(req: Request) {
   try {
-    const body = await req.json();
-    const { business_id, id, name, phone, address, linked_business_id } = body;
-
-    if (!business_id || !id || !name?.trim()) {
-      return NextResponse.json({ error: "business_id, id and name are required" }, { status: 400 });
+    const auth = await authenticateRequest(req);
+    if ("errorResponse" in auth) {
+      return auth.errorResponse;
     }
 
-    const supa = supabaseAdmin();
+    const { user: caller, supa } = auth;
+    const body = await req.json().catch(() => ({}));
+    const { id, name, phone, address, linked_business_id } = body;
+
+    const targetBizId = body.business_id && body.business_id !== "default"
+      ? body.business_id
+      : caller.businessId;
+
+    if (!caller.isSuperAdmin && targetBizId !== caller.businessId) {
+      return NextResponse.json(
+        { error: "Forbidden: Cannot update clients for another business." },
+        { status: 403 }
+      );
+    }
+
+    const business_id = targetBizId;
+
+    if (!id || !name?.trim()) {
+      return NextResponse.json({ error: "id and name are required" }, { status: 400 });
+    }
+
     const updatedClient = {
       id,
       name: name.trim(),
@@ -270,15 +313,30 @@ export async function PUT(req: Request) {
 
 export async function DELETE(req: Request) {
   try {
-    const { searchParams } = new URL(req.url);
-    const businessId = searchParams.get("business_id");
-    const id = searchParams.get("id");
-
-    if (!businessId || !id) {
-      return NextResponse.json({ error: "business_id and id are required" }, { status: 400 });
+    const auth = await authenticateRequest(req);
+    if ("errorResponse" in auth) {
+      return auth.errorResponse;
     }
 
-    const supa = supabaseAdmin();
+    const { user: caller, supa } = auth;
+    const { searchParams } = new URL(req.url);
+    const requestedBizId = searchParams.get("business_id");
+    const id = searchParams.get("id");
+
+    const businessId = requestedBizId && requestedBizId !== "default"
+      ? requestedBizId
+      : caller.businessId;
+
+    if (!caller.isSuperAdmin && businessId !== caller.businessId) {
+      return NextResponse.json(
+        { error: "Forbidden: Cannot delete clients of another business." },
+        { status: 403 }
+      );
+    }
+
+    if (!id) {
+      return NextResponse.json({ error: "id is required" }, { status: 400 });
+    }
 
     // 1. Try table delete
     const { error: tableError } = await supa

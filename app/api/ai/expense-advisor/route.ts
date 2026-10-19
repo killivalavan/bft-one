@@ -1,8 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auditExpenses, ExpenseRecord, PriceListItem } from "@/lib/ai/expense-agent";
+import { authenticateRequest } from "@/lib/auth/serverAuth";
 
 export async function POST(req: NextRequest) {
     try {
+        const auth = await authenticateRequest(req);
+        if ("errorResponse" in auth) {
+            return auth.errorResponse;
+        }
+
         const body = await req.json();
         const {
             expenses = [] as ExpenseRecord[],
@@ -15,7 +21,7 @@ export async function POST(req: NextRequest) {
         // Perform statistical audit of the store's expenses
         const audit = auditExpenses(expenses, priceList, periodLabel);
 
-        const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || process.env.NEXT_PUBLIC_GEMINI_API_KEY;
+        const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
 
         // If user provided a specific conversational query and we have a Gemini API key:
         if (apiKey) {

@@ -68,7 +68,6 @@ export function middleware(request: NextRequest) {
       source = "cookie";
     } else {
       // Priority 3: Extract from subdomain (e.g. navalur.bftone.com → navalur)
-      const subdomain = extractSubdomain(hostname);
       if (subdomain) {
         tenantSlug = subdomain;
         source = "subdomain";

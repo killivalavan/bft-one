@@ -21,8 +21,15 @@ const geistMono = Geist_Mono({
 import { AppShell } from "@/components/layout/AppShell";
 
 export const metadata: Metadata = {
-  title: "SeyalPro — Business Operating System",
-  description: "Client POS, Timesheets, Billing, Inventory & Payroll Management",
+  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || "https://seyalpro.in"),
+  title: {
+    default: "SeyalPro — Business Operating System",
+    template: "%s | SeyalPro",
+  },
+  description: "Enterprise multi-tenant retail point-of-sale, inventory intelligence, timesheet tracking, billing, and automated staff payroll platform.",
+  applicationName: "SeyalPro",
+  authors: [{ name: "SeyalPro" }],
+  keywords: ["POS", "Point of Sale", "Billing", "Inventory", "Retail Management", "Timesheet", "Payroll", "SeyalPro"],
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
@@ -31,6 +38,19 @@ export const metadata: Metadata = {
   },
   formatDetection: {
     telephone: false,
+  },
+  openGraph: {
+    type: "website",
+    locale: "en_IN",
+    url: "https://seyalpro.in",
+    siteName: "SeyalPro",
+    title: "SeyalPro — Business Operating System",
+    description: "Enterprise multi-tenant retail point-of-sale, inventory intelligence, timesheet tracking, billing, and automated staff payroll platform.",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "SeyalPro — Business Operating System",
+    description: "Enterprise multi-tenant retail point-of-sale, inventory intelligence, timesheet tracking, billing, and automated staff payroll platform.",
   },
 };
 

@@ -57,6 +57,13 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "Profile not found" }, { status: 404 });
     }
 
+    // Tenant boundary check: ensure store admin can only preview employees belonging to their store
+    if (caller.isAdmin && requestedUserId && !caller.isSuperAdmin) {
+      if (profile.business_id && profile.business_id !== caller.businessId) {
+        return NextResponse.json({ error: "Forbidden: Cannot view employee belonging to another business." }, { status: 403 });
+      }
+    }
+
     // Default dates and identity
     const emailPrefix = profile.email?.split("@")[0] || "Staff";
     const formattedEmailName = emailPrefix
