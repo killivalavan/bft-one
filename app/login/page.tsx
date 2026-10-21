@@ -22,7 +22,24 @@ export default function LoginPage() {
             const hasParam = new URLSearchParams(window.location.search).has("tenant");
             setHasTenantParam(hasParam);
         }
-    }, []);
+
+        let isMounted = true;
+        (async () => {
+            const { data: { session } } = await supabaseClient.auth.getSession();
+            if (session?.user && isMounted) {
+                try {
+                    const storedMode = localStorage.getItem("seyalpro_app_mode");
+                    if (storedMode === "baker") {
+                        router.replace("/b2b");
+                        return;
+                    }
+                } catch {}
+                router.replace("/");
+            }
+        })();
+
+        return () => { isMounted = false; };
+    }, [router]);
 
     async function onLogin(e: React.FormEvent) {
         e.preventDefault();
@@ -73,18 +90,38 @@ export default function LoginPage() {
                     if (prof?.business_id) {
                         const { data: biz } = await supabaseClient
                             .from('businesses')
-                            .select('slug')
+                            .select('slug, enabled_modules')
                             .eq('id', prof.business_id)
                             .maybeSingle();
 
                         if (biz?.slug) {
                             document.cookie = `tenant_slug=${biz.slug}; path=/; max-age=${60 * 60 * 24 * 30}; SameSite=Lax`;
                         }
+
+                        const isBaker = Boolean(biz?.enabled_modules?.baker_mode);
+                        const isBilling = biz?.enabled_modules?.billing !== false;
+                        let storedMode = "cafe";
+                        try {
+                            storedMode = localStorage.getItem("seyalpro_app_mode") || "cafe";
+                        } catch {}
+
+                        if (isBaker && (!isBilling || storedMode === "baker")) {
+                            window.location.href = "/b2b";
+                            return;
+                        }
                     }
                 } catch (bizErr) {
                     console.warn("Tenant profile resolve error:", bizErr);
                 }
             }
+
+            try {
+                const storedMode = typeof window !== "undefined" ? localStorage.getItem("seyalpro_app_mode") : null;
+                if (storedMode === "baker") {
+                    window.location.href = "/b2b";
+                    return;
+                }
+            } catch {}
 
             // Standard shop user/admin redirect to shop dashboard
             window.location.href = "/";

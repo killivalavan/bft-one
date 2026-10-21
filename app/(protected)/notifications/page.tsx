@@ -11,6 +11,7 @@ import { useProfile } from "@/lib/hooks/useProfile";
 import { cn } from "@/lib/utils/cn";
 
 import { useToast } from "@/components/ui/Toast";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 
 export default function NotificationsPage() {
   const { business } = useTenant();
@@ -18,6 +19,7 @@ export default function NotificationsPage() {
   const isStoreAdmin = Boolean(flags?.isAdmin || flags?.isSuperAdmin);
   const { markAsRead, unreadCount, refreshCount, userId } = useUnreadNotificationsCount();
   const { toast } = useToast();
+  const { confirm } = useConfirm();
   const [items, setItems] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
   const [isClearing, setIsClearing] = useState(false);
@@ -81,11 +83,15 @@ export default function NotificationsPage() {
     const countToClear = filterTab === "all" ? items.length : filteredItems.length;
     if (countToClear === 0) return;
 
-    const confirmed = window.confirm(
-      filterTab === "all"
-        ? `Are you sure you want to clear all ${items.length} alerts for ${business.name || "this store"}?`
-        : `Are you sure you want to clear all ${countToClear} ${filterTab === "baker" ? "kitchen" : "stock"} alerts?`
-    );
+    const confirmed = await confirm({
+      title: "Clear Notifications",
+      description:
+        filterTab === "all"
+          ? `Are you sure you want to clear all ${items.length} alerts for ${business.name || "this store"}?`
+          : `Are you sure you want to clear all ${countToClear} ${filterTab === "baker" ? "kitchen" : "stock"} alerts?`,
+      confirmLabel: "Clear All",
+      variant: "danger",
+    });
     if (!confirmed) return;
 
     setIsClearing(true);
@@ -159,7 +165,7 @@ export default function NotificationsPage() {
   const bakerCount = items.filter(it => it.kind === "baker_broadcast" || it.kind?.includes("baker")).length;
 
   return (
-    <div className="min-h-screen pb-20">
+    <div>
       <div className="max-w-2xl mx-auto p-4 md:p-6 space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="flex items-center gap-3">

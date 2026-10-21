@@ -135,12 +135,103 @@ async function loadUnicodeFonts(doc: jsPDF): Promise<boolean> {
 }
 
 // Helper: load image onto canvas and get PNG base64 with natural dimensions
-async function loadImageData(url: string): Promise<{ dataUrl: string; width: number; height: number } | null> {
+export async function loadImageData(url: string): Promise<{ dataUrl: string; width: number; height: number } | null> {
   if (!url) return null;
 
+  // 1. Direct base64 raster image (PNG, JPEG, WebP)
+  if (url.startsWith("data:image/png;base64,") || url.startsWith("data:image/jpeg;base64,") || url.startsWith("data:image/webp;base64,")) {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        resolve({
+          dataUrl: url,
+          width: img.naturalWidth || 300,
+          height: img.naturalHeight || 300,
+        });
+      };
+      img.onerror = () => resolve(null);
+      img.src = url;
+    });
+  }
+
+  // 2. SVG handling (convert via Blob URL to avoid canvas taint & ensure crisp vector render)
+  if (url.includes(".svg") || url.startsWith("data:image/svg+xml")) {
+    try {
+      let svgText = "";
+      if (url.startsWith("data:image/svg+xml")) {
+        const commaIdx = url.indexOf(",");
+        svgText = decodeURIComponent(url.slice(commaIdx + 1));
+      } else {
+        const res = await fetch(url);
+        if (res.ok) {
+          svgText = await res.text();
+        }
+      }
+
+      if (svgText) {
+        svgText = svgText.replace(/filter="url\([^"]+\)"/g, "");
+        if (!svgText.includes("xmlns=")) {
+          svgText = svgText.replace("<svg", '<svg xmlns="http://www.w3.org/2000/svg"');
+        }
+        let w = 240;
+        let h = 240;
+        const wMatch = svgText.match(/width="(\d+)"/);
+        const hMatch = svgText.match(/height="(\d+)"/);
+        const viewBoxMatch = svgText.match(/viewBox="[^"]*?\s*(\d+)\s+(\d+)"/);
+        if (wMatch && hMatch) {
+          w = parseInt(wMatch[1], 10) || 240;
+          h = parseInt(hMatch[1], 10) || 240;
+        } else if (viewBoxMatch) {
+          w = parseInt(viewBoxMatch[1], 10) || 240;
+          h = parseInt(viewBoxMatch[2], 10) || 240;
+        }
+
+        const svgBlob = new Blob([svgText], { type: "image/svg+xml;charset=utf-8" });
+        const blobUrl = URL.createObjectURL(svgBlob);
+
+        return await new Promise<{ dataUrl: string; width: number; height: number } | null>((resolve) => {
+          const img = new Image();
+          img.onload = () => {
+            try {
+              const canvas = document.createElement("canvas");
+              canvas.width = w * 2;
+              canvas.height = h * 2;
+              const ctx = canvas.getContext("2d");
+              if (ctx) {
+                ctx.drawImage(img, 0, 0, w * 2, h * 2);
+                const pngData = canvas.toDataURL("image/png");
+                URL.revokeObjectURL(blobUrl);
+                resolve({ dataUrl: pngData, width: w, height: h });
+                return;
+              }
+            } catch (e) {
+              console.warn("SVG canvas export error for", url, e);
+            }
+            URL.revokeObjectURL(blobUrl);
+            resolve(null);
+          };
+          img.onerror = () => {
+            URL.revokeObjectURL(blobUrl);
+            resolve(null);
+          };
+          img.src = blobUrl;
+          setTimeout(() => {
+            URL.revokeObjectURL(blobUrl);
+            resolve(null);
+          }, 3000);
+        });
+      }
+    } catch (e) {
+      console.warn("SVG fetch error:", e);
+    }
+  }
+
+  // 3. General raster image (jpg, png, webp)
   return new Promise((resolve) => {
     const img = new Image();
-    img.crossOrigin = "anonymous";
+    if (!url.startsWith("data:") && !url.startsWith("blob:")) {
+      img.crossOrigin = "anonymous";
+    }
     img.src = url;
 
     img.onload = () => {
@@ -195,6 +286,33 @@ export function getInvoicePdfFilename(orderId?: string, businessName?: string, c
 }
 
 export async function generateBillPdf(data: BillPdfData) {
+  // Resolve logo URL from data or active business profile cache
+  let resolvedLogoUrl = data.logoUrl;
+  if (!resolvedLogoUrl && typeof window !== "undefined") {
+    try {
+      const cached = localStorage.getItem("bftone_tenant_cache");
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (parsed?.logo_url) resolvedLogoUrl = parsed.logo_url;
+      }
+      if (!resolvedLogoUrl) {
+        const activeId = localStorage.getItem("bftone_active_tenant_id");
+        if (activeId) {
+          const extra = localStorage.getItem(`bftone_tenant_extra_${activeId}`);
+          if (extra) {
+            const parsed = JSON.parse(extra);
+            if (parsed?.logo_url) resolvedLogoUrl = parsed.logo_url;
+          }
+        }
+      }
+    } catch {}
+  }
+  if (!resolvedLogoUrl) {
+    resolvedLogoUrl = "/dummy-logo.svg?v=5";
+  } else if (resolvedLogoUrl.startsWith("/dummy-logo.svg") && !resolvedLogoUrl.includes("?")) {
+    resolvedLogoUrl = "/dummy-logo.svg?v=5";
+  }
+
   const {
     orderId,
     items = [],
@@ -205,13 +323,13 @@ export async function generateBillPdf(data: BillPdfData) {
     date = new Date().toLocaleDateString("en-IN", { month: "short", day: "numeric", year: "numeric" }),
     dueDate,
     invoiceTitle,
-    businessName = "Brown fening tea",
-    businessAddress = "255, Rajiv Gandhi Salai (OMR), Navalur,\nChennai,\nTamil Nadu, India - 600130",
-    businessPhone = "+91 98765 43210",
+    businessName = "",
+    businessAddress = "",
+    businessPhone = "",
     businessGstin = "",
     bankDetails,
     upiDetails,
-    logoUrl = null,
+    logoUrl = resolvedLogoUrl,
     signatureUrl = "/default-signature.svg",
   } = data;
 
@@ -260,15 +378,33 @@ export async function generateBillPdf(data: BillPdfData) {
 
   let currentY = 16;
 
-  // Background Watermark: "Powered by SeyalPro"
+  // Background Watermark: "SeyalPro" - Prominently & elegantly branded
   const drawBackgroundWatermark = () => {
-    doc.setFont(fontName, "bold");
-    doc.setFontSize(32);
-    doc.setTextColor(242, 246, 253); // Very faint subtle tint
-    doc.text("Powered by SeyalPro", pageWidth / 2, pageHeight / 2 + 10, {
-      align: "center",
-      angle: 28,
-    });
+    try {
+      if (typeof (doc as any).saveGraphicsState === "function") {
+        (doc as any).saveGraphicsState();
+      }
+      doc.setFont(fontName, "bold");
+      doc.setFontSize(48);
+      doc.setTextColor(226, 234, 246); // Clean slate-blue tint (#E2EAF6), visible and legible
+      doc.text("SeyalPro", pageWidth / 2, pageHeight / 2 - 2, {
+        align: "center",
+        angle: 30,
+      });
+
+      doc.setFontSize(11);
+      doc.setFont(fontName, "bold");
+      doc.setTextColor(230, 238, 248);
+      doc.text("B2B STORE & DISPATCH INTELLIGENCE", pageWidth / 2, pageHeight / 2 + 13, {
+        align: "center",
+        angle: 30,
+      });
+      if (typeof (doc as any).restoreGraphicsState === "function") {
+        (doc as any).restoreGraphicsState();
+      }
+    } catch (e) {
+      console.warn("Watermark render error:", e);
+    }
   };
 
   drawBackgroundWatermark();
@@ -310,7 +446,7 @@ export async function generateBillPdf(data: BillPdfData) {
   doc.setTextColor(15, 23, 42);
   doc.text(dueText, leftMargin + 26, currentY);
 
-  // Logo with perfect aspect-ratio preserving fit (No pressing/stretching)
+  // Logo with perfect aspect-ratio preserving fit on the top-right side
   if (logoUrl) {
     try {
       const logoData = await loadImageData(logoUrl);
@@ -329,6 +465,21 @@ export async function generateBillPdf(data: BillPdfData) {
         const logoX = pageWidth - rightMargin - drawW;
         const logoY = 14 + (maxH - drawH) / 2;
         doc.addImage(logoData.dataUrl, "PNG", logoX, logoY, drawW, drawH);
+      } else if (businessName) {
+        // Fallback elegant monogram on the right side if image fails to load
+        const badgeSize = 22;
+        const badgeX = pageWidth - rightMargin - badgeSize;
+        const badgeY = 14;
+        doc.setFillColor(239, 246, 255); // Soft blue
+        doc.roundedRect(badgeX, badgeY, badgeSize, badgeSize, 4, 4, "F");
+        doc.setDrawColor(191, 219, 254);
+        doc.setLineWidth(0.3);
+        doc.roundedRect(badgeX, badgeY, badgeSize, badgeSize, 4, 4, "S");
+        doc.setFont(fontName, "bold");
+        doc.setFontSize(11);
+        doc.setTextColor(37, 99, 235);
+        const initials = businessName.split(" ").map((w) => w[0]).filter(Boolean).slice(0, 2).join("").toUpperCase() || "SP";
+        doc.text(initials, badgeX + badgeSize / 2, badgeY + badgeSize / 2 + 3.5, { align: "center" });
       }
     } catch (e) {
       console.warn("Logo rendering skipped in PDF:", e);
@@ -452,6 +603,11 @@ export async function generateBillPdf(data: BillPdfData) {
       1: { cellWidth: 28, halign: "center" },
       2: { cellWidth: 38, halign: "center" },
       3: { cellWidth: 42, halign: "center", font: fontName, fontStyle: "bold" },
+    },
+    willDrawPage: (hookData) => {
+      if (hookData.pageNumber > 1) {
+        drawBackgroundWatermark();
+      }
     },
   });
 
@@ -614,7 +770,7 @@ export async function generateBillPdf(data: BillPdfData) {
     doc.setFont(fontName, "bold");
     doc.setFontSize(7.5);
     doc.setTextColor(148, 163, 184); // #94A3B8 Subtle slate
-    doc.text("Powered by SeyalPro", pageWidth / 2, pageHeight - 7, { align: "center" });
+    doc.text("Powered by SeyalPro App • B2B Store Stock Inward & Settlement Tracking", pageWidth / 2, pageHeight - 7, { align: "center" });
   }
 
   // Download PDF file with kebab-case filename (e.g. invoice-a00018-brown-fening-tea-protechsoft-technologies-pvt-ltd.pdf)

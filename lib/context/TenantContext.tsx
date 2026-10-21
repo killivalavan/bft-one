@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useEffect, useState } from "react";
+import React, { createContext, useContext, useEffect, useState, useRef } from "react";
 import { supabaseClient } from "@/lib/supabaseClient";
 import { useUser } from "@/lib/hooks/useUser";
 
@@ -59,40 +59,106 @@ export const DEFAULT_BUSINESS: Business = {
   is_active: true,
 };
 
+/**
+ * Neutral, store-less placeholder used while the real tenant is being resolved.
+ * It intentionally carries no store name/id so that no other store's identity
+ * (or localStorage namespace) can ever be shown or used before resolution.
+ */
+export const NEUTRAL_BUSINESS: Business = {
+  id: "",
+  name: "",
+  slug: "",
+  logo_url: null,
+  signature_url: null,
+  address: "",
+  phone: "",
+  gstin: "",
+  upi_id: "",
+  currency_symbol: "₹",
+  timezone: "Asia/Kolkata",
+  geofence_lat: null,
+  geofence_lng: null,
+  geofence_radius_meters: 150,
+  geofence_enabled: false,
+  enabled_modules: {},
+  plan_type: "pro",
+  max_users: 50,
+  is_active: true,
+};
+
+export type TenantStatus = "resolving" | "ready" | "error";
+
+export function isValidCustomLogo(url: string | null | undefined): boolean {
+  if (!url) return false;
+  if (url.startsWith("/dummy-logo.svg")) return false;
+  // If it's a 1x1 dummy pixel (<= 200 chars base64), it's not a real custom logo
+  if (url.startsWith("data:image") && url.length < 200) return false;
+  return true;
+}
+
+export function isValidCustomSig(url: string | null | undefined): boolean {
+  if (!url) return false;
+  if (url.startsWith("/default-signature.svg")) return false;
+  if (url.startsWith("data:image") && url.length < 200) return false;
+  return true;
+}
+
+const TENANT_CACHE_KEY = "bftone_tenant_cache";
+
+interface TenantCacheEntry {
+  ownerUserId: string | null;
+  business: Business;
+  cachedAt: number;
+}
+
+function readTenantCache(): TenantCacheEntry | null {
+  try {
+    if (typeof window === "undefined") return null;
+    const raw = localStorage.getItem(TENANT_CACHE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    // Legacy (un-owned) cache entries are ignored: they cannot be trusted to belong to this user
+    if (!parsed || typeof parsed !== "object" || !("ownerUserId" in parsed) || !parsed.business?.id) return null;
+    return parsed as TenantCacheEntry;
+  } catch {
+    return null;
+  }
+}
+
+export function clearTenantCache() {
+  try {
+    if (typeof window !== "undefined") localStorage.removeItem(TENANT_CACHE_KEY);
+  } catch {}
+}
+
 interface TenantContextType {
   business: Business;
   loading: boolean;
+  status: TenantStatus;
+  isResolved: boolean;
   isModuleEnabled: (moduleName: string) => boolean;
   refreshBusiness: () => Promise<void>;
 }
 
 const TenantContext = createContext<TenantContextType>({
-  business: DEFAULT_BUSINESS,
+  business: NEUTRAL_BUSINESS,
   loading: true,
+  status: "resolving",
+  isResolved: false,
   isModuleEnabled: () => true,
   refreshBusiness: async () => {},
 });
 
 export function TenantProvider({ children }: { children: React.ReactNode }) {
   const { user } = useUser();
-  const [business, setBusiness] = useState<Business>(() => {
-    // 1. Initial warm start from localStorage ONLY if matching active cookie
-    try {
-      if (typeof window !== "undefined") {
-        const cookieMatch = document.cookie.match(/tenant_slug=([^;]+)/);
-        const cookieSlug = cookieMatch ? decodeURIComponent(cookieMatch[1]) : null;
-        const cached = localStorage.getItem("bftone_tenant_cache");
-        if (cached) {
-          const parsed = JSON.parse(cached);
-          if (!cookieSlug || parsed.slug === cookieSlug) {
-            return parsed;
-          }
-        }
-      }
-    } catch {}
-    return DEFAULT_BUSINESS;
-  });
-  const [loading, setLoading] = useState(true);
+  // Identical on server and client: never prerender another store's identity into the HTML
+  const [business, setBusiness] = useState<Business>(NEUTRAL_BUSINESS);
+  const [status, setStatus] = useState<TenantStatus>("resolving");
+  const loading = status === "resolving";
+  // Which user the currently-held business belongs to (null = logged-out visitor)
+  const ownerRef = useRef<string | null | undefined>(undefined);
+  // Guards against out-of-order fetchTenant responses overwriting newer ones
+  const requestIdRef = useRef(0);
 
   /**
    * Extract tenant slug from subdomain.
@@ -117,7 +183,17 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
     return null;
   }
 
+  function applyTenant(biz: Business, ownerUserId: string | null, reqId: number) {
+    if (reqId !== requestIdRef.current) return; // stale response
+    ownerRef.current = ownerUserId;
+    setBusiness(biz);
+    setStatus("ready");
+    if (biz.id) persistTenant(biz, ownerUserId);
+  }
+
   async function fetchTenant() {
+    const reqId = ++requestIdRef.current;
+    let currentUser: { id: string; email?: string } | null = null;
     try {
       // 1. Authenticated User Resolution (direct session check to eliminate React state race)
       const sessionPromise = supabaseClient.auth.getSession();
@@ -125,91 +201,100 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
         setTimeout(() => resolve({ data: { session: null } }), 5000)
       );
       const { data: { session } } = await Promise.race([sessionPromise, timeoutPromise]);
-      const currentUser = session?.user || user;
+      currentUser = session?.user || user;
+      const currentUserId = currentUser?.id ?? null;
+
+      // If the held business does not belong to this user, never show it: warm-start
+      // only from a cache entry owned by this exact user, otherwise go neutral + resolving.
+      if (ownerRef.current !== currentUserId) {
+        const cached = currentUserId ? readTenantCache() : null;
+        if (cached && cached.ownerUserId === currentUserId) {
+          ownerRef.current = currentUserId;
+          setBusiness(cached.business);
+          setStatus("ready");
+        } else {
+          ownerRef.current = undefined;
+          setBusiness(NEUTRAL_BUSINESS);
+          setStatus("resolving");
+          if (!currentUserId) clearTenantCache();
+        }
+      }
 
       if (currentUser) {
-        const { data: prof } = await supabaseClient
+        const { data: prof, error: profErr } = await supabaseClient
           .from("profiles")
           .select("business_id, is_super_admin")
           .eq("id", currentUser.id)
           .maybeSingle();
+        if (profErr) throw profErr;
 
         const isSuperAdmin = prof?.is_super_admin || currentUser.email?.toLowerCase() === "admin@seyalpro.com";
 
-        // For regular shop admins/staff: ALWAYS bind strictly to their assigned business_id
-        if (!isSuperAdmin && prof?.business_id) {
-          const { data: biz } = await supabaseClient
+        // For regular shop admins/staff: ALWAYS bind strictly to their assigned business_id.
+        // Never fall back to another store.
+        if (!isSuperAdmin) {
+          if (!prof?.business_id) throw new Error("No workspace is assigned to this account.");
+          const { data: biz, error: bizErr } = await supabaseClient
             .from("businesses")
             .select("*")
             .eq("id", prof.business_id)
             .maybeSingle();
+          if (bizErr) throw bizErr;
+          if (!biz) throw new Error("Assigned workspace could not be found.");
 
-          if (biz) {
-            const finalBiz = normalizeBusiness(biz);
-            setBusiness(finalBiz);
-            persistTenant(finalBiz);
-            if (typeof document !== "undefined") {
-              document.cookie = `tenant_slug=${finalBiz.slug}; path=/; max-age=${60 * 60 * 24 * 30}; SameSite=Lax`;
-            }
+          const finalBiz = normalizeBusiness(biz);
+          applyTenant(finalBiz, currentUser.id, reqId);
+          if (typeof document !== "undefined" && reqId === requestIdRef.current) {
+            document.cookie = `tenant_slug=${finalBiz.slug}; path=/; max-age=${60 * 60 * 24 * 30}; SameSite=Lax`;
+          }
+          return;
+        }
+
+        // For Super Admin: only an explicitly selected workspace (query, subdomain, switch cookie, or own business_id)
+        const urlSlug = typeof window !== "undefined"
+          ? new URLSearchParams(window.location.search).get("tenant")
+          : null;
+        const subdomainSlug = getSubdomainSlug();
+        const cookieMatch = typeof document !== "undefined"
+          ? document.cookie.match(/tenant_slug=([^;]+)/)
+          : null;
+        const cookieSlug = cookieMatch ? decodeURIComponent(cookieMatch[1]) : null;
+
+        const explicitSlug = urlSlug || subdomainSlug || cookieSlug;
+        if (explicitSlug) {
+          const { data: bizBySlug } = await supabaseClient
+            .from("businesses")
+            .select("*")
+            .eq("slug", explicitSlug)
+            .maybeSingle();
+          if (bizBySlug) {
+            applyTenant(normalizeBusiness(bizBySlug), currentUser.id, reqId);
             return;
           }
         }
 
-        // For Super Admin: allow dynamic switching via query param, subdomain, or switch cookie
-        if (isSuperAdmin) {
-          const urlSlug = typeof window !== "undefined"
-            ? new URLSearchParams(window.location.search).get("tenant")
-            : null;
-          const subdomainSlug = getSubdomainSlug();
-          const cookieMatch = typeof document !== "undefined"
-            ? document.cookie.match(/tenant_slug=([^;]+)/)
-            : null;
-          const cookieSlug = cookieMatch ? decodeURIComponent(cookieMatch[1]) : null;
-
-          const explicitSlug = urlSlug || subdomainSlug || cookieSlug;
-          if (explicitSlug) {
-            const { data: bizBySlug } = await supabaseClient
-              .from("businesses")
-              .select("*")
-              .eq("slug", explicitSlug)
-              .maybeSingle();
-
-            if (bizBySlug) {
-              const finalBiz = normalizeBusiness(bizBySlug);
-              setBusiness(finalBiz);
-              persistTenant(finalBiz);
-              return;
-            }
-          }
-
-          // If Super Admin has an assigned business_id or default business exists in DB
-          const targetBizId = prof?.business_id || DEFAULT_BUSINESS.id;
+        if (prof?.business_id) {
           const { data: bizById } = await supabaseClient
             .from("businesses")
             .select("*")
-            .eq("id", targetBizId)
+            .eq("id", prof.business_id)
             .maybeSingle();
-
           if (bizById) {
-            const finalBiz = normalizeBusiness(bizById);
-            setBusiness(finalBiz);
-            persistTenant(finalBiz);
+            applyTenant(normalizeBusiness(bizById), currentUser.id, reqId);
             return;
           }
         }
+
+        // No workspace selected: stay store-neutral (super admin lands on the SeyalPro dashboard)
+        applyTenant(NEUTRAL_BUSINESS, currentUser.id, reqId);
+        return;
       }
 
-      // 2. Unauthenticated / Public visitor resolution (Query > Subdomain > Cookie > Default)
+      // 2. Unauthenticated / Public visitor: only an explicit ?tenant or subdomain brands the page
       const urlSlug = typeof window !== "undefined"
         ? new URLSearchParams(window.location.search).get("tenant")
         : null;
-      const subdomainSlug = getSubdomainSlug();
-      const cookieMatch = typeof document !== "undefined"
-        ? document.cookie.match(/tenant_slug=([^;]+)/)
-        : null;
-      const cookieSlug = cookieMatch ? decodeURIComponent(cookieMatch[1]) : null;
-
-      const explicitSlug = urlSlug || subdomainSlug || cookieSlug;
+      const explicitSlug = urlSlug || getSubdomainSlug();
 
       if (explicitSlug) {
         const { data: bizBySlug } = await supabaseClient
@@ -217,32 +302,27 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
           .select("*")
           .eq("slug", explicitSlug)
           .maybeSingle();
-
         if (bizBySlug) {
-          const finalBiz = normalizeBusiness(bizBySlug);
-          setBusiness(finalBiz);
-          persistTenant(finalBiz);
+          applyTenant(normalizeBusiness(bizBySlug), null, reqId);
           return;
         }
       }
 
-      // 3. Fall back to default business: query database for default BFT or first business
-      const { data: defaultBiz } = await supabaseClient
-        .from("businesses")
-        .select("*")
-        .eq("id", DEFAULT_BUSINESS.id)
-        .maybeSingle();
-
-      const sourceBiz = defaultBiz || DEFAULT_BUSINESS;
-      const finalBiz = normalizeBusiness(sourceBiz);
-      setBusiness(finalBiz);
-      persistTenant(finalBiz);
+      applyTenant(NEUTRAL_BUSINESS, null, reqId);
     } catch (e) {
-      console.warn("Tenant fetch fallback to default:", e);
-      const fallbackBiz = normalizeBusiness(DEFAULT_BUSINESS);
-      setBusiness(fallbackBiz);
-    } finally {
-      setLoading(false);
+      console.warn("Tenant resolution failed:", e);
+      if (reqId !== requestIdRef.current) return;
+      // Keep an already-verified workspace for this same user (e.g. transient network blip);
+      // otherwise surface an error instead of silently showing another store.
+      if (currentUser && ownerRef.current === currentUser.id && business.id) {
+        setStatus("ready");
+      } else if (currentUser) {
+        setBusiness(NEUTRAL_BUSINESS);
+        setStatus("error");
+      } else {
+        setBusiness(NEUTRAL_BUSINESS);
+        setStatus("ready");
+      }
     }
   }
 
@@ -300,41 +380,79 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
         ? !!localShopLoc.enabled
         : (localExtra.geofence_enabled !== undefined ? localExtra.geofence_enabled !== false : true));
 
+    const isCustomDbLogo = isValidCustomLogo(raw.logo_url);
+    const isCustomLocalLogo = isValidCustomLogo(localExtra.logo_url);
+    const resolvedLogo = isCustomDbLogo ? raw.logo_url : (isCustomLocalLogo ? localExtra.logo_url : (raw.logo_url || null));
+
+    const isCustomDbSig = isValidCustomSig(raw.signature_url);
+    const hasCustomLocalSig = isValidCustomSig(localExtra.signature_url);
+    const resolvedSig = isCustomDbSig ? (raw.signature_url as string) : (hasCustomLocalSig ? localExtra.signature_url : (raw.signature_url || null));
+
     return {
       id: bizId,
-      name: raw.name || localExtra.name || DEFAULT_BUSINESS.name,
-      slug: raw.slug || DEFAULT_BUSINESS.slug,
-      logo_url: raw.logo_url || localExtra.logo_url || DEFAULT_BUSINESS.logo_url,
-      signature_url: (raw.signature_url as string) || localExtra.signature_url || DEFAULT_BUSINESS.signature_url,
-      address: (raw.address as string) || localExtra.address || DEFAULT_BUSINESS.address,
-      phone: (raw.phone as string) || localExtra.phone || DEFAULT_BUSINESS.phone,
-      gstin: (raw.gstin as string) || localExtra.gstin || DEFAULT_BUSINESS.gstin,
-      upi_id: (raw.upi_id as string) || localExtra.upi_id || "",
+      name: raw.name || localExtra.name || "",
+      slug: raw.slug || "",
+      logo_url: resolvedLogo,
+      signature_url: resolvedSig,
+      address: (raw.address as string) || localExtra.address || "",
+      phone: (raw.phone as string) || localExtra.phone || "",
+      gstin: (raw.gstin as string) || localExtra.gstin || "",
+      upi_id: (raw.upi_id as string) || (raw.enabled_modules?.upi_id as string) || localExtra.upi_id || "",
       currency_symbol: raw.currency_symbol || "₹",
       timezone: raw.timezone || "Asia/Kolkata",
       geofence_lat: resolvedLat,
       geofence_lng: resolvedLng,
       geofence_radius_meters: resolvedRadius,
       geofence_enabled: resolvedEnabled,
-      enabled_modules: raw.enabled_modules || DEFAULT_BUSINESS.enabled_modules,
+      enabled_modules: raw.enabled_modules || {},
       plan_type: raw.plan_type || "pro",
       max_users: raw.max_users || 50,
       is_active: raw.is_active !== false,
     };
   }
 
-  function persistTenant(biz: Business) {
+  function persistTenant(biz: Business, ownerUserId: string | null = null) {
     try {
       if (typeof window !== "undefined") {
-        localStorage.setItem("bftone_tenant_cache", JSON.stringify(biz));
+        let existingExtra: any = {};
+        if (biz.id) {
+          try {
+            const extraStr = localStorage.getItem(`bftone_tenant_extra_${biz.id}`);
+            if (extraStr) existingExtra = JSON.parse(extraStr);
+          } catch {}
+        }
+
+        const isCustomBizLogo = isValidCustomLogo(biz.logo_url);
+        const isCustomExistingLogo = isValidCustomLogo(existingExtra.logo_url);
+        const preservedLogo = isCustomBizLogo ? biz.logo_url : (isCustomExistingLogo ? existingExtra.logo_url : biz.logo_url);
+
+        const isCustomBizSig = isValidCustomSig(biz.signature_url);
+        const isCustomExistingSig = isValidCustomSig(existingExtra.signature_url);
+        const preservedSig = isCustomBizSig ? biz.signature_url : (isCustomExistingSig ? existingExtra.signature_url : biz.signature_url);
+
+        const preservedUpi = (biz as any).upi_id || (biz as any).enabled_modules?.upi_id || existingExtra.upi_id || "";
+
+        const entry: TenantCacheEntry = {
+          ownerUserId,
+          business: {
+            ...biz,
+            logo_url: preservedLogo,
+            signature_url: preservedSig,
+            upi_id: preservedUpi,
+          },
+          cachedAt: Date.now(),
+        };
+        localStorage.setItem(TENANT_CACHE_KEY, JSON.stringify(entry));
+
         if (biz.id) {
           localStorage.setItem(`bftone_tenant_extra_${biz.id}`, JSON.stringify({
             name: biz.name,
-            logo_url: biz.logo_url,
-            signature_url: biz.signature_url,
-            address: biz.address,
-            phone: biz.phone,
-            gstin: biz.gstin,
+            logo_url: preservedLogo,
+            signature_url: preservedSig,
+            address: biz.address || existingExtra.address || "",
+            phone: biz.phone || existingExtra.phone || "",
+            gstin: biz.gstin || existingExtra.gstin || "",
+            upi_id: preservedUpi,
             geofence_lat: biz.geofence_lat,
             geofence_lng: biz.geofence_lng,
             geofence_radius_meters: biz.geofence_radius_meters,
@@ -384,6 +502,8 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
       value={{
         business,
         loading,
+        status,
+        isResolved: status === "ready",
         isModuleEnabled,
         refreshBusiness: fetchTenant,
       }}

@@ -442,7 +442,7 @@ export default function UsersAndRolesPage() {
   }
 
   return (
-    <div className="min-h-screen pb-20 bg-[#F8FAFC]">
+    <div>
       <div className="max-w-6xl mx-auto p-4 md:p-6 space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center gap-3">

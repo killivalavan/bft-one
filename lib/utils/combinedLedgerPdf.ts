@@ -2,6 +2,7 @@ import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { format } from "date-fns";
 import { formatCafeName, capitalizeWords } from "./bakerUtils";
+import { loadImageData } from "./billPdf";
 
 export interface CombinedLedgerTransaction {
   date: string;
@@ -21,6 +22,7 @@ export interface CombinedLedgerPdfData {
   businessPhone?: string;
   businessAddress?: string;
   upiId?: string;
+  logoUrl?: string | null;
   mode?: "client" | "store" | "consolidated";
   entityName: string;
   parentClientName?: string;
@@ -40,7 +42,34 @@ export interface CombinedLedgerPdfData {
   transactions: CombinedLedgerTransaction[];
 }
 
-export function generateCombinedLedgerPdf(data: CombinedLedgerPdfData): void {
+export async function generateCombinedLedgerPdf(data: CombinedLedgerPdfData): Promise<void> {
+  // Resolve business logo from data or tenant profile cache
+  let resolvedLogoUrl = data.logoUrl;
+  if (!resolvedLogoUrl && typeof window !== "undefined") {
+    try {
+      const cached = localStorage.getItem("bftone_tenant_cache");
+      if (cached) {
+        const p = JSON.parse(cached);
+        if (p?.logo_url) resolvedLogoUrl = p.logo_url;
+      }
+      if (!resolvedLogoUrl) {
+        const activeId = localStorage.getItem("bftone_active_tenant_id");
+        if (activeId) {
+          const extra = localStorage.getItem(`bftone_tenant_extra_${activeId}`);
+          if (extra) {
+            const p = JSON.parse(extra);
+            if (p?.logo_url) resolvedLogoUrl = p.logo_url;
+          }
+        }
+      }
+    } catch {}
+  }
+  if (!resolvedLogoUrl) {
+    resolvedLogoUrl = "/dummy-logo.svg?v=5";
+  } else if (resolvedLogoUrl.startsWith("/dummy-logo.svg") && !resolvedLogoUrl.includes("?")) {
+    resolvedLogoUrl = "/dummy-logo.svg?v=5";
+  }
+
   const doc = new jsPDF({
     orientation: "portrait",
     unit: "mm",
@@ -59,6 +88,38 @@ export function generateCombinedLedgerPdf(data: CombinedLedgerPdfData): void {
   doc.setFillColor(37, 99, 235); // #2563EB
   doc.rect(0, 0, pageWidth, 4.5, "F");
 
+  // Background Watermark: "SeyalPro" - Prominently & elegantly branded
+  const drawBackgroundWatermark = () => {
+    try {
+      if (typeof (doc as any).saveGraphicsState === "function") {
+        (doc as any).saveGraphicsState();
+      }
+      doc.setFont(fontName, "bold");
+      doc.setFontSize(48);
+      doc.setTextColor(226, 234, 246); // Clean slate-blue tint (#E2EAF6), visible and legible
+      doc.text("SeyalPro", pageWidth / 2, pageHeight / 2 - 2, {
+        align: "center",
+        angle: 30,
+      });
+
+      doc.setFontSize(11);
+      doc.setFont(fontName, "bold");
+      doc.setTextColor(230, 238, 248);
+      doc.text("B2B STORE & DISPATCH INTELLIGENCE", pageWidth / 2, pageHeight / 2 + 13, {
+        align: "center",
+        angle: 30,
+      });
+      if (typeof (doc as any).restoreGraphicsState === "function") {
+        (doc as any).restoreGraphicsState();
+      }
+    } catch (e) {
+      console.warn("Watermark render error:", e);
+    }
+  };
+
+  // Draw watermark on Page 1
+  drawBackgroundWatermark();
+
   let currentY = 13;
 
   // Header Left: Business Name & Details
@@ -72,7 +133,7 @@ export function generateCombinedLedgerPdf(data: CombinedLedgerPdfData): void {
   doc.setTextColor(100, 116, 139); // #64748B
   let bizSubY = currentY + 4;
   if (data.businessAddress) {
-    const addLines = doc.splitTextToSize(data.businessAddress, contentWidth * 0.5);
+    const addLines = doc.splitTextToSize(data.businessAddress, contentWidth * 0.45);
     doc.text(addLines, leftMargin, bizSubY);
     bizSubY += addLines.length * 3.5;
   }
@@ -81,24 +142,69 @@ export function generateCombinedLedgerPdf(data: CombinedLedgerPdfData): void {
     bizSubY += 3.5;
   }
 
-  // Header Right: Title & Period Badge
-  const rightX = pageWidth - rightMargin;
+  // Header Right: Logo & Statement Title
+  let logoData: { dataUrl: string; width: number; height: number } | null = null;
+  if (resolvedLogoUrl) {
+    try {
+      logoData = await loadImageData(resolvedLogoUrl);
+    } catch (e) {
+      console.warn("Ledger logo load warning:", e);
+    }
+  }
+
+  const maxLogoW = 28;
+  const maxLogoH = 20;
+  let drawW = 0;
+  let drawH = 0;
+  let logoX = pageWidth - rightMargin;
+  let logoY = 7;
+
+  if (logoData) {
+    const aspect = logoData.width / logoData.height;
+    drawW = maxLogoW;
+    drawH = drawW / aspect;
+    if (drawH > maxLogoH) {
+      drawH = maxLogoH;
+      drawW = drawH * aspect;
+    }
+    logoX = pageWidth - rightMargin - drawW;
+    logoY = 7 + (maxLogoH - drawH) / 2;
+    doc.addImage(logoData.dataUrl, "PNG", logoX, logoY, drawW, drawH);
+  } else if (data.businessName) {
+    // Fallback monogram badge if image can't be fetched
+    const badgeSize = 18;
+    drawW = badgeSize;
+    logoX = pageWidth - rightMargin - badgeSize;
+    logoY = 8;
+    doc.setFillColor(239, 246, 255);
+    doc.roundedRect(logoX, logoY, badgeSize, badgeSize, 3, 3, "F");
+    doc.setDrawColor(191, 219, 254);
+    doc.setLineWidth(0.3);
+    doc.roundedRect(logoX, logoY, badgeSize, badgeSize, 3, 3, "S");
+    doc.setFont(fontName, "bold");
+    doc.setFontSize(9);
+    doc.setTextColor(37, 99, 235);
+    const initials = data.businessName.split(" ").map((w) => w[0]).filter(Boolean).slice(0, 2).join("").toUpperCase() || "SP";
+    doc.text(initials, logoX + badgeSize / 2, logoY + badgeSize / 2 + 3, { align: "center" });
+  }
+
+  const rightTextX = logoX - 4;
   doc.setFont(fontName, "bold");
-  doc.setFontSize(13);
+  doc.setFontSize(12);
   doc.setTextColor(37, 99, 235);
-  doc.text("CLIENT LEDGER STATEMENT", rightX, currentY, { align: "right" });
+  doc.text("CLIENT LEDGER STATEMENT", rightTextX, currentY, { align: "right" });
 
   doc.setFont(fontName, "bold");
-  doc.setFontSize(8.5);
+  doc.setFontSize(8);
   doc.setTextColor(51, 65, 85);
-  doc.text(`Period: ${data.periodLabel}`, rightX, currentY + 4.5, { align: "right" });
+  doc.text(`Period: ${data.periodLabel}`, rightTextX, currentY + 4.5, { align: "right" });
 
   doc.setFont(fontName, "normal");
   doc.setFontSize(7.5);
   doc.setTextColor(100, 116, 139);
-  doc.text(`Exported: ${data.exportDate}`, rightX, currentY + 8.5, { align: "right" });
+  doc.text(`Exported: ${data.exportDate}`, rightTextX, currentY + 8.5, { align: "right" });
 
-  currentY = Math.max(bizSubY + 3, currentY + 12);
+  currentY = Math.max(bizSubY + 3, currentY + 14, (logoY + (drawH || 18)) + 3);
 
   // 2. RECIPIENT ENTITY DETAILS BOX
   doc.setFillColor(248, 250, 252); // #F8FAFC
@@ -264,6 +370,11 @@ export function generateCombinedLedgerPdf(data: CombinedLedgerPdfData): void {
     alternateRowStyles: {
       fillColor: [248, 250, 252],
     },
+    willDrawPage: (hookData) => {
+      if (hookData.pageNumber > 1) {
+        drawBackgroundWatermark();
+      }
+    },
     didParseCell: (hookData) => {
       if (hookData.section === "body") {
         const isRetRow = hookData.row.raw && (hookData.row.raw as any)[3] === "RETURN";
@@ -284,6 +395,7 @@ export function generateCombinedLedgerPdf(data: CombinedLedgerPdfData): void {
   // 5. PAYMENT / UPI FOOTER
   if (afterTableY > pageHeight - 35) {
     doc.addPage();
+    drawBackgroundWatermark();
     afterTableY = 16;
   } else {
     afterTableY += 6;
@@ -306,7 +418,7 @@ export function generateCombinedLedgerPdf(data: CombinedLedgerPdfData): void {
     ? `Bank / UPI Payments: Settle outstanding dues to UPI ID: ${data.upiId} or registered bank account.`
     : `Please confirm ledger adjustments with ${data.businessName}.`;
   doc.text(upiLine, leftMargin + 3.5, afterTableY + 8.5);
-  doc.text("Generated from verified delivery and return credit slips. Thank you for your business!", leftMargin + 3.5, afterTableY + 12);
+  doc.text("Generated via SeyalPro App • Instant B2B Store Stock Inward & Settlement Tracking.", leftMargin + 3.5, afterTableY + 12);
 
   // 6. MULTI-PAGE PAGE NUMBERING FOOTER
   const pageCount = (doc as any).internal.getNumberOfPages();
@@ -315,7 +427,7 @@ export function generateCombinedLedgerPdf(data: CombinedLedgerPdfData): void {
     doc.setFontSize(6.5);
     doc.setTextColor(148, 163, 184);
     doc.text(
-      `Page ${i} of ${pageCount}   •   SeyalPro Client Ledger Statement   •   Confidential`,
+      `Page ${i} of ${pageCount}   •   Powered by SeyalPro App (seyalpro.com)   •   B2B Store & Dispatch Intelligence`,
       pageWidth / 2,
       pageHeight - 5,
       { align: "center" }

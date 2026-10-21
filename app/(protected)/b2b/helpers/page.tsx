@@ -115,7 +115,10 @@ export default function BakerHelpersPage() {
       `💵 *Net Payable Amount: ₹${netPayable.toLocaleString("en-IN")}*\n\n` +
       `_Payment will be disbursed via UPI/Cash. Thank you for your hard work!_`;
 
-    window.open(`https://wa.me/?text=${encodeURIComponent(message)}`, "_blank");
+    if (typeof navigator !== "undefined" && navigator.clipboard) {
+      navigator.clipboard.writeText(message).catch(() => {});
+    }
+    window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(message)}`, "_blank");
     toast({ title: "WhatsApp Salary Slip Ready! 📱", description: `Opened slip for ${h.name}` });
   };
 
@@ -124,7 +127,7 @@ export default function BakerHelpersPage() {
   const totalNetPayable = totalMonthlyPayroll - totalAdvancesTaken;
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] pb-24">
+    <div className="space-y-6">
       {/* Top Header */}
       <div className="bg-white border-b border-[#E2E8F0] sticky top-14 md:top-0 z-20 shadow-2xs">
         <div className="max-w-6xl mx-auto px-4 py-3 sm:py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">

@@ -17,6 +17,7 @@ import {
 import { capitalizeWords } from "@/app/(protected)/b2b/products/page";
 import { formatCafeName, DEFAULT_BAKER_SAMPLE_STORES, sanitizeBakerStores } from "@/lib/utils/bakerUtils";
 import { fetchB2BClients, saveB2BClient, B2B_CUSTOMERS_UPDATED_EVENT } from "@/lib/services/b2bClients";
+import { generateWhatsAppSlipMessage } from "@/lib/utils/b2bSlipWhatsapp";
 import {
   STORES,
   getItemsByTenant,
@@ -409,30 +410,33 @@ export function SimpleBakerDashboardView({ onSwitchToCafeMode }: SimpleBakerDash
 
   // Format & Share WhatsApp Delivery Slip
   function shareWhatsAppBill(inv: any) {
-    const cleanPhone = (inv.customerPhone || "").replace(/[^0-9]/g, "");
-    const storeTarget = cleanPhone.length >= 10 ? cleanPhone : "";
+    const isRet = inv.isReturn || inv.totalAmount < 0 || (inv.title || "").includes("RETURN");
+    const items = (inv.items || []).map((it: any) => ({
+      name: capitalizeWords(it.name),
+      qty: it.qty,
+      rate: it.rate,
+      amount: it.amount,
+    }));
 
-    const lines = [
-      `📦 *${business?.name || "Dispatch Central"}*`,
-      `📄 *DELIVERY SLIP: #${inv.invoiceNumber}*`,
-      `🏬 Store: *${formatCafeName(inv.customerName)}*`,
-      `📅 Date: ${inv.date}`,
-      `─────────────────`,
-      ...inv.items.map((it: any) => `• *${it.name}*: ${it.qty} pcs @ ₹${it.rate} = ₹${it.amount}`),
-      `─────────────────`,
-      `💰 *Total Amount: ₹${inv.totalAmount}*`,
-      `📌 Status: *Pending Settlement*`,
-      ...(business?.upi_id?.trim() ? [``, `UPI ID: ${business.upi_id.trim()}`] : []),
-      ``,
-      `Thank you for your business! 🙏`
-    ];
+    const { message, waUrl } = generateWhatsAppSlipMessage({
+      slip: {
+        invoiceNumber: inv.invoiceNumber,
+        date: inv.date,
+        customerName: inv.customerName,
+        customerPhone: inv.customerPhone || "",
+        totalAmount: inv.totalAmount,
+        status: inv.status,
+        items,
+      },
+      business,
+      isReturn: isRet,
+    });
 
-    const message = encodeURIComponent(lines.join("\n"));
-    const url = storeTarget
-      ? `https://api.whatsapp.com/send?phone=${storeTarget}&text=${message}`
-      : `https://api.whatsapp.com/send?text=${message}`;
+    if (typeof navigator !== "undefined" && navigator.clipboard) {
+      navigator.clipboard.writeText(message).catch(() => {});
+    }
 
-    window.open(url, "_blank");
+    window.open(waUrl, "_blank");
   }
 
   // Analytics Computation
@@ -507,7 +511,7 @@ export function SimpleBakerDashboardView({ onSwitchToCafeMode }: SimpleBakerDash
   }
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] pb-16">
+    <div>
       {/* ======================================================== */}
       {/* 1. TOP HEADER & MODE TOGGLE                              */}
       {/* ======================================================== */}
@@ -1021,15 +1025,15 @@ export function SimpleBakerDashboardView({ onSwitchToCafeMode }: SimpleBakerDash
               </div>
 
               <div className="bg-[#FFFBEB] p-4 rounded-xl border border-[#FEF3C7] shadow-2xs">
-                <span className="text-[10px] font-bold text-[#B45309] uppercase tracking-wider block">2. Baking &amp; Box Costs</span>
+                <span className="text-[10px] font-bold text-[#B45309] uppercase tracking-wider block">2. Operating &amp; Box Costs</span>
                 <div className="text-xl font-black text-[#B45309] mt-1">₹{profitStats.cogs.toLocaleString("en-IN")}</div>
-                <p className="text-[11px] text-[#B45309]">Ingredients &amp; delivery expenses</p>
+                <p className="text-[11px] text-[#B45309]">Supplies &amp; delivery expenses</p>
               </div>
 
               <div className="bg-[#F5F3FF] p-4 rounded-xl border border-[#EDE9FE] shadow-2xs">
-                <span className="text-[10px] font-bold text-[#6D28D9] uppercase tracking-wider block">3. Helper Staff Wages</span>
+                <span className="text-[10px] font-bold text-[#6D28D9] uppercase tracking-wider block">3. Staff &amp; Team Wages</span>
                 <div className="text-xl font-black text-[#6D28D9] mt-1">₹{profitStats.wages.toLocaleString("en-IN")}</div>
-                <p className="text-[11px] text-[#6D28D9]">Assistant &amp; runner payouts</p>
+                <p className="text-[11px] text-[#6D28D9]">Staff &amp; runner payouts</p>
               </div>
 
               <div className="bg-[#F0FDF4] p-4 rounded-xl border border-[#BBF7D0] shadow-2xs">

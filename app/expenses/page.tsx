@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { supabaseClient } from "@/lib/supabaseClient";
 import { useToast } from "@/components/ui/Toast";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import {
@@ -170,6 +171,7 @@ function numberToWords(amount: number | string): string {
 
 export default function ExpensesPage() {
     const { toast } = useToast();
+    const { confirm } = useConfirm();
     const { business } = useTenant();
     const [loading, setLoading] = useState(true);
     const [isAdmin, setIsAdmin] = useState(false);
@@ -571,7 +573,13 @@ export default function ExpensesPage() {
     }
 
     async function deleteMonthlyExpense(row: MonthlyExpenseRow) {
-        if (!confirm(`Delete fixed monthly overhead "${row.item_name}"?`)) return;
+        const ok = await confirm({
+            title: "Delete Monthly Overhead",
+            description: `Are you sure you want to delete fixed monthly overhead "${row.item_name}"?`,
+            confirmLabel: "Delete Overhead",
+            variant: "danger",
+        });
+        if (!ok) return;
         const { error } = await supabaseClient.from("monthly_expenses").delete().eq("id", row.id);
         if (error) {
             toast({ title: "Failed to delete", description: error.message, variant: "error" }); return;
@@ -644,7 +652,13 @@ export default function ExpensesPage() {
             m => m.item_name.trim().toLowerCase() === item.itemName.trim().toLowerCase()
         );
         if (!existing) return;
-        if (!confirm(`Remove "${existing.item_name}" from Fixed Monthly Overheads?`)) return;
+        const ok = await confirm({
+            title: "Remove Overhead",
+            description: `Remove "${existing.item_name}" from Fixed Monthly Overheads?`,
+            confirmLabel: "Remove",
+            variant: "danger",
+        });
+        if (!ok) return;
 
         const { error } = await supabaseClient.from("monthly_expenses").delete().eq("id", existing.id);
         if (error) {
@@ -712,7 +726,13 @@ export default function ExpensesPage() {
     }
 
     async function deletePriceItem(id: string) {
-        if (!confirm("Delete this fixed price item?")) return;
+        const ok = await confirm({
+            title: "Delete Price Item",
+            description: "Are you sure you want to delete this fixed price item?",
+            confirmLabel: "Delete Item",
+            variant: "danger",
+        });
+        if (!ok) return;
         const { error } = await supabaseClient.from("expense_price_list").delete().eq("id", id);
         if (error) {
             toast({ title: "Failed to delete item", description: error.message, variant: "error" });
@@ -870,7 +890,13 @@ export default function ExpensesPage() {
     }
 
     async function deleteExpense(row: ExpenseRow) {
-        if (!confirm(`Delete "${row.item_name}"?`)) return;
+        const ok = await confirm({
+            title: "Delete Expense",
+            description: `Are you sure you want to delete "${row.item_name}"?`,
+            confirmLabel: "Delete Expense",
+            variant: "danger",
+        });
+        if (!ok) return;
 
         const bizId = business?.id || "default";
 
@@ -1311,7 +1337,7 @@ export default function ExpensesPage() {
     }
 
     return (
-        <div className="min-h-screen bg-neutral-50/50 pb-20 md:pb-10">
+        <div>
             <div className={`mx-auto p-4 md:p-6 space-y-6 ${isAdmin ? "max-w-6xl" : "max-w-md"}`}>
                 {/* Header */}
                 <div className="space-y-4">

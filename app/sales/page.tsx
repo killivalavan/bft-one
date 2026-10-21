@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { supabaseClient } from "@/lib/supabaseClient";
 import { useTenant } from "@/lib/context/TenantContext";
 import { useToast } from "@/components/ui/Toast";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import {
@@ -26,6 +27,7 @@ import { format, addDays, isSameDay } from "date-fns";
 
 export default function SalesPage() {
     const { toast } = useToast();
+    const { confirm } = useConfirm();
     const { business } = useTenant();
     const [loading, setLoading] = useState(true);
     const [isAdmin, setIsAdmin] = useState(false);
@@ -217,7 +219,13 @@ export default function SalesPage() {
     }
 
     async function clearCash() {
-        if (!confirm("Clear cash amount for the selected date?")) return;
+        const ok = await confirm({
+            title: "Clear Cash Amount",
+            description: "Are you sure you want to clear the cash amount for the selected date?",
+            confirmLabel: "Clear Cash",
+            variant: "danger",
+        });
+        if (!ok) return;
         const now = new Date();
         let targetDate = date;
         if (isSameDay(date, new Date()) && now.getHours() < 9) {
@@ -308,7 +316,7 @@ export default function SalesPage() {
     const totalSettlement = numCash + numUpi;
 
     return (
-        <div className="min-h-screen bg-slate-50/50 pb-20 md:pb-12">
+        <div>
             <div className="max-w-5xl 2xl:max-w-6xl mx-auto p-4 sm:p-6 lg:p-8 space-y-6 sm:space-y-7">
                 {/* Header Row */}
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200/80">

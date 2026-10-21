@@ -13,7 +13,7 @@ import {
   Check, Edit3, Coffee, Receipt, CalendarCheck2, Boxes, Contact, Eye, EyeOff,
   ChevronRight, KeyRound, Sparkle, Store, BarChart3, Layers, Trash2, Download,
   MapPin, Clock, DollarSign, LayoutGrid, List, AlertOctagon, CheckSquare, ShieldAlert,
-  LifeBuoy, Bug, MessageSquare, Tag, Image as ImageIcon, Send, FileText, Cake
+  LifeBuoy, Bug, MessageSquare, Tag, Image as ImageIcon, Send, FileText, PackageCheck
 } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils/cn";
@@ -82,7 +82,7 @@ const MODULE_DEFINITIONS = [
   { key: "salary", label: "Payroll & Salary", icon: Wallet, desc: "Staff compensation & payslips" },
   { key: "contacts", label: "Contacts Directory", icon: Contact, desc: "Staff, emergency & vendor database" },
   { key: "b2b_bridge", label: "B2B Supply Bridge", icon: ArrowRightLeft, desc: "Inter-tenant supplier delivery, auto-stock-in & payment sync" },
-  { key: "baker_mode", label: "Baker / Simple View", icon: Cake, desc: "Enable home baker & micro-supplier dispatches, pricing & store ledgers" },
+  { key: "baker_mode", label: "B2B Supply & Wholesale", icon: PackageCheck, desc: "Enable wholesale supplier dispatches, product catalog & store ledgers" },
 ];
 
 enum SuperAdminView {

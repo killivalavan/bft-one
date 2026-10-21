@@ -175,49 +175,49 @@ function ToastItem({
       onTouchEnd={handleTouchEnd}
       className={twMerge(
         "pointer-events-auto relative w-full overflow-hidden select-none",
-        "rounded-2xl bg-slate-900/95 dark:bg-slate-950/95 backdrop-blur-xl",
+        "rounded-xl sm:rounded-2xl bg-slate-900/95 dark:bg-slate-950/95 backdrop-blur-xl",
         "text-slate-100 border border-slate-700/60",
-        "shadow-[0_16px_40px_-8px_rgba(0,0,0,0.45),0_6px_16px_-4px_rgba(0,0,0,0.25)]",
+        "shadow-[0_8px_20px_-4px_rgba(0,0,0,0.35)] sm:shadow-[0_16px_40px_-8px_rgba(0,0,0,0.45),0_6px_16px_-4px_rgba(0,0,0,0.25)]",
         config.glowColor,
         "transition-all duration-200 ease-out",
         isExiting
-          ? "opacity-0 scale-95 -translate-y-3 sm:translate-y-3 pointer-events-none"
-          : "opacity-100 scale-100 translate-y-0 animate-in fade-in zoom-in-95 slide-in-from-top-3 sm:slide-in-from-bottom-3 duration-250"
+          ? "opacity-0 scale-95 -translate-y-2 sm:translate-y-3 pointer-events-none"
+          : "opacity-100 scale-100 translate-y-0 animate-in fade-in zoom-in-95 slide-in-from-top-2 sm:slide-in-from-bottom-3 duration-200"
       )}
     >
-      <div className="flex items-start gap-3.5 p-3.5 sm:p-4">
+      <div className="flex items-start gap-2.5 sm:gap-3.5 p-2.5 sm:p-4">
         {/* Variant Icon Badge with ambient glow */}
         <div
           className={twMerge(
-            "shrink-0 flex items-center justify-center w-8 h-8 rounded-xl border mt-0.5",
+            "shrink-0 flex items-center justify-center w-6 h-6 sm:w-8 sm:h-8 rounded-lg sm:rounded-xl border mt-0.5",
             config.iconBg,
             config.iconColor
           )}
         >
-          <Icon className="w-4 h-4" />
+          <Icon className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
         </div>
 
         {/* Content */}
         <div className="flex-1 min-w-0 pr-1">
-          <div className="text-[13px] sm:text-sm font-semibold tracking-tight text-white leading-snug break-words">
+          <div className="text-xs sm:text-sm font-semibold tracking-tight text-white leading-snug break-words">
             {toast.title}
           </div>
           {toast.description && (
-            <div className="text-xs text-slate-300/90 leading-relaxed mt-0.5 break-words line-clamp-3">
+            <div className="text-[11px] sm:text-xs text-slate-300/90 leading-tight sm:leading-relaxed mt-0.5 break-words line-clamp-2 sm:line-clamp-3">
               {toast.description}
             </div>
           )}
 
           {/* Action button if provided */}
           {toast.action && (
-            <div className="mt-2.5">
+            <div className="mt-2 sm:mt-2.5">
               <button
                 type="button"
                 onClick={() => {
                   toast.action?.onClick();
                   triggerDismiss();
                 }}
-                className="inline-flex items-center text-xs font-semibold px-2.5 py-1 rounded-lg bg-white/10 hover:bg-white/20 active:bg-white/25 text-white border border-white/10 transition-colors cursor-pointer"
+                className="inline-flex items-center text-[10px] sm:text-xs font-semibold px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-md sm:rounded-lg bg-white/10 hover:bg-white/20 active:bg-white/25 text-white border border-white/10 transition-colors cursor-pointer"
               >
                 {toast.action.label}
               </button>
@@ -230,14 +230,14 @@ function ToastItem({
           type="button"
           onClick={triggerDismiss}
           aria-label="Dismiss notification"
-          className="shrink-0 p-1 -mr-1 -mt-1 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 active:bg-white/15 transition-colors cursor-pointer"
+          className="shrink-0 p-1 -mr-1 -mt-0.5 sm:-mt-1 rounded-md sm:rounded-lg text-slate-400 hover:text-white hover:bg-white/10 active:bg-white/15 transition-colors cursor-pointer"
         >
-          <X className="w-4 h-4" />
+          <X className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
         </button>
       </div>
 
       {/* Progress countdown bar */}
-      <div className="h-[2.5px] w-full bg-white/5 overflow-hidden">
+      <div className="h-[2px] sm:h-[2.5px] w-full bg-white/5 overflow-hidden">
         <div
           className={twMerge("h-full transition-colors", config.progressColor)}
           style={{
@@ -276,20 +276,19 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
 
       {/* 
         Responsive Toaster Container:
-        - Small Viewports (sv / mobile): Top-center pill location, padding for safe area,
-          preventing collisions with bottom navigation, floating checkout buttons, or virtual keyboard.
-        - Large Viewports (lv / desktop): Bottom-right floating stack, leaving top headers,
-          profile menu, store switchers, and central tables clear.
+        - Small Viewports (sv / mobile): Top-center compact pill (max-w-[340px]), safe area inset,
+          ergonomic padding preventing obstruction of headers and interaction areas.
+        - Large Viewports (lv / desktop): Bottom-right floating stack.
       */}
       <div
         aria-live="polite"
         role="region"
         className={twMerge(
-          "pointer-events-none fixed z-[120] flex flex-col gap-2.5",
-          // Mobile (SV): Top-center with safe area inset
-          "top-[max(0.75rem,env(safe-area-inset-top,0.75rem))] left-3 right-3 items-center max-w-md mx-auto",
+          "pointer-events-none fixed z-[120] flex flex-col gap-1.5 sm:gap-2.5",
+          // Mobile (SV): Top-center compact pill with safe area inset
+          "top-[max(0.5rem,env(safe-area-inset-top,0.5rem))] left-3 right-3 items-center max-w-[340px] sm:max-w-sm w-full mx-auto",
           // Desktop (LV): Bottom-right stack
-          "sm:top-auto sm:left-auto sm:right-6 sm:bottom-6 sm:items-end sm:max-w-sm sm:w-full sm:mx-0"
+          "sm:top-auto sm:left-auto sm:right-6 sm:bottom-6 sm:items-end sm:mx-0"
         )}
       >
         {toasts.map((t) => (

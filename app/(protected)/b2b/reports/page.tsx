@@ -6,11 +6,11 @@ import { useTenant } from "@/lib/context/TenantContext";
 import { useToast } from "@/components/ui/Toast";
 import { cn } from "@/lib/utils/cn";
 import { supabaseClient } from "@/lib/supabaseClient";
-import { format } from "date-fns";
+import { format, addMonths, subMonths } from "date-fns";
 import {
   FileSpreadsheet, TrendingUp, TrendingDown, Store, Package, Receipt,
   Calendar, ArrowRight, Search, Download, CheckCircle2,
-  PieChart, DollarSign
+  PieChart, DollarSign, ChevronLeft, ChevronRight
 } from "lucide-react";
 import { INITIAL_BAKER_PRODUCTS, BakerProduct, capitalizeWords } from "../products/page";
 import { formatCafeName } from "@/lib/utils/bakerUtils";
@@ -220,7 +220,7 @@ export default function BakerReportsPage() {
 
     filteredInvoices.forEach((inv) => {
       (inv.items || []).forEach((it: any) => {
-        const pName = capitalizeWords(it.name || "Bakery Item");
+        const pName = capitalizeWords(it.name || "Product Item");
         const cleanKey = (it.name || "").trim().toLowerCase();
         const qty = Number(it.qty) || 0;
         const rate = Number(it.rate) || 0;
@@ -286,6 +286,34 @@ export default function BakerReportsPage() {
     return productProfitData.filter((p) => p.productName.toLowerCase().includes(q));
   }, [productProfitData, searchQuery]);
 
+  // Current Month/Year keys for quick reset and future bounds
+  const currentMonthKey = useMemo(() => format(new Date(), "yyyy-MM"), []);
+  const currentYearKey = useMemo(() => format(new Date(), "yyyy"), []);
+  const isCurrentMonth = selectedMonth === currentMonthKey;
+  const isCurrentYear = selectedYear === currentYearKey;
+
+  // Arrow Navigation: Month (-1 = Previous, +1 = Next)
+  const handleNavigateMonth = (direction: -1 | 1) => {
+    try {
+      const [y, m] = selectedMonth.split("-").map(Number);
+      const currentDate = new Date(y, m - 1, 1);
+      const targetDate = direction === 1 ? addMonths(currentDate, 1) : subMonths(currentDate, 1);
+      setSelectedMonth(format(targetDate, "yyyy-MM"));
+    } catch {
+      setSelectedMonth(currentMonthKey);
+    }
+  };
+
+  // Arrow Navigation: Year (-1 = Previous, +1 = Next)
+  const handleNavigateYear = (direction: -1 | 1) => {
+    try {
+      const y = parseInt(selectedYear);
+      setSelectedYear(String(y + direction));
+    } catch {
+      setSelectedYear(currentYearKey);
+    }
+  };
+
   // Period Title Label
   const periodLabel = useMemo(() => {
     if (periodMode === "month") {
@@ -329,7 +357,7 @@ export default function BakerReportsPage() {
       // Export Product-wise Profit Breakdown
       csvContent += `PRODUCT PROFIT STATEMENT - ${periodLabel.toUpperCase()}\n`;
       csvContent += `Generated Date: ${format(new Date(), "dd-MMM-yyyy")}\n\n`;
-      csvContent += "Bakery Product,Pieces Dispatched,Unit Selling Price (INR),Unit Making Cost (INR),Total Revenue (INR),Total Cost (INR),Net Profit (INR),Profit Margin (%)\n";
+      csvContent += "Product Item,Pieces Dispatched,Unit Selling Price (INR),Unit Making Cost (INR),Total Revenue (INR),Total Cost (INR),Net Profit (INR),Profit Margin (%)\n";
 
       productProfitData.forEach((p) => {
         csvContent += `"${p.productName}",${p.piecesSold},${p.sellingPrice},${p.makingCost},${p.revenue},${Math.round(p.cost)},${Math.round(p.profit)},${p.marginPct}%\n`;
@@ -343,7 +371,7 @@ export default function BakerReportsPage() {
     const link = document.createElement("a");
     link.href = url;
     const safePeriod = periodLabel.replace(/[^a-zA-Z0-9]/g, "_");
-    link.download = `Baker_${activeView === "cafe" ? "Cafe" : "Product"}_Profit_${safePeriod}.csv`;
+    link.download = `B2B_${activeView === "cafe" ? "Store" : "Product"}_Profit_${safePeriod}.csv`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -357,7 +385,7 @@ export default function BakerReportsPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] pb-24">
+    <div className="space-y-6">
       {/* Top Header - docks cleanly below AppShell mobile header on mobile */}
       <div className="bg-white border-b border-[#E2E8F0] sticky top-14 md:top-0 z-20 shadow-2xs">
         <div className="max-w-6xl mx-auto px-4 py-3 sm:py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
@@ -368,14 +396,14 @@ export default function BakerReportsPage() {
             <div className="min-w-0">
               <div className="flex items-center gap-2 whitespace-nowrap">
                 <h1 className="text-sm sm:text-xl font-extrabold text-[#0F172A] tracking-tight whitespace-nowrap">
-                  Reports &amp; Profit Intelligence
+                  Profit &amp; Analytics
                 </h1>
                 <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-blue-100 text-blue-800 border border-blue-200 shrink-0 whitespace-nowrap">
                   {periodLabel}
                 </span>
               </div>
               <p className="text-[11px] sm:text-xs text-[#64748B] hidden sm:block">
-                Analyze net profit café-wise and product-wise across months and years
+                Revenue, operational expenses, net margins &amp; store performance analytics
               </p>
             </div>
           </div>
@@ -387,7 +415,7 @@ export default function BakerReportsPage() {
               className="px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl text-[10px] sm:text-xs font-extrabold bg-[#2563EB] hover:bg-blue-700 text-white transition-all shadow-xs flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0"
             >
               <FileSpreadsheet size={14} className="shrink-0" />
-              <span>Export {activeView === "cafe" ? "Café" : "Product"} Excel (CSV)</span>
+              <span>Export Financial Report (CSV)</span>
             </button>
           </div>
         </div>
@@ -400,7 +428,7 @@ export default function BakerReportsPage() {
         {/* ==================================================== */}
         {/* PERIOD SELECTOR BAR (Month-wise / Year-wise / All)   */}
         {/* ==================================================== */}
-        <div className="bg-white p-4 rounded-3xl border border-[#E2E8F0] shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-3.5">
+        <div className="bg-white p-4 rounded-3xl border border-[#E2E8F0] shadow-xs flex flex-col lg:flex-row lg:items-center justify-between gap-3.5">
           {/* Period Mode Pills - Full-width 3-way grid on mobile, flex on desktop */}
           <div className="grid grid-cols-3 sm:flex sm:items-center gap-1 p-1 bg-slate-100 rounded-2xl border border-slate-200 w-full sm:w-auto shrink-0 shadow-2xs">
             <button
@@ -443,49 +471,137 @@ export default function BakerReportsPage() {
             </button>
           </div>
 
-          {/* Dynamic Month or Year Dropdown & Delivery Slips Count */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between sm:justify-end gap-2.5 w-full md:w-auto">
+          {/* Delivery Slips Indicator & Right-Aligned Calendar Arrow Navigator */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between lg:justify-end gap-3 w-full lg:w-auto">
+            {/* Delivery Slips Indicator (placed before months) */}
+            <div className="flex items-center gap-2 text-xs text-slate-500 whitespace-nowrap shrink-0">
+              <span className={cn(
+                "w-2 h-2 rounded-full shrink-0",
+                filteredInvoices.length > 0 ? "bg-blue-500" : "bg-slate-300"
+              )} />
+              <span>
+                {filteredInvoices.length === 0 ? (
+                  <>
+                    <span className="text-slate-500 font-medium">No delivery</span>
+                    {periodMode !== "all" && (
+                      <span className="text-slate-400 font-medium"> in {periodLabel}</span>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <strong className="text-[#0F172A] font-extrabold">{filteredInvoices.length}</strong> delivery {filteredInvoices.length === 1 ? "slip" : "slips"}
+                    {periodMode !== "all" && (
+                      <span className="text-slate-400 font-medium"> in {periodLabel}</span>
+                    )}
+                  </>
+                )}
+              </span>
+            </div>
+
+            {/* Calendar Left/Right Arrow Navigator (Pushed to the right) */}
             {periodMode === "month" && (
-              <div className="flex items-center justify-between sm:justify-start gap-2">
-                <label className="text-[11px] sm:text-xs font-bold text-slate-500 whitespace-nowrap">Select Month:</label>
-                <select
-                  value={selectedMonth}
-                  onChange={(e) => setSelectedMonth(e.target.value)}
-                  className="px-3 py-1.5 rounded-xl text-xs font-extrabold bg-slate-50 border border-slate-200 text-[#0F172A] focus:outline-none focus:ring-2 focus:ring-blue-500 whitespace-nowrap"
-                >
-                  {availableMonths.map((m) => {
-                    const [y, mm] = m.split("-");
-                    const d = new Date(parseInt(y), parseInt(mm) - 1, 1);
-                    return (
-                      <option key={m} value={m}>
-                        {format(d, "MMMM yyyy")}
-                      </option>
-                    );
-                  })}
-                </select>
+              <div className="flex items-center gap-1.5 shrink-0 justify-between sm:justify-end">
+                {/* Quick return to This Month (placed on the left of month navigator) */}
+                {!isCurrentMonth && (
+                  <button
+                    type="button"
+                    onClick={() => setSelectedMonth(currentMonthKey)}
+                    className="text-[11px] font-bold text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100/70 border border-blue-200/60 px-2.5 py-1.5 rounded-xl transition cursor-pointer whitespace-nowrap shadow-2xs active:scale-95"
+                    title="Jump to Current Month"
+                  >
+                    This Month
+                  </button>
+                )}
+
+                {/* Arrow Nav Pill Container (Far Right) */}
+                <div className="flex items-center gap-1 bg-slate-100/90 border border-slate-200/90 rounded-2xl p-1 shadow-2xs">
+                  <button
+                    type="button"
+                    onClick={() => handleNavigateMonth(-1)}
+                    className="p-1.5 rounded-xl hover:bg-white text-slate-600 hover:text-blue-600 hover:shadow-2xs transition-all cursor-pointer active:scale-95"
+                    title="Previous Month"
+                    aria-label="Previous Month"
+                  >
+                    <ChevronLeft size={16} />
+                  </button>
+
+                  <div className="px-3 py-1 text-center min-w-[130px] sm:min-w-[155px] flex items-center justify-center gap-2">
+                    <Calendar size={13} className="text-blue-600 shrink-0" />
+                    <span className="text-xs sm:text-sm font-extrabold text-[#0F172A] tracking-tight whitespace-nowrap">
+                      {periodLabel}
+                    </span>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => handleNavigateMonth(1)}
+                    disabled={isCurrentMonth}
+                    className={cn(
+                      "p-1.5 rounded-xl transition-all active:scale-95",
+                      isCurrentMonth
+                        ? "opacity-30 cursor-not-allowed text-slate-400"
+                        : "hover:bg-white text-slate-600 hover:text-blue-600 hover:shadow-2xs cursor-pointer"
+                    )}
+                    title={isCurrentMonth ? "Current Month (Latest)" : "Next Month"}
+                    aria-label="Next Month"
+                  >
+                    <ChevronRight size={16} />
+                  </button>
+                </div>
               </div>
             )}
 
             {periodMode === "year" && (
-              <div className="flex items-center justify-between sm:justify-start gap-2">
-                <label className="text-[11px] sm:text-xs font-bold text-slate-500 whitespace-nowrap">Select Year:</label>
-                <select
-                  value={selectedYear}
-                  onChange={(e) => setSelectedYear(e.target.value)}
-                  className="px-3 py-1.5 rounded-xl text-xs font-extrabold bg-slate-50 border border-slate-200 text-[#0F172A] focus:outline-none focus:ring-2 focus:ring-blue-500 whitespace-nowrap"
-                >
-                  {availableYears.map((yr) => (
-                    <option key={yr} value={yr}>
-                      Year {yr}
-                    </option>
-                  ))}
-                </select>
+              <div className="flex items-center gap-1.5 shrink-0 justify-between sm:justify-end">
+                {/* Quick return to This Year (placed on the left of year navigator) */}
+                {!isCurrentYear && (
+                  <button
+                    type="button"
+                    onClick={() => setSelectedYear(currentYearKey)}
+                    className="text-[11px] font-bold text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100/70 border border-blue-200/60 px-2.5 py-1.5 rounded-xl transition cursor-pointer whitespace-nowrap shadow-2xs active:scale-95"
+                    title="Jump to Current Year"
+                  >
+                    This Year
+                  </button>
+                )}
+
+                {/* Arrow Nav Pill Container (Far Right) */}
+                <div className="flex items-center gap-1 bg-slate-100/90 border border-slate-200/90 rounded-2xl p-1 shadow-2xs">
+                  <button
+                    type="button"
+                    onClick={() => handleNavigateYear(-1)}
+                    className="p-1.5 rounded-xl hover:bg-white text-slate-600 hover:text-blue-600 hover:shadow-2xs transition-all cursor-pointer active:scale-95"
+                    title="Previous Year"
+                    aria-label="Previous Year"
+                  >
+                    <ChevronLeft size={16} />
+                  </button>
+
+                  <div className="px-3 py-1 text-center min-w-[90px] sm:min-w-[110px] flex items-center justify-center gap-2">
+                    <Calendar size={13} className="text-blue-600 shrink-0" />
+                    <span className="text-xs sm:text-sm font-extrabold text-[#0F172A] tracking-tight whitespace-nowrap">
+                      Year {selectedYear}
+                    </span>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => handleNavigateYear(1)}
+                    disabled={isCurrentYear}
+                    className={cn(
+                      "p-1.5 rounded-xl transition-all active:scale-95",
+                      isCurrentYear
+                        ? "opacity-30 cursor-not-allowed text-slate-400"
+                        : "hover:bg-white text-slate-600 hover:text-blue-600 hover:shadow-2xs cursor-pointer"
+                    )}
+                    title={isCurrentYear ? "Current Year (Latest)" : "Next Year"}
+                    aria-label="Next Year"
+                  >
+                    <ChevronRight size={16} />
+                  </button>
+                </div>
               </div>
             )}
-
-            <div className="text-[11px] sm:text-xs font-semibold text-slate-500 whitespace-nowrap shrink-0">
-              <strong className="text-[#0F172A]">{filteredInvoices.length}</strong> delivery slip{filteredInvoices.length === 1 ? "" : "s"} in {periodLabel}
-            </div>
           </div>
         </div>
 

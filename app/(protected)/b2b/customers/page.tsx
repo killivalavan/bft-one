@@ -10,6 +10,7 @@ import { format } from "date-fns";
 import { generateCombinedLedgerPdf, CombinedLedgerPdfData, CombinedLedgerTransaction } from "@/lib/utils/combinedLedgerPdf";
 import { generateBillPdf, BillPdfData } from "@/lib/utils/billPdf";
 import { formatCafeName, capitalizeWords, sanitizeBakerStores } from "@/lib/utils/bakerUtils";
+import { generateWhatsAppSlipMessage } from "@/lib/utils/b2bSlipWhatsapp";
 import {
   fetchB2BClients,
   saveB2BClient,
@@ -25,6 +26,7 @@ import {
   Send, MapPin, Calendar,
   Clock, Sparkles, RotateCcw, Check, ArrowRightLeft
 } from "lucide-react";
+import { SelectDropdown } from "@/components/ui/SelectDropdown";
 
 export interface CafeCustomer {
   id: string;
@@ -548,7 +550,7 @@ export default function BakerCustomersPage() {
   };
 
   // Trigger Combined Ledger PDF Export for a Client
-  const handleExportCombinedPdf = (
+  const handleExportCombinedPdf = async (
     clientId: string,
     preset: "today" | "week" | "month" | "custom" | "all",
     customStart?: string,
@@ -605,6 +607,7 @@ export default function BakerCustomersPage() {
       businessPhone: business?.phone || "+91 98765 43210",
       businessAddress: business?.address || "OMR, Chennai",
       upiId: business?.upi_id?.trim() || "",
+      logoUrl: business?.logo_url || undefined,
       mode: "client",
       entityName: client.name,
       phone: client.phone,
@@ -622,7 +625,7 @@ export default function BakerCustomersPage() {
       transactions,
     };
 
-    generateCombinedLedgerPdf(pdfData);
+    await generateCombinedLedgerPdf(pdfData);
 
     toast({
       title: "Ledger Statement Exported! 📄",
@@ -667,7 +670,7 @@ export default function BakerCustomersPage() {
   ).length;
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] pb-24">
+    <div className="space-y-6">
       {/* ==================================================== */}
       {/* TOP HEADER WITH SEARCH & EXPORT ACTION               */}
       {/* ==================================================== */}
@@ -1691,17 +1694,21 @@ export default function BakerCustomersPage() {
                 <label className="text-[11px] font-extrabold text-slate-700 block mb-1 uppercase tracking-wider">
                   Select Client Account
                 </label>
-                <select
+                <SelectDropdown
                   value={exportClientId}
-                  onChange={(e) => setExportClientId(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white font-semibold text-[#0F172A] focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  {cafesWithLedger.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {formatCafeName(c.name)} {c.phone ? `(${c.phone})` : ""}
-                    </option>
-                  ))}
-                </select>
+                  onChange={(val) => setExportClientId(val)}
+                  options={cafesWithLedger.map((c) => ({
+                    value: c.id,
+                    label: formatCafeName(c.name),
+                    sublabel: c.phone ? `Phone: ${c.phone}` : undefined,
+                    badge: c.unpaidDues > 0 ? `₹${c.unpaidDues.toLocaleString("en-IN")} due` : "✓ Clear",
+                    badgeVariant: c.unpaidDues > 0 ? "danger" : "success",
+                    icon: <Building2 size={13} className="text-slate-400" />,
+                  }))}
+                  size="md"
+                  placeholder="Select client account..."
+                  searchPlaceholder="Search client name..."
+                />
               </div>
 
               {/* Date Presets */}
@@ -1879,6 +1886,10 @@ export default function BakerCustomersPage() {
                       invoiceTitle: isRet ? "RETURN & CREDIT SLIP" : "DELIVERY SLIP",
                       businessName: business?.name || "Dispatch Central",
                       businessPhone: business?.phone || "+91 98765 43210",
+                      businessAddress: business?.address || undefined,
+                      businessGstin: business?.gstin || undefined,
+                      logoUrl: business?.logo_url || undefined,
+                      signatureUrl: business?.signature_url || undefined,
                       customerName: viewingSlipDetails.customerName,
                       customerPhone: viewingSlipDetails.customerPhone,
                       date: viewingSlipDetails.date,
@@ -1903,13 +1914,31 @@ export default function BakerCustomersPage() {
                 <button
                   type="button"
                   onClick={() => {
-                    const phoneClean = (viewingSlipDetails.customerPhone || "").replace(/[^0-9]/g, "");
-                    const items = viewingSlipDetails.items || [];
-                    const itemsText = items.map((it: any) => `• ${it.qty}x ${it.name} = ₹${Math.abs(it.amount || it.qty * it.rate)}`).join("\n");
-                    const msg = `*${isRet ? "RETURN SLIP" : "DELIVERY SLIP"} - ${business?.name || "SeyalPro"}*\nSlip: ${viewingSlipDetails.invoiceNumber}\nDate: ${viewingSlipDetails.date}\nClient: ${viewingSlipDetails.customerName}\n\n*Items:*\n${itemsText}\n\n*Total:* ${isRet ? "-" : ""}₹${absTotal}`;
-                    const waUrl = phoneClean
-                      ? `https://wa.me/${phoneClean.startsWith("91") ? phoneClean : `91${phoneClean}`}?text=${encodeURIComponent(msg)}`
-                      : `https://wa.me/?text=${encodeURIComponent(msg)}`;
+                    const items = (viewingSlipDetails.items || []).map((it: any) => ({
+                      name: capitalizeWords(it.name),
+                      qty: it.qty,
+                      rate: it.rate,
+                      amount: it.amount,
+                    }));
+
+                    const { message, waUrl } = generateWhatsAppSlipMessage({
+                      slip: {
+                        invoiceNumber: viewingSlipDetails.invoiceNumber,
+                        date: viewingSlipDetails.date,
+                        customerName: viewingSlipDetails.customerName,
+                        customerPhone: viewingSlipDetails.customerPhone || "",
+                        totalAmount: viewingSlipDetails.totalAmount,
+                        status: viewingSlipDetails.status,
+                        items,
+                      },
+                      business,
+                      isReturn: isRet,
+                    });
+
+                    if (typeof navigator !== "undefined" && navigator.clipboard) {
+                      navigator.clipboard.writeText(message).catch(() => {});
+                    }
+
                     window.open(waUrl, "_blank");
                   }}
                   className="flex-1 py-2.5 rounded-xl text-xs font-extrabold bg-[#16A34A] hover:bg-[#15803D] text-white flex items-center justify-center gap-1.5 cursor-pointer shadow-xs"

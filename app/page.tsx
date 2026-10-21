@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { supabaseClient } from "@/lib/supabaseClient";
 import { useUser } from "@/lib/hooks/useUser";
@@ -15,12 +16,12 @@ import {
 
 import { AdminDashboardView } from "@/components/admin-dashboard/AdminDashboardView";
 import { EmployeeHubView } from "@/components/employee-hub/EmployeeHubView";
-import { SimpleBakerDashboardView } from "@/components/baker/SimpleBakerDashboardView";
 
 export default function Home() {
+  const router = useRouter();
   const { user, loading: userLoading } = useUser();
   const { flags, loading: profileLoading } = useProfile();
-  const { isModuleEnabled } = useTenant();
+  const { isModuleEnabled, isResolved } = useTenant();
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [previewStaffId, setPreviewStaffId] = useState<string | null>(null);
 
@@ -63,6 +64,13 @@ export default function Home() {
   const isBakerEnabled = isModuleEnabled ? isModuleEnabled("baker_mode") : false;
   const isBillingEnabled = isModuleEnabled ? isModuleEnabled("billing") : true;
 
+  const isAdmin = Boolean(
+    flags?.isAdmin ||
+    flags?.isSuperAdmin ||
+    (userEmail && userEmail.toLowerCase().includes("admin")) ||
+    (user && user.email && user.email.toLowerCase().includes("admin"))
+  );
+
   useEffect(() => {
     if (isBakerEnabled && !isBillingEnabled && appMode !== "baker") {
       setAppMode("baker");
@@ -76,6 +84,22 @@ export default function Home() {
       } catch {}
     }
   }, [isBakerEnabled, isBillingEnabled, appMode]);
+
+  // If unauthenticated: redirect directly to /login
+  useEffect(() => {
+    if (!userLoading && !user) {
+      router.replace("/login");
+    }
+  }, [user, userLoading, router]);
+
+  // If in B2B mode: redirect directly to /b2b (full B2B Executive Suite with sidebar)
+  useEffect(() => {
+    if (!userLoading && user && isAdmin && isResolved) {
+      if (isBakerEnabled && (!isBillingEnabled || appMode === "baker")) {
+        router.replace("/b2b");
+      }
+    }
+  }, [userLoading, user, isAdmin, isResolved, isBakerEnabled, isBillingEnabled, appMode, router]);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -98,13 +122,6 @@ export default function Home() {
       try { localStorage.removeItem('bftone_display_email'); } catch { }
     }
   }, [user, isBillingEnabled]);
-
-  const isAdmin = Boolean(
-    flags?.isAdmin ||
-    flags?.isSuperAdmin ||
-    (userEmail && userEmail.toLowerCase().includes("admin")) ||
-    (user && user.email && user.email.toLowerCase().includes("admin"))
-  );
 
   // Dashboard Items with Deep Navy + Blue & Semantic Color Mapping
   const baseItems: DashboardItem[] = [
@@ -240,8 +257,8 @@ export default function Home() {
     }
   ];
 
-  // While auth state is resolving, render a smooth minimal loading screen
-  if (userLoading || profileLoading) {
+  // While auth & tenant state is resolving, render a smooth minimal loading screen
+  if (userLoading || profileLoading || !isResolved) {
     return (
       <div className="min-h-[70vh] flex items-center justify-center">
         <div className="flex flex-col items-center gap-3">
@@ -252,26 +269,13 @@ export default function Home() {
     );
   }
 
-  // If user is not authenticated, show sign-in prompt
+  // If user is not authenticated, redirecting to login
   if (!user) {
     return (
-      <div className="min-h-[70vh] flex items-center justify-center p-4">
-        <div className="max-w-md w-full bg-white border border-slate-200 rounded-3xl p-8 text-center shadow-lg space-y-4">
-          <div className="w-14 h-14 mx-auto rounded-2xl bg-blue-50 border border-blue-200 flex items-center justify-center text-blue-600">
-            <Shield className="w-7 h-7" />
-          </div>
-          <h2 className="text-xl font-bold text-slate-900">Sign in to SeyalPro</h2>
-          <p className="text-sm text-slate-500">
-            Please sign in with your employee account to view your dashboard.
-          </p>
-          <div className="pt-2">
-            <Link
-              href="/login"
-              className="inline-flex items-center justify-center w-full px-5 py-3 rounded-xl bg-blue-600 text-white font-semibold text-sm hover:bg-blue-700 transition shadow-sm"
-            >
-              Go to Login
-            </Link>
-          </div>
+      <div className="min-h-[70vh] flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-8 h-8 border-3 border-blue-600 border-t-transparent rounded-full animate-spin" />
+          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Redirecting to login...</p>
         </div>
       </div>
     );
@@ -302,18 +306,19 @@ export default function Home() {
   if (isAdmin) {
     if (isBakerEnabled && (!isBillingEnabled || appMode === "baker")) {
       return (
-        <SimpleBakerDashboardView
-          onSwitchToCafeMode={() => handleSwitchMode("cafe")}
-        />
+        <div className="min-h-[70vh] flex items-center justify-center">
+          <div className="flex flex-col items-center gap-3">
+            <div className="w-8 h-8 border-3 border-blue-600 border-t-transparent rounded-full animate-spin" />
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Loading B2B Supply Hub...</p>
+          </div>
+        </div>
       );
     }
 
     return (
-      <div className="min-h-screen">
-        <AdminDashboardView
-          baseItems={baseItems}
-        />
-      </div>
+      <AdminDashboardView
+        baseItems={baseItems}
+      />
     );
   }
 

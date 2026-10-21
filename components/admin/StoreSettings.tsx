@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from "react";
 import { supabaseClient } from "@/lib/supabaseClient";
-import { useTenant } from "@/lib/context/TenantContext";
+import { useTenant, isValidCustomLogo, isValidCustomSig } from "@/lib/context/TenantContext";
+import { getAuthHeaders } from "@/lib/auth/clientAuth";
 import { useToast } from "@/components/ui/Toast";
 import { Card, CardContent, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -21,20 +22,44 @@ import { formatCafeName } from "@/lib/utils/bakerUtils";
 import { cn } from "@/lib/utils/cn";
 
 export function StoreSettings() {
-  const { business, refreshBusiness } = useTenant();
+  const { business, refreshBusiness, isModuleEnabled } = useTenant();
   const { toast } = useToast();
   const { flags } = useProfile();
   const isSuperAdmin = !!flags?.isSuperAdmin;
+  const isTimesheetEnabled = isModuleEnabled("timesheet");
 
-  const [name, setName] = useState(formatCafeName(business?.name || "Royal Baker"));
-  const [logoUrl, setLogoUrl] = useState(business?.logo_url || "/dummy-logo.svg");
-  const [signatureUrl, setSignatureUrl] = useState((business as any)?.signature_url || "/default-signature.svg");
-  const [address, setAddress] = useState(
-    (business as any)?.address || "255, Rajiv Gandhi Salai (OMR), Navalur,\nChennai,\nTamil Nadu, India - 600130"
-  );
-  const [phone, setPhone] = useState((business as any)?.phone || "+91 98765 43210");
+  const [name, setName] = useState(formatCafeName(business?.name || ""));
+  const [logoUrl, setLogoUrl] = useState(() => {
+    if (typeof window !== "undefined" && business?.id) {
+      try {
+        const extra = JSON.parse(localStorage.getItem(`bftone_tenant_extra_${business.id}`) || "{}");
+        if (isValidCustomLogo(extra.logo_url)) return extra.logo_url;
+      } catch {}
+    }
+    return isValidCustomLogo(business?.logo_url) ? (business!.logo_url as string) : (business?.logo_url || "/dummy-logo.svg");
+  });
+  const [signatureUrl, setSignatureUrl] = useState(() => {
+    if (typeof window !== "undefined" && business?.id) {
+      try {
+        const extra = JSON.parse(localStorage.getItem(`bftone_tenant_extra_${business.id}`) || "{}");
+        if (isValidCustomSig(extra.signature_url)) return extra.signature_url;
+      } catch {}
+    }
+    const dbSig = (business as any)?.signature_url;
+    return isValidCustomSig(dbSig) ? dbSig : (dbSig || "/default-signature.svg");
+  });
+  const [address, setAddress] = useState((business as any)?.address || "");
+  const [phone, setPhone] = useState((business as any)?.phone || "");
   const [gstin, setGstin] = useState((business as any)?.gstin || "");
-  const [upiId, setUpiId] = useState((business as any)?.upi_id || "");
+  const [upiId, setUpiId] = useState(() => {
+    if (typeof window !== "undefined" && business?.id) {
+      try {
+        const extra = JSON.parse(localStorage.getItem(`bftone_tenant_extra_${business.id}`) || "{}");
+        if (extra.upi_id) return extra.upi_id;
+      } catch {}
+    }
+    return (business as any)?.upi_id || (business as any)?.enabled_modules?.upi_id || "";
+  });
 
   // Store Geofence & Location state
   const isInitialRoot = !business?.id || business?.id === "a0000000-0000-0000-0000-000000000001";
@@ -87,13 +112,23 @@ export function StoreSettings() {
         }
       } catch { }
 
-      setName(formatCafeName(business.name || localExtra.name || "Royal Baker"));
-      setLogoUrl(business.logo_url || localExtra.logo_url || "/dummy-logo.svg");
-      setSignatureUrl((business as any).signature_url || localExtra.signature_url || "/default-signature.svg");
+      setName(formatCafeName(business.name || localExtra.name || ""));
+
+      // Respect custom logo from DB or local storage over default placeholders
+      const hasCustomDbLogo = isValidCustomLogo(business.logo_url);
+      const hasCustomLocalLogo = isValidCustomLogo(localExtra.logo_url);
+      const resolvedLogo = hasCustomDbLogo ? (business.logo_url as string) : (hasCustomLocalLogo ? localExtra.logo_url : (business.logo_url || "/dummy-logo.svg"));
+      setLogoUrl(resolvedLogo);
+
+      const hasCustomDbSig = isValidCustomSig((business as any).signature_url);
+      const hasCustomLocalSig = isValidCustomSig(localExtra.signature_url);
+      const resolvedSig = hasCustomDbSig ? ((business as any).signature_url as string) : (hasCustomLocalSig ? localExtra.signature_url : ((business as any).signature_url || "/default-signature.svg"));
+      setSignatureUrl(resolvedSig);
+
       setAddress((business as any).address || localExtra.address || "");
       setPhone((business as any).phone || localExtra.phone || "");
       setGstin((business as any).gstin || localExtra.gstin || "");
-      setUpiId((business as any).upi_id || localExtra.upi_id || "");
+      setUpiId((business as any).upi_id || (business as any).enabled_modules?.upi_id || localExtra.upi_id || "");
 
       // Prioritize active business record from database, then tenant-scoped cache
       const isRootDefault = bizId === "a0000000-0000-0000-0000-000000000001";
@@ -128,7 +163,7 @@ export function StoreSettings() {
       setGeofenceRadius(Number(bRadius) || 150);
       setGeofenceEnabled(bEnabled !== false);
     }
-  }, [business?.id]);
+  }, [business?.id, business?.logo_url, (business as any)?.signature_url, (business as any)?.upi_id, (business as any)?.enabled_modules?.upi_id]);
 
   // Cropper Modal States
   const [cropperState, setCropperState] = useState<{
@@ -229,23 +264,72 @@ export function StoreSettings() {
     e.target.value = "";
   }
 
-  // Handle Crop Completion
-  function handleCropComplete(croppedDataUrl: string) {
-    if (cropperState.cropType === "logo") {
+  // Handle Crop Completion - Auto-save immediately to localStorage & Supabase DB so tab swaps NEVER lose it
+  async function handleCropComplete(croppedDataUrl: string) {
+    const isLogo = cropperState.cropType === "logo";
+    if (isLogo) {
       setLogoUrl(croppedDataUrl);
-      toast({
-        title: "Logo Cropped! ✂️",
-        description: "1:1 Square crop applied. Click 'Save All Changes' to save.",
-        variant: "success",
-      });
     } else {
       setSignatureUrl(croppedDataUrl);
-      toast({
-        title: "Signature Cropped! ✂️",
-        description: "Signature crop applied. Click 'Save All Changes' to save.",
-        variant: "success",
-      });
     }
+
+    if (!business?.id) return;
+
+    // 1. Instantly write to local tenant storage cache (guaranteed persistence across tab switches)
+    try {
+      const extraKey = `bftone_tenant_extra_${business.id}`;
+      const existingExtraStr = localStorage.getItem(extraKey);
+      const existingExtra = existingExtraStr ? JSON.parse(existingExtraStr) : {};
+      const updatedExtra = {
+        ...existingExtra,
+        ...(isLogo ? { logo_url: croppedDataUrl } : { signature_url: croppedDataUrl }),
+      };
+      localStorage.setItem(extraKey, JSON.stringify(updatedExtra));
+
+      const cachedStr = localStorage.getItem("bftone_tenant_cache");
+      if (cachedStr) {
+        const parsed = JSON.parse(cachedStr);
+        localStorage.setItem("bftone_tenant_cache", JSON.stringify({
+          ...parsed,
+          business: {
+            ...(parsed.business || {}),
+            ...(isLogo ? { logo_url: croppedDataUrl } : { signature_url: croppedDataUrl }),
+          },
+        }));
+      }
+    } catch (e) {
+      console.warn("Local asset storage write warning:", e);
+    }
+
+    // 2. Persist directly to backend database via API route
+    try {
+      const headers = await getAuthHeaders();
+      const res = await fetch("/api/business/profile", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          businessId: business.id,
+          ...(isLogo ? { logo_url: croppedDataUrl } : { signature_url: croppedDataUrl }),
+        })
+      });
+
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        console.warn("Backend API sync warning:", errJson);
+      } else {
+        await refreshBusiness();
+      }
+    } catch (e) {
+      console.warn("Direct DB sync warning:", e);
+    }
+
+    toast({
+      title: isLogo ? "Logo Saved & Applied! 🎉" : "Signature Saved & Applied! ✍️",
+      description: isLogo
+        ? "Your new logo is saved across all tabs and documents."
+        : "Your new authorised signature is saved across all documents.",
+      variant: "success",
+    });
   }
 
   // Dedicated direct saver for shop GPS coordinates (no need to submit whole form)
@@ -499,7 +583,13 @@ export function StoreSettings() {
           localStorage.setItem(`bftone_tenant_extra_${business.id}`, JSON.stringify(updatedProfile));
           const cached = localStorage.getItem("bftone_tenant_cache");
           const parsed = cached ? JSON.parse(cached) : {};
-          localStorage.setItem("bftone_tenant_cache", JSON.stringify({ ...parsed, ...updatedProfile }));
+          localStorage.setItem("bftone_tenant_cache", JSON.stringify({
+            ...parsed,
+            business: {
+              ...(parsed.business || {}),
+              ...updatedProfile,
+            },
+          }));
           // Scoped shop location cache for instant retrieval across Timesheet and Geofence gate
           if (numLat !== null && numLng !== null) {
             saveShopGeofence({
@@ -519,48 +609,31 @@ export function StoreSettings() {
 
       // 2. Persist via secure backend API route
       try {
-        const { data: { session } } = await supabaseClient.auth.getSession();
-        const token = session?.access_token;
-        await fetch("/api/business/profile", {
+        const headers = await getAuthHeaders();
+        const res = await fetch("/api/business/profile", {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            ...(token ? { Authorization: `Bearer ${token}` } : {})
-          },
+          headers,
           body: JSON.stringify({
             businessId: business.id,
             ...updatedProfile
           })
         });
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          console.warn("Backend API profile update warning:", errData);
+        } else {
+          await refreshBusiness();
+        }
       } catch (apiErr) {
         console.warn("Backend API sync warning:", apiErr);
       }
 
-      // 3. Best effort direct client update
-      try {
-        const directUpdates: any = {
-          logo_url: updatedProfile.logo_url,
-          upi_id: updatedProfile.upi_id,
-          geofence_lat: updatedProfile.geofence_lat,
-          geofence_lng: updatedProfile.geofence_lng,
-          geofence_radius_meters: updatedProfile.geofence_radius_meters,
-          geofence_enabled: updatedProfile.geofence_enabled,
-        };
-        // Only Super Admin is permitted to update business name directly in DB
-        if (isSuperAdmin && updatedProfile.name) {
-          directUpdates.name = updatedProfile.name;
-        }
-
-        await supabaseClient
-          .from("businesses")
-          .update(directUpdates)
-          .eq("id", business.id);
-      } catch (_) { }
-
       await refreshBusiness();
       toast({
         title: "Store Profile Updated! 🎉",
-        description: "Logo, signature, address, and timesheet location saved successfully",
+        description: isTimesheetEnabled
+          ? "Logo, signature, address, and timesheet location saved successfully"
+          : "Logo, signature, and address saved successfully",
         variant: "success",
       });
     } catch (err: any) {
@@ -596,7 +669,7 @@ export function StoreSettings() {
                 {logoUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
-                    src={logoUrl}
+                    src={logoUrl.startsWith("/dummy-logo.svg") ? `/dummy-logo.svg?v=5` : logoUrl}
                     alt="Store Logo"
                     className="w-full h-full object-contain p-2"
                   />
@@ -634,8 +707,43 @@ export function StoreSettings() {
 
                   <button
                     type="button"
-                    onClick={() => setLogoUrl("/dummy-logo.svg")}
-                    className="px-3 py-2 text-xs font-semibold text-emerald-700 hover:bg-emerald-50 rounded-xl transition-colors"
+                    onClick={async () => {
+                      setLogoUrl("/dummy-logo.svg");
+                      if (business?.id) {
+                        try {
+                          const extraKey = `bftone_tenant_extra_${business.id}`;
+                          const existingExtraStr = localStorage.getItem(extraKey);
+                          const existingExtra = existingExtraStr ? JSON.parse(existingExtraStr) : {};
+                          localStorage.setItem(extraKey, JSON.stringify({ ...existingExtra, logo_url: "/dummy-logo.svg" }));
+
+                          const cachedStr = localStorage.getItem("bftone_tenant_cache");
+                          if (cachedStr) {
+                            const parsed = JSON.parse(cachedStr);
+                            localStorage.setItem("bftone_tenant_cache", JSON.stringify({
+                              ...parsed,
+                              business: {
+                                ...(parsed.business || {}),
+                                logo_url: "/dummy-logo.svg",
+                              },
+                            }));
+                          }
+
+                          const headers = await getAuthHeaders();
+                          await fetch("/api/business/profile", {
+                            method: "POST",
+                            headers,
+                            body: JSON.stringify({
+                              businessId: business.id,
+                              logo_url: "/dummy-logo.svg",
+                            }),
+                          });
+
+                          await refreshBusiness();
+                          toast({ title: "Reset to Default Logo", description: "Default SeyalPro logo restored.", variant: "info" });
+                        } catch {}
+                      }
+                    }}
+                    className="px-3 py-2 text-xs font-semibold text-emerald-700 hover:bg-emerald-50 rounded-xl transition-colors cursor-pointer"
                   >
                     Reset to Default Logo
                   </button>
@@ -689,8 +797,43 @@ export function StoreSettings() {
 
                   <button
                     type="button"
-                    onClick={() => setSignatureUrl("/default-signature.svg")}
-                    className="px-3 py-2 text-xs font-semibold text-indigo-700 hover:bg-indigo-50 rounded-xl transition-colors"
+                    onClick={async () => {
+                      setSignatureUrl("/default-signature.svg");
+                      if (business?.id) {
+                        try {
+                          const extraKey = `bftone_tenant_extra_${business.id}`;
+                          const existingExtraStr = localStorage.getItem(extraKey);
+                          const existingExtra = existingExtraStr ? JSON.parse(existingExtraStr) : {};
+                          localStorage.setItem(extraKey, JSON.stringify({ ...existingExtra, signature_url: "/default-signature.svg" }));
+
+                          const cachedStr = localStorage.getItem("bftone_tenant_cache");
+                          if (cachedStr) {
+                            const parsed = JSON.parse(cachedStr);
+                            localStorage.setItem("bftone_tenant_cache", JSON.stringify({
+                              ...parsed,
+                              business: {
+                                ...(parsed.business || {}),
+                                signature_url: "/default-signature.svg",
+                              },
+                            }));
+                          }
+
+                          const headers = await getAuthHeaders();
+                          await fetch("/api/business/profile", {
+                            method: "POST",
+                            headers,
+                            body: JSON.stringify({
+                              businessId: business.id,
+                              signature_url: "/default-signature.svg",
+                            }),
+                          });
+
+                          await refreshBusiness();
+                          toast({ title: "Reset to Default Signature", description: "Default signature restored.", variant: "info" });
+                        } catch {}
+                      }
+                    }}
+                    className="px-3 py-2 text-xs font-semibold text-indigo-700 hover:bg-indigo-50 rounded-xl transition-colors cursor-pointer"
                   >
                     Use Default Signature
                   </button>
@@ -712,7 +855,7 @@ export function StoreSettings() {
                     </label>
                     {!isSuperAdmin ? (
                       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-50 text-amber-800 border border-amber-200 shadow-2xs">
-                        🔒 Locked (Super Admin Only)
+                        🔒 Locked by SeyalPro Admin
                       </span>
                     ) : (
                       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-50 text-emerald-800 border border-emerald-200">
@@ -796,8 +939,9 @@ export function StoreSettings() {
               </div>
             </div>
 
-            {/* 4. Store Physical Location & Attendance Geofence */}
-            <div className="p-5 rounded-2xl bg-sky-50/50 border border-sky-100/90 space-y-5">
+            {/* 4. Store Physical Location & Attendance Geofence (Only enabled when Timesheet module is enabled by Super Admin) */}
+            {isTimesheetEnabled && (
+              <div className="p-5 rounded-2xl bg-sky-50/50 border border-sky-100/90 space-y-5">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-xl bg-sky-100 text-sky-700 flex items-center justify-center font-bold shrink-0">
@@ -1098,6 +1242,7 @@ export function StoreSettings() {
                 )}
               </div>
             </div>
+          )}
 
             {/* Action Bar */}
             <div className="pt-4 border-t border-zinc-100 flex items-center justify-end gap-3">

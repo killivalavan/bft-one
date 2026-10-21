@@ -171,7 +171,8 @@ export async function authenticateRequest(
   const emailLower = userEmail.toLowerCase();
   const isSuperAdmin =
     emailLower === "admin@seyalpro.com" ||
-    (!!profile.is_super_admin && !profile.business_id);
+    emailLower === "admin@bft.com" ||
+    !!profile.is_super_admin;
   const isStockManager = !!profile.is_stock_manager;
 
   // 4. Role Authorization Checks

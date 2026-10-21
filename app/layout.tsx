@@ -2,22 +2,10 @@ import type { Metadata } from "next";
 import { Plus_Jakarta_Sans, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { ToastProvider } from "@/components/ui/Toast";
+import { ConfirmProvider } from "@/components/ui/ConfirmDialog";
 import { TenantProvider } from "@/lib/context/TenantContext";
 import { OfflineBanner } from "@/components/offline/OfflineBanner";
 import { PWARegister } from "@/components/offline/PWARegister";
-
-const plusJakartaSans = Plus_Jakarta_Sans({
-  variable: "--font-sans",
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700", "800"],
-  display: "swap",
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-mono",
-  subsets: ["latin"],
-});
-
 import { AppShell } from "@/components/layout/AppShell";
 
 export const metadata: Metadata = {
@@ -54,6 +42,18 @@ export const metadata: Metadata = {
   },
 };
 
+const plusJakartaSans = Plus_Jakarta_Sans({
+  variable: "--font-sans",
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700", "800"],
+  display: "swap",
+});
+
+const geistMono = Geist_Mono({
+  variable: "--font-mono",
+  subsets: ["latin"],
+});
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -67,9 +67,11 @@ export default function RootLayout({
       >
         <TenantProvider>
           <ToastProvider>
-            <PWARegister />
-            <OfflineBanner />
-            <AppShell>{children}</AppShell>
+            <ConfirmProvider>
+              <PWARegister />
+              <OfflineBanner />
+              <AppShell>{children}</AppShell>
+            </ConfirmProvider>
           </ToastProvider>
         </TenantProvider>
       </body>

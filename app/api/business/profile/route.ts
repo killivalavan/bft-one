@@ -35,91 +35,87 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Unauthorized for this business" }, { status: 403 });
     }
 
-    // Prepare update payloads
-    const fullPayload: any = {
-      logo_url: logo_url || "/dummy-logo.svg",
-      signature_url: signature_url || "/default-signature.svg",
-      address: address?.trim() || "",
-      phone: phone?.trim() || "",
-      gstin: gstin?.trim() || "",
-      upi_id: upi_id?.trim() || "",
+    // Prepare update payloads - ONLY use columns that exist in public.businesses table
+    const updatePayload: any = {
       updated_at: new Date().toISOString(),
     };
+
+    if (logo_url !== undefined) {
+      updatePayload.logo_url = logo_url || "/dummy-logo.svg";
+    }
+    if (signature_url !== undefined) {
+      updatePayload.signature_url = signature_url || "/default-signature.svg";
+    }
+    if (address !== undefined) {
+      updatePayload.address = address?.trim() || "";
+    }
+    if (phone !== undefined) {
+      updatePayload.phone = phone?.trim() || "";
+    }
+    if (gstin !== undefined) {
+      updatePayload.gstin = gstin?.trim() || "";
+    }
+
+    if (upi_id !== undefined) {
+      const { data: currentBiz } = await supa
+        .from("businesses")
+        .select("enabled_modules")
+        .eq("id", targetBizId)
+        .maybeSingle();
+
+      updatePayload.enabled_modules = {
+        ...(currentBiz?.enabled_modules || {}),
+        upi_id: upi_id?.trim() || "",
+      };
+    }
 
     // SECURITY RULE: Store / Business name CANNOT be changed by regular clients/tenants.
     // Only SeyalPro Super Admin is permitted to change store names to prevent tenant spoofing or subscription hijacking.
     if (caller.isSuperAdmin && name?.trim()) {
-      fullPayload.name = name.trim();
+      updatePayload.name = name.trim();
     }
 
-    if (geofence_lat !== undefined) fullPayload.geofence_lat = geofence_lat !== null ? Number(geofence_lat) : null;
-    if (geofence_lng !== undefined) fullPayload.geofence_lng = geofence_lng !== null ? Number(geofence_lng) : null;
-    if (geofence_radius_meters !== undefined) fullPayload.geofence_radius_meters = Number(geofence_radius_meters) || 150;
-    if (geofence_enabled !== undefined) fullPayload.geofence_enabled = !!geofence_enabled;
+    if (geofence_lat !== undefined) updatePayload.geofence_lat = geofence_lat !== null ? Number(geofence_lat) : null;
+    if (geofence_lng !== undefined) updatePayload.geofence_lng = geofence_lng !== null ? Number(geofence_lng) : null;
+    if (geofence_radius_meters !== undefined) updatePayload.geofence_radius_meters = Number(geofence_radius_meters) || 150;
+    if (geofence_enabled !== undefined) updatePayload.geofence_enabled = !!geofence_enabled;
 
-    // Try updating with all columns
+    // Try updating with validated columns
     let { data: updatedBiz, error: updateErr } = await supa
       .from("businesses")
-      .update(fullPayload)
+      .update(updatePayload)
       .eq("id", targetBizId)
       .select("*")
       .maybeSingle();
 
     if (updateErr) {
-      console.warn("Full business profile update failed, falling back to core columns:", updateErr.message);
-      // Fallback 1: update core columns + geofence columns (present in businesses table)
-      const geoCorePayload: any = {
-        logo_url: logo_url || "/dummy-logo.svg",
+      console.warn("Business profile update failed, falling back to minimal payload:", updateErr.message);
+      // Fallback: minimal logo and geofence
+      const minimalPayload: any = {
         updated_at: new Date().toISOString(),
       };
-      if (caller.isSuperAdmin && name?.trim()) {
-        geoCorePayload.name = name.trim();
-      }
-      if (geofence_lat !== undefined) geoCorePayload.geofence_lat = geofence_lat !== null ? Number(geofence_lat) : null;
-      if (geofence_lng !== undefined) geoCorePayload.geofence_lng = geofence_lng !== null ? Number(geofence_lng) : null;
-      if (geofence_radius_meters !== undefined) geoCorePayload.geofence_radius_meters = Number(geofence_radius_meters) || 150;
-      if (geofence_enabled !== undefined) geoCorePayload.geofence_enabled = !!geofence_enabled;
+      if (logo_url !== undefined) minimalPayload.logo_url = logo_url || "/dummy-logo.svg";
+      if (caller.isSuperAdmin && name?.trim()) minimalPayload.name = name.trim();
+      if (geofence_lat !== undefined) minimalPayload.geofence_lat = geofence_lat !== null ? Number(geofence_lat) : null;
+      if (geofence_lng !== undefined) minimalPayload.geofence_lng = geofence_lng !== null ? Number(geofence_lng) : null;
 
-      let { data: fallbackBiz, error: geoErr } = await supa
+      const { data: minBiz, error: minErr } = await supa
         .from("businesses")
-        .update(geoCorePayload)
+        .update(minimalPayload)
         .eq("id", targetBizId)
         .select("*")
         .maybeSingle();
 
-      if (geoErr) {
-        // Fallback 2: minimal logo only (plus name only if Super Admin)
-        const minimalPayload: any = {
-          logo_url: logo_url || "/dummy-logo.svg",
-          updated_at: new Date().toISOString(),
-        };
-        if (caller.isSuperAdmin && name?.trim()) {
-          minimalPayload.name = name.trim();
-        }
-        const { data: minBiz, error: minErr } = await supa
-          .from("businesses")
-          .update(minimalPayload)
-          .eq("id", targetBizId)
-          .select("*")
-          .maybeSingle();
-
-        if (minErr) {
-          return NextResponse.json({ error: minErr.message }, { status: 500 });
-        }
-        fallbackBiz = minBiz;
+      if (minErr) {
+        return NextResponse.json({ error: minErr.message }, { status: 500 });
       }
+      updatedBiz = minBiz;
+    }
 
+    if (updatedBiz) {
       updatedBiz = {
-        ...(fallbackBiz || {}),
-        signature_url: signature_url || "/default-signature.svg",
-        address: address || "",
-        phone: phone || "",
-        gstin: gstin || "",
-        upi_id: upi_id || (fallbackBiz?.upi_id ?? ""),
-        geofence_lat: geofence_lat !== undefined ? (geofence_lat !== null ? Number(geofence_lat) : null) : (fallbackBiz?.geofence_lat ?? null),
-        geofence_lng: geofence_lng !== undefined ? (geofence_lng !== null ? Number(geofence_lng) : null) : (fallbackBiz?.geofence_lng ?? null),
-        geofence_radius_meters: geofence_radius_meters !== undefined ? Number(geofence_radius_meters) : (fallbackBiz?.geofence_radius_meters ?? 150),
-        geofence_enabled: geofence_enabled !== undefined ? !!geofence_enabled : (fallbackBiz?.geofence_enabled ?? true),
+        ...updatedBiz,
+        upi_id: upi_id !== undefined ? upi_id : (updatedBiz.enabled_modules?.upi_id ?? updatedBiz.upi_id ?? ""),
       };
     }
 

@@ -1773,7 +1773,7 @@ ${order.taxCents > 0 ? `🏛️ *GST (5%):* ₹${(order.taxCents / 100).toFixed(
                 </div>
               )}
               <h2 className="text-sm font-bold tracking-tight uppercase leading-tight">
-                {business?.name || "Brown fening tea"}
+                {business?.name || "STORE"}
               </h2>
               <p className="text-[10px] text-zinc-600 mt-0.5 font-medium">
                 TAX INVOICE / BILL RECEIPT

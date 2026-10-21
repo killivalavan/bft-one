@@ -245,7 +245,7 @@ export default function ContactsPage() {
     }
 
     return (
-        <div className="min-h-screen bg-[#F8FAFC] pb-20">
+        <div>
             <div className="max-w-5xl mx-auto p-4 md:p-6 space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-300">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div className="flex items-center gap-3">

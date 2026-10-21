@@ -267,6 +267,7 @@ export function AdminSidebar({
       try { localStorage.removeItem("bftone_display_email"); } catch {}
       try { localStorage.removeItem("bftone_tenant_cache"); } catch {}
       try { localStorage.removeItem("bftone_flags"); } catch {}
+      try { localStorage.removeItem("seyalpro_app_mode"); } catch {}
       if (typeof document !== "undefined") {
         document.cookie = "tenant_slug=; path=/; max-age=0; SameSite=Lax";
       }
@@ -516,9 +517,9 @@ export function AdminSidebar({
     },
     {
       id: "baker-reports",
-      label: "Reports & Excel Export",
+      label: "Profit & Analytics",
       href: "/b2b/reports",
-      icon: PieChart,
+      icon: TrendingUp,
       category: "FINANCE",
       colorScheme: "blue",
     },

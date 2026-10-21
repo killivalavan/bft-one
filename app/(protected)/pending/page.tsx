@@ -4,11 +4,15 @@ import { supabaseClient } from "@/lib/supabaseClient";
 import { PendingOrderCard } from "@/components/pending/PendingOrderCard";
 import { ChevronLeft, Inbox } from "lucide-react";
 import Link from "next/link";
+import { useToast } from "@/components/ui/Toast";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 
 type Row = { id: string; user_id: string | null; status: string; total_cents: number; created_at: string };
 type ItemRow = { order_id: string; product_id: string; qty: number; product_name: string };
 
 export default function PendingPage() {
+  const { toast } = useToast();
+  const { confirm } = useConfirm();
   const [orders, setOrders] = useState<Row[]>([]);
   const [itemsByOrder, setItemsByOrder] = useState<Record<string, ItemRow[]>>({});
 
@@ -49,25 +53,58 @@ export default function PendingPage() {
 
   async function delivered(id: string) {
     const { error } = await supabaseClient.from("orders").update({ status: "delivered" }).eq("id", id);
-    if (error) { alert(error.message); return; }
+    if (error) {
+      toast({
+        title: "Update Failed",
+        description: error.message,
+        variant: "error",
+      });
+      return;
+    }
+    toast({
+      title: "Order Delivered",
+      description: "Order marked as delivered successfully.",
+      variant: "success",
+    });
     load();
   }
 
   async function cancelOrder(id: string) {
+    const ok = await confirm({
+      title: "Cancel Order",
+      description: "Are you sure you want to cancel this pending order? This action cannot be undone.",
+      confirmLabel: "Cancel Order",
+      variant: "danger",
+    });
+    if (!ok) return;
+
     try {
-      const res = await fetch('/api/orders/cancel', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ order_id: id }) });
+      const res = await fetch('/api/orders/cancel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ order_id: id }),
+      });
       if (!res.ok) {
         const data = await res.json();
-        throw new Error(data?.error || 'Failed');
+        throw new Error(data?.error || 'Failed to cancel order');
       }
+      toast({
+        title: "Order Cancelled",
+        description: "The order has been cancelled.",
+        variant: "info",
+      });
       load();
     } catch (e: any) {
-      alert(e?.message || String(e));
+      toast({
+        title: "Cancellation Failed",
+        description: e?.message || String(e),
+        variant: "error",
+      });
     }
   }
 
   return (
-    <div className="min-h-screen pb-20">
+    <div>
       <div className="max-w-4xl mx-auto p-4 md:p-6 space-y-6">
         <div className="flex items-center justify-between">
           <div className="space-y-1">

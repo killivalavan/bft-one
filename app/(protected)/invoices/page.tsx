@@ -5,6 +5,7 @@ import Link from "next/link";
 import { supabaseClient } from "@/lib/supabaseClient";
 import { useTenant } from "@/lib/context/TenantContext";
 import { useToast } from "@/components/ui/Toast";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { cn } from "@/lib/utils/cn";
 import { generateBillPdf, BillPdfData } from "@/lib/utils/billPdf";
 import { numberToIndianRupeesWords } from "@/lib/utils/numberToWords";
@@ -115,6 +116,7 @@ export default function InvoicesPage() {
   const { flags, loading: profileLoading } = useProfile();
   const { business, isModuleEnabled } = useTenant();
   const { toast } = useToast();
+  const { confirm } = useConfirm();
 
   // Mode: "list" (history view) or "builder" (editor view)
   const [view, setView] = useState<"list" | "builder">("list");
@@ -152,9 +154,9 @@ export default function InvoicesPage() {
   const [dueDate, setDueDate] = useState(() => format(addDays(new Date(), 15), "MMM dd, yyyy"));
 
   // Billed By & Billed To
-  const [billedByName, setBilledByName] = useState("Brown fening tea");
-  const [billedByAddress, setBilledByAddress] = useState("255, Rajiv Gandhi Salai (OMR), Navalur, Chennai, Tamil Nadu, India - 600130");
-  const [billedByPhone, setBilledByPhone] = useState("+91 98765 43210");
+  const [billedByName, setBilledByName] = useState("");
+  const [billedByAddress, setBilledByAddress] = useState("");
+  const [billedByPhone, setBilledByPhone] = useState("");
   const [billedByGstin, setBilledByGstin] = useState("");
   const [isEditingBilledBy, setIsEditingBilledBy] = useState(false);
 
@@ -273,11 +275,11 @@ export default function InvoicesPage() {
 
     // Load Store Profile Branding
     if (business) {
-      setBilledByName(business.name || "Brown fening tea");
+      setBilledByName(business.name || "");
       setLogoUrl(business.logo_url || null);
       setSignatureUrl((business as any)?.signature_url || "/default-signature.svg");
-      setBilledByAddress((business as any)?.address || "255, Rajiv Gandhi Salai (OMR), Navalur, Chennai, Tamil Nadu, India - 600130");
-      setBilledByPhone((business as any)?.phone || "+91 98765 43210");
+      setBilledByAddress((business as any)?.address || "");
+      setBilledByPhone((business as any)?.phone || "");
       setBilledByGstin((business as any)?.gstin || "");
     }
 
@@ -665,8 +667,14 @@ export default function InvoicesPage() {
   }
 
   // Delete Invoice
-  function deleteInvoice(id: string) {
-    if (!confirm("Are you sure you want to delete this invoice?")) return;
+  async function deleteInvoice(id: string) {
+    const ok = await confirm({
+      title: "Delete Invoice",
+      description: "Are you sure you want to delete this invoice? This action cannot be undone.",
+      confirmLabel: "Delete Invoice",
+      variant: "danger",
+    });
+    if (!ok) return;
     const updated = invoices.filter(i => i.id !== id);
     persistInvoices(updated);
     toast({ title: "Invoice deleted", variant: "info" });
@@ -837,7 +845,7 @@ export default function InvoicesPage() {
       st.lastDate = inv.date;
 
       (inv.items || []).forEach(it => {
-        const itName = (it.name || "Bakery Item").trim();
+        const itName = (it.name || "Product Item").trim();
         const qty = Number(it.qty) || 0;
         const amt = Number(it.amount) || (qty * (Number(it.rate) || 0));
 
@@ -1009,7 +1017,7 @@ export default function InvoicesPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] py-6 px-3 sm:px-6 lg:px-8">
+    <div>
       {/* Desktop Max Width Container with subtle left/right padding */}
       <div className="max-w-[1240px] mx-auto space-y-6">
 
@@ -1471,10 +1479,10 @@ export default function InvoicesPage() {
                   <div className="border-b border-[#E2E8F0] pb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                     <div>
                       <h2 className="text-base font-bold text-[#0F172A]">Item Distribution Matrix (Which Item Sold Where)</h2>
-                      <p className="text-xs text-[#64748B]">See exactly how many pieces of Brownie, Jam Cake, and Tea Cake each store purchased</p>
+                      <p className="text-xs text-[#64748B]">See exactly how many units each store purchased per catalog item</p>
                     </div>
                     <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-indigo-50 text-indigo-700 w-fit">
-                      {storeAnalytics.itemsList.length} Unique Bakery Items
+                      {storeAnalytics.itemsList.length} Unique Product Items
                     </span>
                   </div>
 
@@ -1488,7 +1496,7 @@ export default function InvoicesPage() {
                         <div key={item.name} className="p-4 rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] space-y-3">
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
-                              <span className="text-lg">🧁</span>
+                              <span className="text-lg">📦</span>
                               <div>
                                 <h3 className="font-bold text-sm text-[#0F172A]">{item.name}</h3>
                                 <p className="text-[11px] text-[#64748B]">Total: {item.totalUnits} pcs (₹{item.totalRevenue.toLocaleString("en-IN")})</p>
@@ -1582,7 +1590,7 @@ export default function InvoicesPage() {
                         {/* 2. Raw Material & Expenses */}
                         <div className="bg-[#FFFBEB] p-5 rounded-xl border border-[#FEF3C7] shadow-xs">
                           <div className="flex items-center justify-between">
-                            <span className="text-xs font-semibold text-[#B45309] uppercase tracking-wider">Baking &amp; Daily Costs</span>
+                            <span className="text-xs font-semibold text-[#B45309] uppercase tracking-wider">Operating &amp; Daily Costs</span>
                             <Link href="/expenses" className="text-[11px] font-bold text-[#B45309] hover:underline flex items-center gap-1">
                               <span>Log</span> <ExternalLink className="w-3 h-3" />
                             </Link>
@@ -1590,13 +1598,13 @@ export default function InvoicesPage() {
                           <div className="text-2xl font-bold text-[#B45309] mt-1">
                             ₹{cogsAndExpenses.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
                           </div>
-                          <p className="text-[11px] text-[#B45309] mt-0.5">Ingredients, gas, packaging &amp; bills</p>
+                          <p className="text-[11px] text-[#B45309] mt-0.5">Supplies, utilities, packaging &amp; bills</p>
                         </div>
 
                         {/* 3. Helper Staff Wages */}
                         <div className="bg-[#F5F3FF] p-5 rounded-xl border border-[#EDE9FE] shadow-xs">
                           <div className="flex items-center justify-between">
-                            <span className="text-xs font-semibold text-[#6D28D9] uppercase tracking-wider">Helper Staff Wages</span>
+                            <span className="text-xs font-semibold text-[#6D28D9] uppercase tracking-wider">Staff &amp; Team Wages</span>
                             <Link href="/admin" className="text-[11px] font-bold text-[#6D28D9] hover:underline flex items-center gap-1">
                               <span>Manage</span> <ExternalLink className="w-3 h-3" />
                             </Link>
@@ -1604,7 +1612,7 @@ export default function InvoicesPage() {
                           <div className="text-2xl font-bold text-[#6D28D9] mt-1">
                             ₹{staffWages.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
                           </div>
-                          <p className="text-[11px] text-[#6D28D9] mt-0.5">Assistant baker, packager &amp; delivery</p>
+                          <p className="text-[11px] text-[#6D28D9] mt-0.5">Staff, packaging &amp; delivery operations</p>
                         </div>
 
                         {/* 4. Real Net Profit */}
@@ -1660,12 +1668,12 @@ export default function InvoicesPage() {
                               - ₹{totalCosts.toLocaleString("en-IN")}
                             </div>
                             <p className="text-[11px] text-amber-700">
-                              ₹{cogsAndExpenses.toLocaleString("en-IN")} ingredients + ₹{staffWages.toLocaleString("en-IN")} wages
+                              ₹{cogsAndExpenses.toLocaleString("en-IN")} expenses + ₹{staffWages.toLocaleString("en-IN")} wages
                             </p>
                           </div>
 
                           <div className="p-4 rounded-xl bg-emerald-50/60 border border-emerald-200 space-y-1">
-                            <span className="text-[11px] font-bold text-emerald-800 uppercase">3. Baker's Take-Home</span>
+                            <span className="text-[11px] font-bold text-emerald-800 uppercase">3. Business Net Profit</span>
                             <div className="text-lg font-bold text-emerald-900">
                               = ₹{netProfit.toLocaleString("en-IN")}
                             </div>
@@ -1680,7 +1688,7 @@ export default function InvoicesPage() {
                             className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-semibold rounded-lg transition-colors inline-flex items-center gap-1.5"
                           >
                             <Receipt className="w-3.5 h-3.5 text-amber-600" />
-                            <span>Add Ingredient / Delivery Bill in Expenses</span>
+                            <span>Add Expense / Supply Bill in Expenses</span>
                           </Link>
 
                           <Link
@@ -1688,7 +1696,7 @@ export default function InvoicesPage() {
                             className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-semibold rounded-lg transition-colors inline-flex items-center gap-1.5"
                           >
                             <Users className="w-3.5 h-3.5 text-purple-600" />
-                            <span>Manage Helper Staff Wages in Admin</span>
+                            <span>Manage Staff &amp; Team Wages in Admin</span>
                           </Link>
                         </div>
                       </div>
@@ -1975,7 +1983,7 @@ export default function InvoicesPage() {
 
                   {/* Separate Store Name Box */}
                   <div className="w-full bg-white/95 border border-blue-100 rounded-xl px-3.5 py-2.5 text-xs font-semibold text-[#0F172A] flex items-center justify-between shadow-2xs">
-                    <span className="truncate">{billedByName || "Brown fening tea"}</span>
+                    <span className="truncate">{billedByName || business?.name || "SeyalPro"}</span>
                     <span className="px-2 py-0.5 rounded-md bg-blue-50 text-[10px] font-bold text-[#2563EB] border border-blue-100 shrink-0">
                       Store Profile
                     </span>
@@ -1987,7 +1995,7 @@ export default function InvoicesPage() {
                       <div className="space-y-1.5">
                         <div className="flex items-center justify-between">
                           <h4 className="text-sm font-bold text-[#0F172A]">
-                            {billedByName || "Brown fening tea"}
+                            {billedByName || business?.name || "SeyalPro"}
                           </h4>
                           <button
                             type="button"

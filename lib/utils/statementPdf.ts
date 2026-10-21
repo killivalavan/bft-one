@@ -50,6 +50,37 @@ export function generateStatementPdf(data: StatementPdfData): void {
   doc.setFillColor(37, 99, 235); // #2563EB
   doc.rect(0, 0, pageWidth, 5, "F");
 
+  // Background Watermark: "SeyalPro" - Prominently & elegantly branded
+  const drawBackgroundWatermark = () => {
+    try {
+      if (typeof (doc as any).saveGraphicsState === "function") {
+        (doc as any).saveGraphicsState();
+      }
+      doc.setFont(fontName, "bold");
+      doc.setFontSize(48);
+      doc.setTextColor(226, 234, 246); // Clean slate-blue tint (#E2EAF6), visible and legible
+      doc.text("SeyalPro", pageWidth / 2, pageHeight / 2 - 2, {
+        align: "center",
+        angle: 30,
+      });
+
+      doc.setFontSize(11);
+      doc.setFont(fontName, "bold");
+      doc.setTextColor(230, 238, 248);
+      doc.text("B2B STORE & DISPATCH INTELLIGENCE", pageWidth / 2, pageHeight / 2 + 13, {
+        align: "center",
+        angle: 30,
+      });
+      if (typeof (doc as any).restoreGraphicsState === "function") {
+        (doc as any).restoreGraphicsState();
+      }
+    } catch (e) {
+      console.warn("Watermark render error:", e);
+    }
+  };
+
+  drawBackgroundWatermark();
+
   let currentY = 14;
 
   // Header Left: Business Name & Title

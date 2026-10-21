@@ -156,3 +156,68 @@ input[type="number"] {
   to { width: 0%; }
 }
 
+/* ==========================================================================
+   Page Scroll Optimization: Only scroll when content exceeds viewport
+   ========================================================================== */
+/* Neutralize artificial full-viewport heights on direct page containers inside main */
+main > div[class*="min-h-screen"],
+main > main[class*="min-h-screen"],
+main > div > div[class*="min-h-screen"] {
+  min-height: 0 !important;
+}
+
+/* Neutralize legacy phantom bottom paddings on direct page containers inside main */
+main > div[class*="pb-16"],
+main > div[class*="pb-20"],
+main > div[class*="pb-24"],
+main > div[class*="pb-28"],
+main > main[class*="pb-16"],
+main > main[class*="pb-20"],
+main > main[class*="pb-24"],
+main > main[class*="pb-28"] {
+  padding-bottom: 0 !important;
+}
+
+/* ==========================================================================
+   Modern Select & Dropdown Styling (Universal)
+   ========================================================================== */
+select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2364748B' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+  background-repeat: no-repeat;
+  background-position: right 0.75rem center;
+  background-size: 1rem 1rem;
+  padding-right: 2.25rem !important;
+  cursor: pointer;
+  border-radius: 0.75rem;
+  transition: all 0.15s ease-in-out;
+}
+
+select:hover:not(:disabled) {
+  border-color: #cbd5e1;
+}
+
+select:focus {
+  outline: none;
+  border-color: #2563eb !important;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15) !important;
+  background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%232563EB' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+}
+
+/* Styled option elements across supported platforms */
+select option {
+  background-color: #ffffff;
+  color: #0f172a;
+  padding: 8px 12px;
+  font-weight: 600;
+  font-size: 13px;
+}
+
+select option:checked {
+  background-color: #eff6ff !important;
+  color: #1d4ed8 !important;
+  font-weight: 700;
+}
+

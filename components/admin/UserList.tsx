@@ -12,7 +12,7 @@ import {
   Droplets, Trash2, History, ArrowRight
 } from "lucide-react";
 import SalaryManager from "@/app/(protected)/admin/SalaryManager";
-import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { ConfirmDialog, useConfirm } from "@/components/ui/ConfirmDialog";
 import { useToast } from "@/components/ui/Toast";
 import { cn } from "@/lib/utils/cn";
 import { validatePasswordPolicy, validateEmailFormat } from "@/lib/utils/passwordPolicy";
@@ -241,6 +241,7 @@ function UserAccordionRow({
   }
 
   const { toast } = useToast();
+  const { confirm } = useConfirm();
   const [activeTab, setActiveTab] = useState<"profile" | "salary" | "security">("salary");
   const [password, setPassword] = useState("");
   const [isSavingPass, setIsSavingPass] = useState(false);
@@ -579,7 +580,13 @@ function UserAccordionRow({
   }
 
   async function handleDeleteIncrementRecord(incId: string) {
-    if (!confirm("Are you sure you want to remove this salary increment log? Base salary will automatically revert if this was the latest hike.")) return;
+    const ok = await confirm({
+      title: "Remove Salary Increment",
+      description: "Are you sure you want to remove this salary increment log? Base salary will automatically revert if this was the latest hike.",
+      confirmLabel: "Remove Increment",
+      variant: "danger",
+    });
+    if (!ok) return;
     setDeletingIncrementId(incId);
     try {
       const { data: { session } } = await supabaseClient.auth.getSession();
@@ -1633,6 +1640,7 @@ export function UserList({
   onUpdateFullProfile,
   onDownloadPayslip,
 }: UserListProps) {
+  const { toast } = useToast();
   // New User Form State
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -1750,12 +1758,20 @@ export function UserList({
 
   async function handleAddUser() {
     if (!validateEmailFormat(email)) {
-      alert("Please enter a valid email address.");
+      toast({
+        title: "Invalid Email",
+        description: "Please enter a valid email address.",
+        variant: "warning",
+      });
       return;
     }
 
     if (!sendInvite && !policy.valid) {
-      alert(policy.errors.join("\n"));
+      toast({
+        title: "Password Policy Error",
+        description: policy.errors.join(". "),
+        variant: "error",
+      });
       return;
     }
 

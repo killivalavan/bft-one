@@ -9,7 +9,7 @@ export default function BakerSupportPage() {
   const { business } = useTenant();
 
   return (
-    <div className="min-h-screen pb-24 bg-[#F8FAFC]">
+    <div>
       {/* Top Banner */}
       <div className="bg-white border-b border-[#E2E8F0] px-4 py-6 sm:px-8">
         <div className="max-w-4xl mx-auto flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -27,7 +27,7 @@ export default function BakerSupportPage() {
                 </span>
               </div>
               <p className="text-xs text-[#64748B] mt-0.5">
-                Report technical glitches, request B2B features, or contact platform engineering for {business?.name || "your bakery"}
+                Report technical glitches, request B2B features, or contact platform engineering for {business?.name || "your business"}
               </p>
             </div>
           </div>

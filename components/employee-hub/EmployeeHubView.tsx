@@ -370,7 +370,7 @@ export function EmployeeHubView({
   const isMissingJoiningDate = !profile.dateOfJoining;
 
   return (
-    <div className="min-h-screen pb-20 bg-[#F8FAFC]">
+    <div>
       {/* Admin Preview Floating Header */}
       {(flags?.isAdmin || previewUserId) && (
         <div className="bg-slate-900 text-white border-b border-slate-800 px-4 py-2 text-xs flex items-center justify-between gap-3 shadow-sm">

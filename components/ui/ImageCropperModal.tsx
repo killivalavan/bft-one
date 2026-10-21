@@ -259,8 +259,8 @@ export function ImageCropperModal({
       return;
     }
     const img = imgRef.current;
-    // Scale down ultra-large camera photos (>1200px) so they don't break local storage or payload limits
-    const maxDimension = 1200;
+    // Scale down photos to 360px max so base64 strings are lightweight (~25KB) and fit in localStorage and network payloads
+    const maxDimension = 360;
     let targetW = img.naturalWidth;
     let targetH = img.naturalHeight;
     if (targetW > maxDimension || targetH > maxDimension) {
@@ -276,7 +276,7 @@ export function ImageCropperModal({
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = "high";
       ctx.drawImage(img, 0, 0, targetW, targetH);
-      const dataUrl = canvas.toDataURL("image/png", 0.95);
+      const dataUrl = canvas.toDataURL("image/png");
       onCropComplete(dataUrl);
     } else {
       onCropComplete(imageSrc);
@@ -300,12 +300,12 @@ export function ImageCropperModal({
 
     if (sourceW <= 0 || sourceH <= 0) return;
 
-    // Target output dimensions (preserving exact crop aspect ratio)
+    // Target output dimensions (optimized to max 360px so dataUrl is ~25KB, never blowing browser localStorage quotas)
     const cropAspect = sourceW / sourceH;
-    let targetW = Math.min(1000, Math.max(300, Math.round(sourceW)));
+    let targetW = Math.min(360, Math.max(120, Math.round(sourceW)));
     let targetH = Math.round(targetW / cropAspect);
-    if (targetH > 1000) {
-      targetH = 1000;
+    if (targetH > 360) {
+      targetH = 360;
       targetW = Math.round(targetH * cropAspect);
     }
 
@@ -330,7 +330,7 @@ export function ImageCropperModal({
         targetH
       );
 
-      const croppedDataUrl = canvas.toDataURL("image/png", 0.95);
+      const croppedDataUrl = canvas.toDataURL("image/png");
       onCropComplete(croppedDataUrl);
       onClose();
     }

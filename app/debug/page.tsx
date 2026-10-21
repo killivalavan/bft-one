@@ -2,9 +2,13 @@
 import { useProfile } from "@/lib/hooks/useProfile";
 import { useUser } from "@/lib/hooks/useUser";
 import { supabaseClient } from "@/lib/supabaseClient";
+import { useToast } from "@/components/ui/Toast";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { useEffect, useState } from "react";
 
 export default function DebugPage() {
+    const { toast } = useToast();
+    const { alert } = useConfirm();
     const { user, loading: userLoading } = useUser();
     const { flags, loading: profileLoading } = useProfile();
     const [rawProfile, setRawProfile] = useState<any>(null);
@@ -72,18 +76,29 @@ export default function DebugPage() {
                     />
                     <button
                         onClick={async () => {
-                            if (!user?.email) return alert("No email found");
+                            if (!user?.email) {
+                                toast({ title: "Debug Error", description: "No authenticated email found", variant: "error" });
+                                return;
+                            }
                             const res = await fetch('/api/seed-admin', {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({ email: user.email, isAdmin: true })
                             });
                             if (res.ok) {
-                                alert("Success! You are now an Admin. Refresh the page.");
+                                await alert({
+                                    title: "Admin Access Granted",
+                                    description: "Success! You are now an Admin. The page will reload now.",
+                                    variant: "success",
+                                });
                                 window.location.reload();
                             } else {
                                 const err = await res.json();
-                                alert("Failed: " + JSON.stringify(err));
+                                toast({
+                                    title: "Seed Admin Failed",
+                                    description: JSON.stringify(err),
+                                    variant: "error",
+                                });
                             }
                         }}
                         className="bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700 whitespace-nowrap"

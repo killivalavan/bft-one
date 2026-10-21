@@ -4,6 +4,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { supabaseClient } from "@/lib/supabaseClient";
 import { useTenant } from "@/lib/context/TenantContext";
 import { useProfile } from "@/lib/hooks/useProfile";
+import { useToast } from "@/components/ui/Toast";
 import {
   Boxes,
   Package,
@@ -259,6 +260,7 @@ const MOCK_LEDGER: LedgerEntry[] = [
 export default function InventoryHubPage() {
   const { business } = useTenant();
   const { flags } = useProfile();
+  const { toast } = useToast();
 
   // State
   const [activeTab, setActiveTab] = useState<
@@ -610,7 +612,11 @@ export default function InventoryHubPage() {
   }
 
   async function handleSaveRecipe() {
-    alert("Recipe Formula saved successfully!");
+    toast({
+      title: "Recipe Saved",
+      description: "Recipe Formula saved successfully!",
+      variant: "success",
+    });
   }
 
   async function handleAdjustStock() {
@@ -760,11 +766,19 @@ export default function InventoryHubPage() {
       customId: `po-recv-${po.id}-${Date.now()}`,
     });
 
-    alert(`PO #${po.po_number} received! Goods inwarded to stock ledger.`);
+    toast({
+      title: "Purchase Order Received",
+      description: `PO #${po.po_number} received! Goods inwarded to stock ledger.`,
+      variant: "success",
+    });
   }
 
   async function handleSubmitAudit() {
-    alert("Stock audit counts submitted and reconciled successfully!");
+    toast({
+      title: "Audit Submitted",
+      description: "Stock audit counts submitted and reconciled successfully!",
+      variant: "success",
+    });
     setAuditCounts({});
   }
 
@@ -778,7 +792,7 @@ export default function InventoryHubPage() {
   }
 
   return (
-    <div className="min-h-screen pb-24 space-y-6 max-w-[1600px] mx-auto px-3 sm:px-6 lg:px-8">
+    <div className="space-y-6 max-w-[1600px] mx-auto">
       {/* Top Header */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 pt-4 border-b border-slate-200 pb-5">
         <div>

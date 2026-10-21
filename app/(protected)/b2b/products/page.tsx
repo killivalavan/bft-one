@@ -4,6 +4,7 @@ import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { useTenant } from "@/lib/context/TenantContext";
 import { useToast } from "@/components/ui/Toast";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { cn } from "@/lib/utils/cn";
 import {
   Boxes, Plus, Trash2, Edit3, TrendingUp, Sparkles,
@@ -43,6 +44,7 @@ export const INITIAL_BAKER_PRODUCTS: BakerProduct[] = [
 export default function BakerProductsPage() {
   const { business } = useTenant();
   const { toast } = useToast();
+  const { confirm } = useConfirm();
   const bizId = business?.id || "default";
 
   const [products, setProducts] = useState<BakerProduct[]>([]);
@@ -152,8 +154,14 @@ export default function BakerProductsPage() {
     setIsModalOpen(false);
   };
 
-  const handleDeleteProduct = (id: string, prodName: string) => {
-    if (!confirm(`Are you sure you want to remove "${prodName}"?`)) return;
+  const handleDeleteProduct = async (id: string, prodName: string) => {
+    const ok = await confirm({
+      title: "Remove Product",
+      description: `Are you sure you want to remove "${prodName}" from the catalog?`,
+      confirmLabel: "Remove Product",
+      variant: "danger",
+    });
+    if (!ok) return;
     const updated = products.filter((p) => p.id !== id);
     saveProductsToStorage(updated);
     toast({ title: "Product Removed", description: `${prodName} deleted from catalog.` });
@@ -185,10 +193,10 @@ export default function BakerProductsPage() {
   const previewMargin = previewSelling > 0 ? ((previewProfit / previewSelling) * 100).toFixed(1) : "0";
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] pb-20">
-      {/* Top Header - docks cleanly below AppShell mobile header on mobile */}
-      <div className="bg-white border-b border-[#E2E8F0] sticky top-14 md:top-0 z-20 shadow-2xs">
-        <div className="max-w-6xl mx-auto px-4 py-3 sm:py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+    <div className="max-w-6xl mx-auto space-y-5">
+      {/* Top Header Card */}
+      <div className="bg-white border border-[#E2E8F0] rounded-2xl p-4 sm:p-5 shadow-2xs">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
             <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-blue-50 text-blue-600 border border-blue-200 flex items-center justify-center font-bold text-lg sm:text-xl shadow-2xs shrink-0">
               <Package size={18} />
@@ -226,8 +234,6 @@ export default function BakerProductsPage() {
           </div>
         </div>
       </div>
-
-      <div className="max-w-6xl mx-auto px-4 py-6 space-y-6">
         {/* Metric Highlights */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className="p-4 rounded-2xl bg-white border border-[#E2E8F0] shadow-2xs flex items-center justify-between">
@@ -370,7 +376,7 @@ export default function BakerProductsPage() {
 
           {filteredProducts.length === 0 && (
             <div className="bg-white p-8 rounded-2xl border border-[#E2E8F0] text-center text-[#64748B]">
-              <p className="font-bold text-sm">No bakery items found.</p>
+              <p className="font-bold text-sm">No catalog products found.</p>
               <p className="text-xs text-slate-400 mt-1">Tap &ldquo;Add Product&rdquo; to add your products.</p>
             </div>
           )}
@@ -464,7 +470,6 @@ export default function BakerProductsPage() {
             </table>
           </div>
         </div>
-      </div>
 
       {/* Add / Edit Product Modal */}
       {isModalOpen && (

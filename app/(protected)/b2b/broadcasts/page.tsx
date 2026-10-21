@@ -30,6 +30,7 @@ import {
 import { BakerProduct, INITIAL_BAKER_PRODUCTS } from "../products/page";
 import { formatCafeName, DEFAULT_BAKER_SAMPLE_STORES, sanitizeBakerStores } from "@/lib/utils/bakerUtils";
 import { fetchB2BClients, B2B_CUSTOMERS_UPDATED_EVENT } from "@/lib/services/b2bClients";
+import { SelectDropdown } from "@/components/ui/SelectDropdown";
 
 interface ClientStore {
   id: string;
@@ -54,16 +55,6 @@ export interface BakerBroadcast {
 }
 
 const DEFAULT_STORES: ClientStore[] = [];
-
-const TOPIC_SUGGESTIONS = [
-  { label: "🚨 Surplus Stock", category: "surplus" },
-  { label: "⏳ Delivery Delay", category: "delay" },
-  { label: "📦 Fresh Restock", category: "restock" },
-  { label: "🛑 Stock Out", category: "stockout" },
-  { label: "📢 General Memo", category: "memo" },
-  { label: "☕ Break Time", category: "memo" },
-  { label: "🛠️ Kitchen Notice", category: "memo" },
-];
 
 export default function BakerBroadcastsPage() {
   const { business } = useTenant();
@@ -178,11 +169,6 @@ export default function BakerBroadcastsPage() {
     try {
       localStorage.setItem(`bftone_baker_broadcasts_${bizId}`, JSON.stringify(items));
     } catch {}
-  };
-
-  const handleSelectTopic = (suggestion: typeof TOPIC_SUGGESTIONS[0]) => {
-    setTopic(suggestion.label);
-    setSelectedCategory(suggestion.category);
   };
 
   const toggleStoreSelection = (id: string) => {
@@ -338,7 +324,10 @@ export default function BakerBroadcastsPage() {
     text += `\n_Sent via SeyalPro Central Kitchen Dispatch_`;
 
     const encoded = encodeURIComponent(text);
-    const url = phone ? `https://wa.me/${phone}?text=${encoded}` : `https://wa.me/?text=${encoded}`;
+    const url = phone ? `https://api.whatsapp.com/send?phone=${phone}&text=${encoded}` : `https://api.whatsapp.com/send?text=${encoded}`;
+    if (typeof navigator !== "undefined" && navigator.clipboard) {
+      navigator.clipboard.writeText(text).catch(() => {});
+    }
     window.open(url, "_blank");
   };
 
@@ -348,7 +337,7 @@ export default function BakerBroadcastsPage() {
   }, [broadcasts, historyFilter]);
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] pb-24">
+    <div className="space-y-6">
       {/* Top Header */}
       <div className="bg-white border-b border-[#E2E8F0] sticky top-14 md:top-0 z-20 shadow-2xs">
         <div className="max-w-6xl mx-auto px-4 py-3 sm:py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
@@ -448,14 +437,11 @@ export default function BakerBroadcastsPage() {
               </div>
             </div>
 
-            {/* Step 1: Topic or Advisory Type (Manual Typing + Quick Suggestion Chips) */}
-            <div className="space-y-2.5">
-              <div className="flex items-center justify-between">
-                <label className="text-xs font-bold text-[#0F172A] uppercase tracking-wider block">
-                  1. Advisory Topic / Type
-                </label>
-                <span className="text-[10px] text-slate-400 font-medium">Type manually or select below</span>
-              </div>
+            {/* Step 1: Topic or Advisory Type */}
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-[#0F172A] uppercase tracking-wider block">
+                1. Advisory Topic / Type
+              </label>
 
               {/* Manual Topic Typing Input */}
               <input
@@ -465,29 +451,6 @@ export default function BakerBroadcastsPage() {
                 placeholder="Type advisory topic (e.g. Break time, Oven Maintenance, Delivery Delay, Surplus Stock...)"
                 className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs font-bold text-[#0F172A] focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white shadow-2xs"
               />
-
-              {/* Quick Topic Suggestion Chips */}
-              <div className="flex flex-wrap gap-1.5 pt-0.5">
-                {TOPIC_SUGGESTIONS.map((sug) => {
-                  const isSelected = topic.trim().toLowerCase() === sug.label.toLowerCase();
-                  return (
-                    <button
-                      key={sug.label}
-                      type="button"
-                      onClick={() => handleSelectTopic(sug)}
-                      className={cn(
-                        "px-2.5 py-1 rounded-xl text-xs font-semibold border transition-all cursor-pointer flex items-center gap-1",
-                        isSelected
-                          ? "bg-blue-50 border-blue-600 text-blue-900 font-bold ring-1 ring-blue-600/30 shadow-2xs"
-                          : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900"
-                      )}
-                    >
-                      <span>{sug.label}</span>
-                      {isSelected && <Check size={12} className="text-blue-600" />}
-                    </button>
-                  );
-                })}
-              </div>
             </div>
 
             {/* Step 2: Target Stores (Dropdown for Specific Store) */}
@@ -541,24 +504,26 @@ export default function BakerBroadcastsPage() {
                   </div>
 
                   {/* Dropdown Selector */}
-                  <div className="relative">
-                    <select
-                      value={selectedStoreIds[0] || ""}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        setSelectedStoreIds(val ? [val] : []);
-                      }}
-                      className="w-full px-3.5 py-2.5 pr-10 rounded-xl border border-slate-300 bg-white text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-2xs appearance-none cursor-pointer"
-                    >
-                      <option value="">-- Click to Select Store from Dropdown --</option>
-                      {stores.map((st) => (
-                        <option key={st.id} value={st.id}>
-                          {st.business_id ? "⚡ [SeyalPro App] " : "📱 [External / WhatsApp] "}{formatCafeName(st.name)} {st.phone ? `(${st.phone})` : ""}
-                        </option>
-                      ))}
-                    </select>
-                    <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-                  </div>
+                  <SelectDropdown
+                    value={selectedStoreIds[0] || ""}
+                    onChange={(val) => {
+                      setSelectedStoreIds(val ? [val] : []);
+                    }}
+                    options={[
+                      { value: "", label: "-- Click to Select Store from Dropdown --" },
+                      ...stores.map((st) => ({
+                        value: st.id,
+                        label: formatCafeName(st.name),
+                        sublabel: st.phone ? `Phone: ${st.phone}` : undefined,
+                        badge: st.business_id ? "⚡ SeyalPro App" : "📱 WhatsApp",
+                        badgeVariant: st.business_id ? ("info" as const) : ("default" as const),
+                        icon: <Store size={13} className="text-slate-400" />,
+                      })),
+                    ]}
+                    size="md"
+                    placeholder="Click to select store..."
+                    searchPlaceholder="Search store..."
+                  />
 
                   {selectedStoreIds[0] && (
                     <div className="p-2.5 bg-white rounded-xl border border-blue-200/80 flex items-center justify-between text-xs shadow-2xs">
@@ -608,18 +573,21 @@ export default function BakerBroadcastsPage() {
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
                   <div>
                     <label className="text-[10px] font-bold text-slate-600 block mb-1">Product</label>
-                    <select
+                    <SelectDropdown
                       value={selectedProductName}
-                      onChange={(e) => setSelectedProductName(e.target.value)}
-                      className="w-full px-2.5 py-1.5 rounded-xl border border-slate-200 text-xs font-medium bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    >
-                      <option value="">Select Item (Optional)</option>
-                      {products.map((p) => (
-                        <option key={p.id} value={p.name}>
-                          {p.name}
-                        </option>
-                      ))}
-                    </select>
+                      onChange={(val) => setSelectedProductName(val)}
+                      options={[
+                        { value: "", label: "Select Item (Optional)" },
+                        ...products.map((p) => ({
+                          value: p.name,
+                          label: p.name,
+                          icon: <Package size={13} className="text-slate-400" />,
+                        })),
+                      ]}
+                      size="sm"
+                      placeholder="Select item..."
+                      searchPlaceholder="Search product..."
+                    />
                   </div>
                   <div>
                     <label className="text-[10px] font-bold text-slate-600 block mb-1">Available Qty (Pcs)</label>
@@ -732,7 +700,10 @@ export default function BakerBroadcastsPage() {
                     if (selectedProductName) text += `📦 Item: ${selectedProductName}\n`;
                     if (quantity) text += `🔢 Qty: ${quantity} pcs\n`;
                     if (discountRate) text += `🏷️ Offer Price: ₹${discountRate}\n`;
-                    const url = phone ? `https://wa.me/${phone}?text=${encodeURIComponent(text)}` : `https://wa.me/?text=${encodeURIComponent(text)}`;
+                    const url = phone ? `https://api.whatsapp.com/send?phone=${phone}&text=${encodeURIComponent(text)}` : `https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`;
+                    if (typeof navigator !== "undefined" && navigator.clipboard) {
+                      navigator.clipboard.writeText(text).catch(() => {});
+                    }
                     window.open(url, "_blank");
                   }}
                   className={cn(

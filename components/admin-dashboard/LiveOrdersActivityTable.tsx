@@ -21,6 +21,7 @@ import {
   ArrowLeft
 } from "lucide-react";
 import { OrderReceiptModal, AdminOrderRecord } from "./OrderReceiptModal";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 import Link from "next/link";
 
 interface LiveOrdersActivityTableProps {
@@ -42,6 +43,7 @@ export function LiveOrdersActivityTable({
   storeName = "Main Store",
   currencySymbol = "₹",
 }: LiveOrdersActivityTableProps) {
+  const { confirm } = useConfirm();
   const [statusFilter, setStatusFilter] = useState<string>("ALL");
   const [orderTypeFilter, setOrderTypeFilter] = useState<string>("ALL");
   const [searchQuery, setSearchQuery] = useState<string>("");
@@ -417,9 +419,15 @@ export function LiveOrdersActivityTable({
                         </button>
                         {onCancelOrder && !isCompleted && (
                           <button
-                            onClick={(e) => {
+                            onClick={async (e) => {
                               e.stopPropagation();
-                              if (confirm("Are you sure you want to cancel this order?")) {
+                              const ok = await confirm({
+                                title: "Cancel Order",
+                                description: "Are you sure you want to cancel this order? This action cannot be undone.",
+                                confirmLabel: "Cancel Order",
+                                variant: "danger",
+                              });
+                              if (ok) {
                                 onCancelOrder(order.id);
                               }
                             }}

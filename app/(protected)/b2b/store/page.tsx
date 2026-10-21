@@ -9,7 +9,7 @@ export default function B2BStoreSettingsPage() {
   const { business } = useTenant();
 
   return (
-    <div className="min-h-screen pb-20 bg-[#F8FAFC]">
+    <div>
       <div className="max-w-5xl mx-auto p-4 md:p-6 space-y-6">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center shadow-xs shrink-0">

@@ -154,6 +154,7 @@ export default function Navbar({
       try { localStorage.removeItem('bftone_display_email'); } catch { }
       try { localStorage.removeItem('bftone_tenant_cache'); } catch { }
       try { localStorage.removeItem('bftone_flags'); } catch { }
+      try { localStorage.removeItem('seyalpro_app_mode'); } catch { }
       if (typeof document !== 'undefined') {
         document.cookie = "tenant_slug=; path=/; max-age=0; SameSite=Lax";
       }

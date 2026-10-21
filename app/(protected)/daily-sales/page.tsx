@@ -567,7 +567,7 @@ export default function DailySalesPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50/50 pb-20 md:pb-12 text-[#0F172A] font-sans">
+    <div className="text-[#0F172A] font-sans">
       
       {/* ========================================================================= */}
       {/* 1. TOP HERO & CONTROL BAR */}
@@ -594,7 +594,7 @@ export default function DailySalesPage() {
                   )}
                 </div>
                 <p className="text-xs text-[#64748B] flex items-center gap-1.5 mt-0.5">
-                  <span className="font-medium text-slate-700">{business?.name || "Brown fening tea"}</span>
+                  <span className="font-medium text-slate-700">{business?.name || "Store Operations"}</span>
                   <span>•</span>
                   <span>Itemized POS billing & quantity analytics</span>
                 </p>
@@ -1458,7 +1458,7 @@ export default function DailySalesPage() {
               
               {/* Business & Time details */}
               <div className="text-center pb-3 border-b border-slate-100 space-y-1">
-                <div className="font-bold text-base text-slate-900">{business?.name || "Brown fening tea"}</div>
+                <div className="font-bold text-base text-slate-900">{business?.name || "Store"}</div>
                 <div className="text-slate-500">
                   {format(new Date(selectedBillForModal.created_at), "dd MMMM yyyy, hh:mm:ss a")}
                 </div>
@@ -1557,7 +1557,7 @@ export default function DailySalesPage() {
               
               {/* Header Info */}
               <div className="text-center pb-4 border-b border-dashed border-slate-300 space-y-1">
-                <div className="font-bold text-lg tracking-wider text-slate-900 uppercase">{business?.name || "BROWN FENING TEA"}</div>
+                <div className="font-bold text-lg tracking-wider text-slate-900 uppercase">{business?.name ? business.name.toUpperCase() : "STORE"}</div>
                 <div className="text-slate-600">DAILY BUSINESS SALES CLOSING (Z-REPORT)</div>
                 <div className="text-slate-500 text-[10px]">
                   Date: {format(selectedDate, "yyyy-MM-dd")} | Generated: {format(new Date(), "hh:mm a")}

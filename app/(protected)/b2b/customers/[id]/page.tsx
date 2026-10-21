@@ -331,7 +331,7 @@ export default function ClientLedgerDedicatedPage() {
   }, [detailCustomStart, detailCustomEnd]);
 
   // Export Combined Ledger Statement PDF
-  const handleExportStatementPdf = () => {
+  const handleExportStatementPdf = async () => {
     if (!client) return;
 
     if (clientTransactions.length === 0) {
@@ -358,6 +358,7 @@ export default function ClientLedgerDedicatedPage() {
         businessPhone: business?.phone || undefined,
         businessAddress: business?.address || undefined,
         upiId: business?.upi_id?.trim() || undefined,
+        logoUrl: business?.logo_url || undefined,
         mode: "client",
         entityName: client.name,
         phone: client.phone || undefined,
@@ -374,7 +375,7 @@ export default function ClientLedgerDedicatedPage() {
         transactions: clientTransactions,
       };
 
-      generateCombinedLedgerPdf(pdfData);
+      await generateCombinedLedgerPdf(pdfData);
 
       toast({
         title: "Statement Downloaded 📄",

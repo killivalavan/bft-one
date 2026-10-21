@@ -90,7 +90,7 @@ export default function CalendarPage() {
   const monthLabel = month.toLocaleString(undefined, { month: "long", year: "numeric" });
 
   return (
-    <div className="min-h-screen bg-slate-50/50 pb-20">
+    <div>
       <div className="max-w-6xl mx-auto p-4 md:p-6 space-y-6">
         {/* Title & Controls */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">

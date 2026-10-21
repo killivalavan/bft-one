@@ -286,7 +286,7 @@ export default function TimesheetPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] pb-20 md:pb-10">
+    <div>
       <div className="max-w-md mx-auto p-4 space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between gap-4">

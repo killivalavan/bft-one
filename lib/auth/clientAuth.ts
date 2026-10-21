@@ -7,7 +7,24 @@ import { supabaseClient } from "@/lib/supabaseClient";
 export async function getAuthHeaders(customHeaders: Record<string, string> = {}): Promise<Record<string, string>> {
   try {
     const { data: { session } } = await supabaseClient.auth.getSession();
-    const token = session?.access_token;
+    let token = session?.access_token;
+
+    if (!token && typeof window !== "undefined") {
+      try {
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (key && key.startsWith("sb-") && key.endsWith("-auth-token")) {
+            const raw = localStorage.getItem(key);
+            if (raw) {
+              const parsed = JSON.parse(raw);
+              token = parsed.access_token || (Array.isArray(parsed) ? parsed[0]?.access_token : "");
+              if (token) break;
+            }
+          }
+        }
+      } catch {}
+    }
+
     return {
       "Content-Type": "application/json",
       ...(token ? { Authorization: `Bearer ${token}` } : {}),

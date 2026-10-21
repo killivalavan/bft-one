@@ -4,15 +4,17 @@ import React, { useEffect } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { useUser } from "@/lib/hooks/useUser";
 import { useProfile } from "@/lib/hooks/useProfile";
+import { useTenant } from "@/lib/context/TenantContext";
 import { Loader2 } from "lucide-react";
 
 export default function ProtectedLayout({ children }: { children: React.ReactNode }) {
   const { user, loading: userLoading } = useUser();
   const { flags, loading: profileLoading } = useProfile();
+  const { status: tenantStatus } = useTenant();
   const router = useRouter();
   const pathname = usePathname();
 
-  const isLoading = userLoading || (user ? profileLoading : false);
+  const isLoading = userLoading || (user ? profileLoading : false) || tenantStatus === "resolving";
 
   useEffect(() => {
     if (isLoading) return;

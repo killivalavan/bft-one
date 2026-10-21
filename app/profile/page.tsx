@@ -118,7 +118,7 @@ export default function ProfilePage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50/60 pb-20 sm:pb-24">
+    <div>
       {/* Top Breadcrumb & Status Navigation - Fully Responsive */}
       <div className="bg-white border-b border-[#E2E8F0] sticky top-0 z-20">
         <div className="max-w-4xl mx-auto px-3 sm:px-6 h-12 sm:h-14 flex items-center justify-between gap-2">

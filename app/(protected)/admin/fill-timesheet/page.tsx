@@ -344,7 +344,7 @@ export default function FillTimesheetPage() {
     }
 
     return (
-        <div className="min-h-screen bg-zinc-50/50 pb-20">
+        <div>
             <div className="max-w-[100vw] overflow-hidden">
                 {/* Header */}
                 <div className="sticky top-0 z-30 bg-white/80 backdrop-blur-md border-b border-zinc-200 shadow-sm">

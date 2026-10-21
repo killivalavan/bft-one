@@ -35,6 +35,7 @@ import { useProfile } from "@/lib/hooks/useProfile";
 import { useTenant } from "@/lib/context/TenantContext";
 import { supabaseClient } from "@/lib/supabaseClient";
 import { useToast } from "@/components/ui/Toast";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { cn } from "@/lib/utils/cn";
@@ -84,6 +85,7 @@ export function NoticeBoardView() {
   const { flags } = useProfile();
   const { business } = useTenant();
   const { toast } = useToast();
+  const { confirm } = useConfirm();
 
   // Management access: Only admins have editing, creation, pinning, and deletion privileges
   const isDirectAdmin = Boolean(
@@ -211,7 +213,7 @@ export function NoticeBoardView() {
   };
 
   const handleCopyNotice = (notice: NoticeItem) => {
-    const text = `📢 *${notice.title}*\n\n${notice.message}\n\n— ${business?.name || "BFT Store Operations"}`;
+    const text = `📢 *${notice.title}*\n\n${notice.message}\n\n— ${business?.name || "SeyalPro"}`;
     navigator.clipboard.writeText(text);
     setCopiedId(notice.id);
     setTimeout(() => setCopiedId(null), 2500);
@@ -220,7 +222,7 @@ export function NoticeBoardView() {
 
   const handleShareToWhatsApp = (notice: NoticeItem) => {
     const text = encodeURIComponent(
-      `📢 *${notice.title}*\n\n${notice.message}\n\n— Sent via ${business?.name || "BFT Team Portal"}`
+      `📢 *${notice.title}*\n\n${notice.message}\n\n— Sent via ${business?.name || "SeyalPro"}`
     );
     window.open(`https://api.whatsapp.com/send?text=${text}`, "_blank");
   };
@@ -413,7 +415,13 @@ export function NoticeBoardView() {
   };
 
   const handleDeleteNotice = async (noticeId: string) => {
-    if (!window.confirm("Are you sure you want to delete this notice? This action cannot be undone.")) return;
+    const ok = await confirm({
+      title: "Delete Notice",
+      description: "Are you sure you want to delete this notice? This action cannot be undone.",
+      confirmLabel: "Delete Notice",
+      variant: "danger",
+    });
+    if (!ok) return;
 
     try {
       const { error: directErr } = await supabaseClient
@@ -485,7 +493,7 @@ export function NoticeBoardView() {
   }, [notices, readIds]);
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] pb-24 text-[#0F172A]">
+    <div className="text-[#0F172A]">
       {/* 1. TOP HEADER BAR (Fully Responsive for Mobile & Desktop) */}
       <div className="border-b border-[#E2E8F0] bg-white sticky top-0 z-30 shadow-xs">
         <div className="max-w-7xl mx-auto px-3.5 sm:px-6 lg:px-8 py-3 sm:py-4">
@@ -510,7 +518,7 @@ export function NoticeBoardView() {
                 {/* Store Name & Subtitle Description (Responsive multiline wrapping) */}
                 <div className="text-xs text-[#64748B] mt-1 leading-relaxed">
                   <span className="font-semibold text-slate-800">
-                    {business?.name || "BFT Store Operations"}
+                    {business?.name || "SeyalPro"}
                   </span>
                   <span className="mx-1.5 text-slate-300">•</span>
                   <span className="text-slate-500">

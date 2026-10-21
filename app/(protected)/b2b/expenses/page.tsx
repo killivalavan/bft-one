@@ -16,18 +16,18 @@ export interface BakerExpense {
   id: string;
   name: string;
   amount: number;
-  category: "Flour & Sugar" | "Butter & Dairy" | "Chocolate & Cocoa" | "Packaging" | "Utilities & Gas" | "Other";
+  category: "Raw Materials & Supplies" | "Packaging & Boxes" | "Utilities & Energy" | "Logistics & Delivery" | "Maintenance & Repairs" | "Other Operating Costs" | string;
   date: string;
   notes?: string;
 }
 
 export const EXPENSE_CATEGORIES = [
-  "Flour & Sugar",
-  "Butter & Dairy",
-  "Chocolate & Cocoa",
-  "Packaging",
-  "Utilities & Gas",
-  "Other",
+  "Raw Materials & Supplies",
+  "Packaging & Boxes",
+  "Utilities & Energy",
+  "Logistics & Delivery",
+  "Maintenance & Repairs",
+  "Other Operating Costs",
 ] as const;
 
 export default function BakerExpensesPage() {
@@ -42,7 +42,7 @@ export default function BakerExpensesPage() {
   // Form State
   const [name, setName] = useState("");
   const [amount, setAmount] = useState("");
-  const [category, setCategory] = useState<BakerExpense["category"]>("Flour & Sugar");
+  const [category, setCategory] = useState<string>("Raw Materials & Supplies");
   const [notes, setNotes] = useState("");
 
   // Load from LocalStorage and Supabase daily_expenses
@@ -53,9 +53,9 @@ export default function BakerExpensesPage() {
         setExpenses(JSON.parse(stored));
       } else {
         const initialExp: BakerExpense[] = [
-          { id: "exp-1", name: "Amul Butter (5kg bulk)", amount: 2400, category: "Butter & Dairy", date: format(new Date(), "MMM dd, yyyy") },
-          { id: "exp-2", name: "Callebaut Dark Chocolate (2.5kg)", amount: 3200, category: "Chocolate & Cocoa", date: format(new Date(), "MMM dd, yyyy") },
-          { id: "exp-3", name: "Kraft Brownie Boxes (100 pcs)", amount: 1100, category: "Packaging", date: format(new Date(), "MMM dd, yyyy") },
+          { id: "exp-1", name: "Raw Material Supplies (Batch #101)", amount: 2400, category: "Raw Materials & Supplies", date: format(new Date(), "MMM dd, yyyy") },
+          { id: "exp-2", name: "Packaging Supplies & Boxes", amount: 1800, category: "Packaging & Boxes", date: format(new Date(), "MMM dd, yyyy") },
+          { id: "exp-3", name: "Facility Electricity & Utilities", amount: 1200, category: "Utilities & Energy", date: format(new Date(), "MMM dd, yyyy") },
         ];
         setExpenses(initialExp);
         localStorage.setItem(`bftone_baker_expenses_${bizId}`, JSON.stringify(initialExp));
@@ -132,6 +132,16 @@ export default function BakerExpensesPage() {
 
   // Metrics
   const totalExpenses = expenses.reduce((acc, e) => acc + e.amount, 0);
+  const topCategory = useMemo(() => {
+    if (expenses.length === 0) return "None";
+    const counts: Record<string, number> = {};
+    expenses.forEach((e) => {
+      counts[e.category] = (counts[e.category] || 0) + e.amount;
+    });
+    const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+    return sorted[0] ? sorted[0][0] : "None";
+  }, [expenses]);
+
   const filteredExpenses = expenses.filter(
     (e) =>
       e.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -139,7 +149,7 @@ export default function BakerExpensesPage() {
   );
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] pb-24">
+    <div className="space-y-6">
       {/* Top Header */}
       <div className="bg-white border-b border-[#E2E8F0] sticky top-14 md:top-0 z-20 shadow-2xs">
         <div className="max-w-6xl mx-auto px-4 py-3 sm:py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
@@ -149,12 +159,12 @@ export default function BakerExpensesPage() {
             </div>
             <div className="min-w-0">
               <div className="flex items-center gap-2 whitespace-nowrap">
-                <h1 className="text-sm sm:text-xl font-extrabold text-[#0F172A] tracking-tight whitespace-nowrap">Baking & Ingredient Expenses</h1>
+                <h1 className="text-sm sm:text-xl font-extrabold text-[#0F172A] tracking-tight whitespace-nowrap">Operating Expenses</h1>
                 <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-rose-50 text-rose-700 border border-rose-200 shrink-0 whitespace-nowrap">
                   {expenses.length} Entries
                 </span>
               </div>
-              <p className="text-[11px] sm:text-xs text-[#64748B] hidden sm:block">Log butter, chocolate, flour, packaging boxes & operational costs</p>
+              <p className="text-[11px] sm:text-xs text-[#64748B] hidden sm:block">Log raw materials, supplies, packaging, utilities &amp; operational costs</p>
             </div>
           </div>
 
@@ -182,7 +192,7 @@ export default function BakerExpensesPage() {
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className="p-4 rounded-2xl bg-white border border-[#E2E8F0] shadow-2xs flex items-center justify-between">
             <div>
-              <p className="text-[11px] font-bold text-[#64748B] uppercase tracking-wider">Total Raw Costs</p>
+              <p className="text-[11px] font-bold text-[#64748B] uppercase tracking-wider">Total Operating Costs</p>
               <h3 className="text-2xl font-black text-[#0F172A] mt-0.5">₹{totalExpenses.toLocaleString("en-IN")}</h3>
               <p className="text-xs text-rose-600 font-semibold mt-1">Deducted from gross sales</p>
             </div>
@@ -194,8 +204,8 @@ export default function BakerExpensesPage() {
           <div className="p-4 rounded-2xl bg-white border border-[#E2E8F0] shadow-2xs flex items-center justify-between">
             <div>
               <p className="text-[11px] font-bold text-[#64748B] uppercase tracking-wider">Top Category</p>
-              <h3 className="text-base font-black text-[#0F172A] mt-0.5">Chocolate & Dairy</h3>
-              <p className="text-xs text-[#64748B] font-semibold mt-1">Primary ingredient driver</p>
+              <h3 className="text-base font-black text-[#0F172A] mt-0.5 truncate max-w-[170px]" title={topCategory}>{topCategory}</h3>
+              <p className="text-xs text-[#64748B] font-semibold mt-1">Primary expense driver</p>
             </div>
             <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold">
               <ShoppingBag size={20} />
@@ -222,7 +232,7 @@ export default function BakerExpensesPage() {
             <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
               type="text"
-              placeholder="Search ingredient or packaging..."
+              placeholder="Search expenses, supplies or categories..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full pl-9 pr-3.5 py-2 rounded-xl text-xs bg-slate-50 border border-slate-200 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
@@ -285,7 +295,7 @@ export default function BakerExpensesPage() {
                   <tr>
                     <td colSpan={5} className="py-12 text-center text-[#64748B]">
                       <p className="font-bold text-sm">No expenses found.</p>
-                      <p className="text-xs text-slate-400 mt-1">Click "+ Log Expense" to record raw material bills.</p>
+                      <p className="text-xs text-slate-400 mt-1">Click &ldquo;+ Log Expense&rdquo; to record business &amp; supply expenses.</p>
                     </td>
                   </tr>
                 )}
@@ -300,7 +310,7 @@ export default function BakerExpensesPage() {
         <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl max-w-sm w-full border border-slate-200 shadow-2xl p-6 space-y-4">
             <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
-              <h3 className="font-extrabold text-base text-[#0F172A]">Log Baking Expense</h3>
+              <h3 className="font-extrabold text-base text-[#0F172A]">Log Operating Expense</h3>
               <button
                 type="button"
                 onClick={() => setIsModalOpen(false)}
@@ -316,7 +326,7 @@ export default function BakerExpensesPage() {
                 <input
                   type="text"
                   required
-                  placeholder="e.g. Amul Butter 5kg"
+                  placeholder="e.g. Raw Material Batch / Packaging Supplies"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   className="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500"

@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { formatCafeName } from "@/lib/utils/bakerUtils";
 import { fetchB2BClients, B2B_CUSTOMERS_UPDATED_EVENT } from "@/lib/services/b2bClients";
+import { SelectDropdown, SelectOption } from "@/components/ui/SelectDropdown";
 
 export interface BakerPaymentRecord {
   id: string;
@@ -302,8 +303,12 @@ export default function BakerPaymentsPage() {
 
     const phoneClean = (inv.customerPhone || "").replace(/[^0-9]/g, "");
     const waUrl = phoneClean
-      ? `https://wa.me/${phoneClean.startsWith("91") ? phoneClean : `91${phoneClean}`}?text=${encodeURIComponent(message)}`
-      : `https://wa.me/?text=${encodeURIComponent(message)}`;
+      ? `https://api.whatsapp.com/send?phone=${phoneClean.startsWith("91") ? phoneClean : `91${phoneClean}`}&text=${encodeURIComponent(message)}`
+      : `https://api.whatsapp.com/send?text=${encodeURIComponent(message)}`;
+
+    if (typeof navigator !== "undefined" && navigator.clipboard) {
+      navigator.clipboard.writeText(message).catch(() => {});
+    }
 
     window.open(waUrl, "_blank");
     toast({ title: "Reminder Opened on WhatsApp! 📱", description: `Sent to ${inv.customerName}` });
@@ -342,8 +347,12 @@ export default function BakerPaymentsPage() {
     const phone = storeStats[storeName]?.phone || storeInvs[0]?.customerPhone || "";
     const phoneClean = phone.replace(/[^0-9]/g, "");
     const waUrl = phoneClean
-      ? `https://wa.me/${phoneClean.startsWith("91") ? phoneClean : `91${phoneClean}`}?text=${encodeURIComponent(message)}`
-      : `https://wa.me/?text=${encodeURIComponent(message)}`;
+      ? `https://api.whatsapp.com/send?phone=${phoneClean.startsWith("91") ? phoneClean : `91${phoneClean}`}&text=${encodeURIComponent(message)}`
+      : `https://api.whatsapp.com/send?text=${encodeURIComponent(message)}`;
+
+    if (typeof navigator !== "undefined" && navigator.clipboard) {
+      navigator.clipboard.writeText(message).catch(() => {});
+    }
 
     window.open(waUrl, "_blank");
     toast({
@@ -410,6 +419,47 @@ export default function BakerPaymentsPage() {
   const totalStoresWithDuesCount = useMemo(() => {
     return Object.values(storeStats).filter((s) => s.unpaidDues > 0).length;
   }, [storeStats]);
+
+  // Rich options for Store Filter SelectDropdown
+  const storeFilterOptions = useMemo((): SelectOption[] => {
+    const list: SelectOption[] = [
+      {
+        value: "all",
+        label: `All Stores (${availableStores.length})`,
+        icon: <Building2 size={13} className="text-blue-600" />,
+        badge: totalStoresWithDuesCount > 0 ? `${totalStoresWithDuesCount} with dues` : "All clear",
+        badgeVariant: totalStoresWithDuesCount > 0 ? "danger" : "success",
+      },
+    ];
+
+    availableStores.forEach((storeName) => {
+      const s = storeStats[storeName];
+      const hasDues = s && s.unpaidDues > 0;
+      list.push({
+        value: storeName,
+        label: formatCafeName(storeName),
+        icon: <Store size={13} className="text-slate-500" />,
+        badge: hasDues ? `₹${s.unpaidDues.toLocaleString("en-IN")} due` : "✓ Clear",
+        badgeVariant: hasDues ? "danger" : "success",
+      });
+    });
+
+    return list;
+  }, [availableStores, storeStats, totalStoresWithDuesCount]);
+
+  // Rich options for Modal Record Payment SelectDropdown
+  const storeRecordOptions = useMemo((): SelectOption[] => {
+    return availableStores.map((s) => {
+      const due = storeStats[s]?.unpaidDues || 0;
+      return {
+        value: s,
+        label: formatCafeName(s),
+        icon: <Store size={13} className="text-slate-500" />,
+        badge: due > 0 ? `₹${due.toLocaleString("en-IN")} due` : "✓ Clear",
+        badgeVariant: due > 0 ? "danger" : "success",
+      };
+    });
+  }, [availableStores, storeStats]);
 
   // Selected slip for modal (differentiates delivery slip vs return slip refund)
   const selectedSlip = useMemo(() => {
@@ -538,7 +588,7 @@ export default function BakerPaymentsPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] pb-24">
+    <div className="space-y-6">
       {/* Top Header */}
       <div className="bg-white border-b border-[#E2E8F0] sticky top-14 md:top-0 z-20 shadow-2xs">
         <div className="max-w-6xl mx-auto px-4 py-3 sm:py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
@@ -785,7 +835,7 @@ export default function BakerPaymentsPage() {
         <div className="bg-white p-3.5 sm:p-4 rounded-2xl border border-[#E2E8F0] shadow-2xs space-y-3">
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
             {/* View Switcher: Delivery Slips vs Payment History */}
-            <div className="flex items-center gap-1.5 p-1 bg-slate-100 rounded-xl shrink-0">
+            <div className="flex items-center gap-1.5 p-1 bg-slate-100 rounded-xl shrink-0 max-w-full overflow-x-auto scrollbar-none">
               <button
                 type="button"
                 onClick={() => setActiveTab("slips")}
@@ -812,7 +862,7 @@ export default function BakerPaymentsPage() {
 
             {/* Status Pills (Only when on Slips Tab) */}
             {activeTab === "slips" && (
-              <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-xl shrink-0">
+              <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-xl shrink-0 max-w-full overflow-x-auto scrollbar-none">
                 <button
                   type="button"
                   onClick={() => setStatusFilter("unpaid")}
@@ -850,23 +900,15 @@ export default function BakerPaymentsPage() {
           {/* Search bar & Store Select Filter Dropdown */}
           <div className="flex flex-col sm:flex-row items-center gap-2 pt-1 border-t border-slate-100">
             {/* Store Select Dropdown */}
-            <div className="w-full sm:w-64 shrink-0">
-              <select
+            <div className="w-full sm:w-72 shrink-0">
+              <SelectDropdown
                 value={selectedStoreFilter}
-                onChange={(e) => setSelectedStoreFilter(e.target.value)}
-                className="w-full px-3 py-1.5 rounded-xl text-xs bg-slate-50 border border-slate-200 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 font-bold text-[#0F172A]"
-              >
-                <option value="all">📍 All Stores ({availableStores.length})</option>
-                {availableStores.map((storeName) => {
-                  const s = storeStats[storeName];
-                  const dueText = s && s.unpaidDues > 0 ? ` [₹${s.unpaidDues.toLocaleString("en-IN")} due]` : " [Clear]";
-                  return (
-                    <option key={storeName} value={storeName}>
-                      {formatCafeName(storeName)} {dueText}
-                    </option>
-                  );
-                })}
-              </select>
+                onChange={(val) => setSelectedStoreFilter(val)}
+                options={storeFilterOptions}
+                size="sm"
+                placeholder="Filter by Store..."
+                searchPlaceholder="Search store name..."
+              />
             </div>
 
             {/* Keyword Search */}
@@ -1239,8 +1281,8 @@ export default function BakerPaymentsPage() {
       {/* RECORD PAYMENT MODAL                                 */}
       {/* ==================================================== */}
       {isRecordModalOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-md w-full border border-slate-200 shadow-2xl p-6 space-y-4">
+        <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+          <div className="bg-white rounded-3xl max-w-md w-full border border-slate-200 shadow-2xl p-4 sm:p-6 space-y-4 my-auto max-h-[92vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
               <div className="flex items-center gap-2">
                 <div className={cn(
@@ -1300,10 +1342,9 @@ export default function BakerPaymentsPage() {
                 <label className="text-xs font-bold text-[#0F172A] block mb-1">
                   {isSelectedSlipReturn ? "Client / Store Receiving Refund *" : "Paying Store / Café *"}
                 </label>
-                <select
+                <SelectDropdown
                   value={selectedStoreName}
-                  onChange={(e) => {
-                    const st = e.target.value;
+                  onChange={(st) => {
                     setSelectedStoreName(st);
                     const due = storeStats[st]?.unpaidDues;
                     if (due && due > 0 && !selectedInvoiceNumber) {
@@ -1311,14 +1352,11 @@ export default function BakerPaymentsPage() {
                       setNotes(`Clearing dues for ${st}`);
                     }
                   }}
-                  className="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-                >
-                  {availableStores.map((s) => (
-                    <option key={s} value={s}>
-                      {formatCafeName(s)} {storeStats[s]?.unpaidDues ? `(₹${storeStats[s].unpaidDues.toLocaleString("en-IN")} due)` : ""}
-                    </option>
-                  ))}
-                </select>
+                  options={storeRecordOptions}
+                  size="md"
+                  placeholder="Select store / café..."
+                  searchPlaceholder="Search store name..."
+                />
               </div>
 
               <div>
