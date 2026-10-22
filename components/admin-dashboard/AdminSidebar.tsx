@@ -39,12 +39,9 @@ import {
   Megaphone,
   Truck,
   Package,
-  PackageCheck,
   CreditCard,
   Send,
-  PieChart,
   Radio,
-  Lock,
   X
 } from "lucide-react";
 import { BoldFilledLock } from "@/components/ui/BoldFilledLock";
@@ -81,7 +78,6 @@ export function AdminSidebar({
   onToggleCollapse,
   onItemClick,
   storeName = "SeyalPro Store",
-  activeItem = "dashboard",
   onSelectInternalView,
   isGridViewActive = false,
   onToggleGridView,
@@ -109,7 +105,7 @@ export function AdminSidebar({
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const profileMenuRef = React.useRef<HTMLDivElement>(null);
 
-  const [cachedIsAdmin, setCachedIsAdmin] = useState<boolean>(() => {
+  const [cachedIsAdmin] = useState<boolean>(() => {
     if (typeof window !== "undefined") {
       try {
         for (let i = 0; i < localStorage.length; i++) {
@@ -164,9 +160,10 @@ export function AdminSidebar({
         setAppMode(e.newValue);
       }
     };
-    const handleCustomEvent = (e: any) => {
-      if (e.detail?.mode === "baker" || e.detail?.mode === "cafe") {
-        setAppMode(e.detail.mode);
+    const handleCustomEvent = (e: Event) => {
+      const customEv = e as CustomEvent<{ mode?: "baker" | "cafe" }>;
+      if (customEv.detail?.mode === "baker" || customEv.detail?.mode === "cafe") {
+        setAppMode(customEv.detail.mode);
       }
     };
     window.addEventListener("storage", handleStorage);
@@ -816,18 +813,10 @@ export function AdminSidebar({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-2 pt-0.5">
-            <Link
-              href="/profile"
-              onClick={onCloseMobile}
-              className="flex items-center justify-center gap-1.5 px-2.5 py-2 rounded-xl text-xs font-semibold text-slate-200 bg-slate-800/80 hover:bg-slate-800 hover:text-white border border-slate-700/60 active:scale-95 transition-all min-h-[40px]"
-            >
-              <User size={14} className="text-blue-400 shrink-0" />
-              <span>My Profile</span>
-            </Link>
+          <div className="pt-0.5 w-full">
             <button
               onClick={handleLogout}
-              className="flex items-center justify-center gap-1.5 px-2.5 py-2 rounded-xl text-xs font-semibold text-rose-400 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 active:scale-95 transition-all min-h-[40px]"
+              className="w-full flex items-center justify-center gap-1.5 px-2.5 py-2 rounded-xl text-xs font-semibold text-rose-400 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 active:scale-95 transition-all min-h-[40px]"
             >
               <LogOut size={14} className="shrink-0" />
               <span>Sign out</span>
@@ -1244,16 +1233,7 @@ export function AdminSidebar({
 
             {/* Popover Links */}
             <div className="space-y-0.5 py-0.5">
-              <Link
-                href="/profile"
-                onClick={() => setProfileMenuOpen(false)}
-                className="flex items-center gap-2.5 px-2.5 py-2 text-xs font-semibold text-slate-200 hover:text-white rounded-xl hover:bg-slate-800/90 transition-colors"
-              >
-                <User size={15} className="text-blue-400 shrink-0" />
-                <span>My Profile & Settings</span>
-              </Link>
-
-              {isAdmin || isBakerActive ? (
+              {isAdmin ? (
                 <>
                   <Link
                     href={isBakerActive ? "/b2b/store" : "/admin/store"}
@@ -1304,7 +1284,7 @@ export function AdminSidebar({
             onClick={() => setProfileMenuOpen(!profileMenuOpen)}
             className="relative w-9 h-9 rounded-xl bg-gradient-to-tr from-blue-600 via-indigo-600 to-violet-600 text-white font-extrabold text-xs flex items-center justify-center shadow-xs hover:scale-105 hover:ring-2 hover:ring-blue-400 transition-all group"
             title={`${userRoleTitle}: ${displayName || "User"} (${userEmail}) - Click for options`}
-            aria-label="User Profile and Settings"
+            aria-label="User Account"
           >
             {initial}
             <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 ring-2 ring-[#0B132B] absolute -bottom-0.5 -right-0.5" />
@@ -1314,7 +1294,7 @@ export function AdminSidebar({
           <div
             onClick={() => setProfileMenuOpen(!profileMenuOpen)}
             className="flex items-center justify-between p-2 rounded-xl bg-slate-900/80 hover:bg-slate-900 border border-slate-800/80 hover:border-slate-700/80 transition-all cursor-pointer group select-none shadow-xs"
-            title={`${userRoleTitle} Account & Settings`}
+            title={`${userRoleTitle} Account`}
           >
             <div className="flex items-center gap-2.5 min-w-0 pr-1">
               <div className="relative shrink-0">

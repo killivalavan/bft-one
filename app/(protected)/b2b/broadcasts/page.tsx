@@ -679,12 +679,16 @@ export default function BakerBroadcastsPage() {
                     type="button"
                     disabled={isSending}
                     onClick={handleSendBroadcast}
-                    className="w-full sm:flex-1 py-2.5 px-4 rounded-xl text-xs font-extrabold bg-blue-600 hover:bg-blue-700 text-white transition-all shadow-xs flex items-center justify-center gap-2 cursor-pointer active:scale-95 disabled:opacity-50"
+                    className="w-full sm:flex-1 py-3 px-4 rounded-xl text-xs sm:text-sm font-extrabold bg-blue-600 hover:bg-blue-700 text-white transition-all shadow-xs flex items-center justify-center gap-2.5 cursor-pointer active:scale-95 disabled:opacity-50"
                   >
-                    {isSending ? <RefreshCw size={14} className="animate-spin" /> : <Send size={14} />}
+                    {isSending ? (
+                      <RefreshCw size={17} className="animate-spin shrink-0" />
+                    ) : (
+                      <Send size={17} className="shrink-0" />
+                    )}
                     <span>
                       {targetType === "all"
-                        ? `Send Notification to Client Apps (${seyalProConnectedStores.length} SeyalPro Stores)`
+                        ? `Send Notification to Client Apps (${seyalProConnectedStores.length === 1 ? "1 SeyalPro Store" : `${seyalProConnectedStores.length} SeyalPro Stores`})`
                         : `Send Notification to ${formatCafeName(selectedStore?.name || "Client App")}`}
                     </span>
                   </button>
@@ -707,13 +711,13 @@ export default function BakerBroadcastsPage() {
                     window.open(url, "_blank");
                   }}
                   className={cn(
-                    "py-2.5 px-4 rounded-xl text-xs font-extrabold transition-all flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap active:scale-95 shadow-2xs",
+                    "py-3 px-4 rounded-xl text-xs sm:text-sm font-extrabold transition-all flex items-center justify-center gap-2 cursor-pointer whitespace-nowrap active:scale-95 shadow-2xs",
                     !canSendInAppNotification
                       ? "w-full bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs"
                       : "w-full sm:w-auto bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-300"
                   )}
                 >
-                  <Share2 size={14} />
+                  <Share2 size={16} className="shrink-0" />
                   <span>
                     {!canSendInAppNotification
                       ? `Send Advisory via WhatsApp to ${formatCafeName(selectedStore?.name || "Client")}`
@@ -725,11 +729,11 @@ export default function BakerBroadcastsPage() {
           </div>
 
           {/* Right Column: Sent Advisories Feed (5 cols) */}
-          <div className="lg:col-span-5 bg-white p-5 rounded-3xl border border-[#E2E8F0] shadow-xs space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div className="flex items-center gap-2">
-                <Radio size={16} className="text-blue-600" />
-                <h3 className="text-sm font-extrabold text-[#0F172A] tracking-tight">
+          <div className="lg:col-span-5 bg-white p-4 sm:p-5 rounded-3xl border border-[#E2E8F0] shadow-xs space-y-4">
+            <div className="flex items-center justify-between gap-2 border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2 min-w-0">
+                <Radio size={16} className="text-blue-600 shrink-0" />
+                <h3 className="text-xs sm:text-sm font-extrabold text-[#0F172A] tracking-tight whitespace-nowrap">
                   Broadcast History ({broadcasts.length})
                 </h3>
               </div>

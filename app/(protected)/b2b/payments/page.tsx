@@ -768,15 +768,6 @@ export default function BakerPaymentsPage() {
                 <Plus size={13} />
                 <span>Record Store Payment</span>
               </button>
-
-              <button
-                type="button"
-                onClick={() => setSelectedStoreFilter("all")}
-                className="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-white transition cursor-pointer"
-                title="Clear store filter"
-              >
-                <X size={15} />
-              </button>
             </div>
           </div>
         )}

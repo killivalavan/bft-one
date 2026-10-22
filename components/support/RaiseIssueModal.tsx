@@ -275,22 +275,24 @@ export default function RaiseIssueModal({ isOpen, onClose, initialTab = "list", 
             {/* Navigation Tabs */}
             <div className="flex items-center gap-2 mt-5">
               <button
+                type="button"
                 onClick={() => {
                   setActiveTab("list");
                   setSubmittedTicket(null);
                 }}
                 className={cn(
-                  "flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all",
+                  "flex-1 sm:flex-initial flex items-center justify-center gap-2 px-3.5 sm:px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all whitespace-nowrap cursor-pointer",
                   activeTab === "list"
                     ? "bg-zinc-900 text-white shadow-md shadow-zinc-900/20"
                     : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200 hover:text-zinc-900"
                 )}
               >
-                <Clock size={14} />
-                <span>Raised Issues & Status</span>
+                <Clock size={17} className="shrink-0" strokeWidth={2.2} />
+                <span className="hidden sm:inline">Raised Issues &amp; Status</span>
+                <span className="sm:hidden">Raised Issues</span>
                 {tickets.length > 0 && (
                   <span className={cn(
-                    "px-1.5 py-0.2 rounded-full text-[10px] font-extrabold",
+                    "px-1.5 py-0.2 rounded-full text-[10px] font-extrabold shrink-0",
                     activeTab === "list" ? "bg-white/20 text-white" : "bg-zinc-300 text-zinc-800"
                   )}>
                     {tickets.length}
@@ -299,19 +301,21 @@ export default function RaiseIssueModal({ isOpen, onClose, initialTab = "list", 
               </button>
 
               <button
+                type="button"
                 onClick={() => {
                   setActiveTab("create");
                   setSubmittedTicket(null);
                 }}
                 className={cn(
-                  "flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all",
+                  "flex-1 sm:flex-initial flex items-center justify-center gap-2 px-3.5 sm:px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all whitespace-nowrap cursor-pointer",
                   activeTab === "create"
                     ? "bg-[#2563EB] text-white shadow-xs"
                     : "bg-[#EFF6FF] text-[#1E40AF] hover:bg-[#DBEAFE] border border-[#BFDBFE]"
                 )}
               >
-                <Plus size={14} />
-                <span>Raise New Issue</span>
+                <Plus size={18} className="shrink-0" strokeWidth={2.5} />
+                <span className="hidden sm:inline">Raise New Issue</span>
+                <span className="sm:hidden">Raise Issue</span>
               </button>
             </div>
           </div>

@@ -773,12 +773,16 @@ export function StoreSettings() {
               {/* Signature Controls */}
               <div className="flex-1 space-y-3 min-w-0 text-center sm:text-left">
                 <div>
-                  <h4 className="text-sm font-bold text-indigo-950 flex items-center gap-1.5 justify-center sm:justify-start">
-                    <FileSignature className="w-4 h-4 text-indigo-600" />
-                    <span>Authorised Signature / Stamp</span>
-                    <span className="text-[10px] bg-indigo-100 text-indigo-800 font-bold px-2 py-0.5 rounded-md">Square (1:1) / Rectangle Crop</span>
-                  </h4>
-                  <p className="text-xs text-zinc-500 mt-0.5">
+                  <div className="flex flex-wrap items-center justify-center sm:justify-start gap-1.5 sm:gap-2">
+                    <h4 className="text-sm font-bold text-indigo-950 flex items-center gap-1.5">
+                      <FileSignature className="w-4 h-4 text-indigo-600 shrink-0" />
+                      <span>Authorised Signature / Stamp</span>
+                    </h4>
+                    <span className="text-[10px] bg-indigo-100 text-indigo-800 font-bold px-2 py-0.5 rounded-md whitespace-nowrap">
+                      Square / Rectangle Crop
+                    </span>
+                  </div>
+                  <p className="text-xs text-zinc-500 mt-1">
                     Strict image format only (PNG, JPG, WEBP). Selecting an image opens the cropper to frame your signature.
                   </p>
                 </div>
@@ -843,22 +847,25 @@ export function StoreSettings() {
 
             {/* 3. Store Information & Billed By Details */}
             <div className="space-y-4">
-              <h4 className="text-xs font-bold text-zinc-900 uppercase tracking-wider flex items-center gap-1.5">
-                <Building2 className="w-4 h-4 text-emerald-600" /> Store &amp; Billing Information (Billed By)
+              <h4 className="text-xs font-bold text-zinc-900 uppercase tracking-wider flex items-center gap-1.5 flex-wrap">
+                <Building2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>Store &amp; Billing Information</span>
+                <span className="text-[10px] font-semibold text-zinc-400 normal-case whitespace-nowrap">(Billed by)</span>
               </h4>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1.5">
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
                     <label className="text-xs font-bold text-zinc-700 flex items-center gap-1.5">
-                      <Store className="w-3.5 h-3.5 text-emerald-600" /> Store / Business Name
+                      <Store className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                      <span>Store / Business Name</span>
                     </label>
                     {!isSuperAdmin ? (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-50 text-amber-800 border border-amber-200 shadow-2xs">
-                        🔒 Locked by SeyalPro Admin
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-50 text-amber-800 border border-amber-200 shadow-2xs whitespace-nowrap">
+                        🔒 Locked by Admin
                       </span>
                     ) : (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-50 text-emerald-800 border border-emerald-200 whitespace-nowrap">
                         👑 Super Admin Editable
                       </span>
                     )}

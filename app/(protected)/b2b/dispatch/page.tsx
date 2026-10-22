@@ -815,47 +815,52 @@ export default function BakerDispatchPage() {
                 {/* Selected Store Active Spotlight Banner OR Prompt */}
                 {selectedStore ? (
                   <div className={cn(
-                    "p-3.5 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs transition-all",
+                    "p-3.5 sm:p-4 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs transition-all",
                     isReturnMode
-                      ? "bg-amber-50/70 border border-amber-200/80"
-                      : "bg-blue-50/70 border border-blue-200/80"
+                      ? "bg-amber-50/80 border border-amber-200/90"
+                      : "bg-blue-50/80 border border-blue-200/90"
                   )}>
-                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                    <div className="flex items-start gap-3 min-w-0 flex-1">
                       <div className={cn(
-                        "w-9 h-9 rounded-xl flex items-center justify-center font-bold shrink-0 shadow-2xs text-white",
+                        "w-9 h-9 rounded-xl flex items-center justify-center font-bold shrink-0 shadow-2xs text-white mt-0.5",
                         isReturnMode ? "bg-amber-600" : "bg-blue-600"
                       )}>
                         {isReturnMode ? <RotateCcw size={16} /> : <Store size={16} />}
                       </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2 flex-wrap">
+                      <div className="min-w-0 flex-1 space-y-1">
+                        <div className="flex items-center gap-1.5 flex-wrap">
                           <span className={cn(
                             "text-[10px] font-black uppercase tracking-wider",
                             isReturnMode ? "text-amber-800" : "text-blue-700"
                           )}>
-                            {isReturnMode ? "Returning Store (Balance will be credited)" : "Active Recipient"}
+                            {isReturnMode ? "Returning Store" : "Active Recipient"}
                           </span>
                           <span className={cn(
                             "w-1.5 h-1.5 rounded-full animate-pulse",
                             isReturnMode ? "bg-amber-500" : "bg-emerald-500"
                           )} />
+                          {isReturnMode && (
+                            <span className="hidden sm:inline text-[10px] text-amber-700/80 font-medium">
+                              (Balance credited)
+                            </span>
+                          )}
                           {selectedStore.business_id ? (
-                            <span className="inline-flex items-center gap-1 text-[9.5px] font-black px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 border border-blue-200">
-                              ⚡ SeyalPro App Linked
+                            <span className="inline-flex items-center gap-1 text-[9px] font-black px-1.5 py-0.2 rounded-md bg-blue-100 text-blue-800 border border-blue-200">
+                              ⚡ SeyalPro App
                             </span>
                           ) : (
-                            <span className="inline-flex items-center gap-1 text-[9.5px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200">
+                            <span className="inline-flex items-center gap-1 text-[9px] font-semibold px-1.5 py-0.2 rounded-md bg-white/90 text-slate-600 border border-slate-200">
                               External Client
                             </span>
                           )}
                         </div>
-                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-0.5">
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                           <span className="text-sm font-extrabold text-[#0F172A] tracking-tight font-sans break-words">
                             {formatCafeName(selectedStore.name)}
                           </span>
                           {selectedStore.phone && (
                             <span className={cn(
-                              "font-semibold font-mono text-xs whitespace-nowrap inline-flex items-center gap-1 bg-white/90 px-2 py-0.5 rounded-md border shadow-2xs",
+                              "font-semibold font-mono text-[11px] whitespace-nowrap inline-flex items-center gap-1 bg-white/90 px-2 py-0.5 rounded-md border shadow-2xs",
                               isReturnMode ? "text-amber-900 border-amber-200/80" : "text-[#475569] border-blue-200/80"
                             )}>
                               <Phone size={10} className={isReturnMode ? "text-amber-500 shrink-0" : "text-blue-500 shrink-0"} />
@@ -866,14 +871,17 @@ export default function BakerDispatchPage() {
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-2 shrink-0 sm:self-center self-start">
+                    <div className={cn(
+                      "flex items-center gap-2 shrink-0 sm:self-center self-stretch pt-2 sm:pt-0 border-t sm:border-t-0",
+                      isReturnMode ? "border-amber-200/60" : "border-blue-200/60"
+                    )}>
                       <Link
                         href="/b2b/customers"
                         className={cn(
-                          "px-3.5 py-1.5 rounded-xl text-xs font-bold bg-white transition-all flex items-center gap-1 shadow-2xs cursor-pointer border",
+                          "w-full sm:w-auto justify-center px-3.5 py-1.5 rounded-xl text-xs font-bold bg-white transition-all flex items-center gap-1 shadow-2xs cursor-pointer border",
                           isReturnMode
-                            ? "hover:bg-amber-50 text-amber-800 border-amber-200"
-                            : "hover:bg-blue-50 text-blue-700 border-blue-200"
+                            ? "hover:bg-amber-100 text-amber-800 border-amber-200"
+                            : "hover:bg-blue-100 text-blue-700 border-blue-200"
                         )}
                       >
                         <span>View Client Ledger →</span>
@@ -881,12 +889,21 @@ export default function BakerDispatchPage() {
                     </div>
                   </div>
                 ) : (
-                  <div className="p-3.5 rounded-2xl bg-amber-50/80 border border-amber-200/90 flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-xl bg-amber-500 text-white flex items-center justify-center font-bold shrink-0 shadow-2xs">
+                  <div className={cn(
+                    "p-3.5 rounded-2xl flex items-center gap-3 border shadow-2xs",
+                    isReturnMode ? "bg-amber-50/80 border-amber-200/90" : "bg-blue-50/80 border-blue-200/90"
+                  )}>
+                    <div className={cn(
+                      "w-8 h-8 rounded-xl text-white flex items-center justify-center font-bold shrink-0 shadow-2xs",
+                      isReturnMode ? "bg-amber-500" : "bg-blue-600"
+                    )}>
                       <Store size={16} />
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="text-xs font-extrabold text-amber-900 tracking-tight">
+                      <p className={cn(
+                        "text-xs font-extrabold tracking-tight",
+                        isReturnMode ? "text-amber-900" : "text-blue-900"
+                      )}>
                         {isReturnMode ? "No Returning Café Selected Yet" : "No Delivery Store Selected Yet"}
                       </p>
                     </div>
@@ -898,42 +915,54 @@ export default function BakerDispatchPage() {
             {/* ==================================================== */}
             {/* STEP 2: TAP ITEM QUANTITIES                          */}
             {/* ==================================================== */}
-            <div className="bg-white p-5 rounded-3xl border border-[#E2E8F0] shadow-xs space-y-4">
+            <div className="bg-white p-4 sm:p-5 rounded-3xl border border-[#E2E8F0] shadow-xs space-y-4">
               {/* Step 2 Header */}
               <div className="border-b border-[#F1F5F9] pb-3">
                 <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2 min-w-0">
+                  <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 flex-1">
                     <span className={cn(
-                      "px-2.5 py-0.5 rounded-lg text-white text-[10px] font-black uppercase tracking-wider shrink-0 whitespace-nowrap",
+                      "px-2 sm:px-2.5 py-0.5 rounded-lg text-white text-[10px] font-black uppercase tracking-wider shrink-0 whitespace-nowrap",
                       isReturnMode ? "bg-amber-600" : "bg-blue-600"
                     )}>
                       Step 02
                     </span>
-                    <h2 className="text-base font-extrabold text-[#0F172A] whitespace-nowrap tracking-tight">
-                      {isReturnMode ? "Tap Returned / Expired Quantities" : "Tap Item Quantities"}
+                    <h2 className="text-xs sm:text-base font-extrabold text-[#0F172A] tracking-tight truncate">
+                      {isReturnMode ? (
+                        <>
+                          <span className="hidden sm:inline">Tap Returned / Expired Quantities</span>
+                          <span className="sm:hidden">Return Items</span>
+                        </>
+                      ) : (
+                        <>
+                          <span className="hidden sm:inline">Tap Item Quantities</span>
+                          <span className="sm:hidden">Item Quantities</span>
+                        </>
+                      )}
                     </h2>
                   </div>
 
                   {/* Piece counter badge - compact on mobile, full on desktop */}
-                  <div className="flex items-center gap-2 shrink-0 whitespace-nowrap">
+                  <div className="flex items-center gap-1.5 sm:gap-2 shrink-0 whitespace-nowrap pl-2">
                     {totalUnitsDelivered > 0 && (
-                      <button
-                        type="button"
-                        onClick={() => setQuantities({})}
-                        className="text-[11px] font-bold text-slate-400 hover:text-rose-600 px-2 py-0.5 rounded-lg hover:bg-rose-50 transition-colors cursor-pointer"
-                        title="Clear all product quantities"
-                      >
-                        Reset All
-                      </button>
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => setQuantities({})}
+                          className="text-[11px] font-bold text-slate-400 hover:text-rose-600 px-1.5 py-0.5 rounded-lg hover:bg-rose-50 transition-colors cursor-pointer"
+                          title="Clear all product quantities"
+                        >
+                          Reset
+                        </button>
+                        <span className={cn(
+                          "sm:hidden px-2 py-0.5 rounded-lg text-xs font-black whitespace-nowrap border",
+                          isReturnMode
+                            ? "bg-amber-50 text-amber-800 border-amber-200"
+                            : "bg-blue-50 text-blue-700 border-blue-200"
+                        )}>
+                          {totalUnitsDelivered} {isReturnMode ? "ret" : "pcs"}
+                        </span>
+                      </>
                     )}
-                    <span className={cn(
-                      "sm:hidden px-2.5 py-1 rounded-lg text-xs font-black whitespace-nowrap border",
-                      isReturnMode
-                        ? "bg-amber-50 text-amber-800 border-amber-200"
-                        : "bg-blue-50 text-blue-700 border-blue-200"
-                    )}>
-                      {totalUnitsDelivered} {isReturnMode ? "returned pcs" : "pcs"}
-                    </span>
                     <span className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-slate-50 border border-slate-200 text-xs font-semibold text-[#64748B] whitespace-nowrap">
                       <strong className="text-[#0F172A] font-extrabold">{totalUnitsDelivered}</strong> total {isReturnMode ? "returned pieces" : "pieces"} selected
                     </span>
@@ -1066,29 +1095,39 @@ export default function BakerDispatchPage() {
             {/* ==================================================== */}
             {/* STEP 3: TOTAL & DISPATCH / RETURN ACTIONS            */}
             {/* ==================================================== */}
-            <div className="bg-white p-5 rounded-3xl border border-[#E2E8F0] shadow-xs space-y-4">
+            <div className="bg-white p-4 sm:p-5 rounded-3xl border border-[#E2E8F0] shadow-xs space-y-4">
               {/* Step 3 Header */}
               <div className="border-b border-[#F1F5F9] pb-3">
                 <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2 min-w-0">
+                  <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 flex-1">
                     <span className={cn(
-                      "px-2.5 py-0.5 rounded-lg text-white text-[10px] font-black uppercase tracking-wider shrink-0 whitespace-nowrap",
+                      "px-2 sm:px-2.5 py-0.5 rounded-lg text-white text-[10px] font-black uppercase tracking-wider shrink-0 whitespace-nowrap",
                       isReturnMode ? "bg-amber-600" : "bg-blue-600"
                     )}>
                       Step 03
                     </span>
-                    <h2 className="text-base font-extrabold text-[#0F172A] whitespace-nowrap tracking-tight">
-                      {isReturnMode ? "Review Return Value & Deduct" : "Review Total & Dispatch"}
+                    <h2 className="text-xs sm:text-base font-extrabold text-[#0F172A] tracking-tight truncate">
+                      {isReturnMode ? (
+                        <>
+                          <span className="hidden sm:inline">Review Return Value & Deduct</span>
+                          <span className="sm:hidden">Review Return</span>
+                        </>
+                      ) : (
+                        <>
+                          <span className="hidden sm:inline">Review Total & Dispatch</span>
+                          <span className="sm:hidden">Review Total</span>
+                        </>
+                      )}
                     </h2>
                   </div>
 
                   {/* Total price - compact on mobile, full breakdown on desktop */}
-                  <div className="text-right shrink-0 whitespace-nowrap">
+                  <div className="text-right shrink-0 whitespace-nowrap pl-2">
                     <span className="hidden sm:block text-[10px] font-bold text-[#64748B] uppercase tracking-wider whitespace-nowrap">
                       {isReturnMode ? "Total Return Credit (To Deduct)" : "Gross Billed Total"}
                     </span>
                     <span className={cn(
-                      "text-lg sm:text-2xl font-black whitespace-nowrap",
+                      "text-base sm:text-2xl font-black whitespace-nowrap",
                       isReturnMode ? "text-amber-700" : "text-[#0F172A]"
                     )}>
                       {isReturnMode ? `-₹${billTotalAmount.toLocaleString("en-IN")}` : `₹${billTotalAmount.toLocaleString("en-IN")}`}

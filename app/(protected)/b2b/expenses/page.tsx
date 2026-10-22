@@ -243,8 +243,73 @@ export default function BakerExpensesPage() {
           </span>
         </div>
 
-        {/* Expense List Table */}
-        <div className="bg-white rounded-2xl border border-[#E2E8F0] shadow-xs overflow-hidden">
+        {/* MOBILE VIEW: Vertical Card Feed (Zero horizontal scrolling; matching other B2B tables) */}
+        <div className="md:hidden space-y-3">
+          {filteredExpenses.map((exp) => (
+            <div
+              key={exp.id}
+              className="bg-white p-4 rounded-2xl border border-[#E2E8F0] shadow-2xs space-y-3 transition-all"
+            >
+              {/* Top Row: Icon, Name, Notes, and Delete Action */}
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                  <div className="w-9 h-9 rounded-xl bg-rose-50 border border-rose-200/80 flex items-center justify-center text-rose-700 font-bold shrink-0 shadow-2xs">
+                    <Receipt size={16} />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <h4 className="font-extrabold text-sm text-[#0F172A] leading-snug break-words">
+                      {exp.name}
+                    </h4>
+                    {exp.notes && (
+                      <p className="text-[11px] text-slate-400 mt-0.5 line-clamp-2">
+                        {exp.notes}
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => handleDeleteExpense(exp.id, exp.name)}
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 border border-slate-200/60 transition-all cursor-pointer shrink-0"
+                  title="Delete Expense"
+                >
+                  <Trash2 size={14} />
+                </button>
+              </div>
+
+              {/* 3-Stat Financial Grid (Category, Date, Amount) */}
+              <div className="grid grid-cols-3 gap-2 p-2.5 rounded-xl bg-slate-50 border border-slate-200/60 text-center">
+                <div className="min-w-0">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block truncate">Category</span>
+                  <span className="text-xs font-extrabold text-slate-700 mt-0.5 block truncate" title={exp.category}>
+                    {exp.category}
+                  </span>
+                </div>
+                <div className="min-w-0 border-l border-slate-200">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block truncate">Date</span>
+                  <span className="text-xs font-semibold text-slate-600 mt-0.5 block truncate">{exp.date}</span>
+                </div>
+                <div className="min-w-0 border-l border-slate-200">
+                  <span className="text-[10px] font-bold text-rose-600 uppercase tracking-wider block truncate">Amount</span>
+                  <span className="text-xs font-black text-rose-600 mt-0.5 block truncate">
+                    -₹{exp.amount.toLocaleString("en-IN")}
+                  </span>
+                </div>
+              </div>
+            </div>
+          ))}
+
+          {filteredExpenses.length === 0 && (
+            <div className="bg-white p-8 rounded-2xl border border-[#E2E8F0] text-center text-[#64748B]">
+              <p className="font-bold text-sm">No expenses found.</p>
+              <p className="text-xs text-slate-400 mt-1">Click &ldquo;+ Log Expense&rdquo; to record business &amp; supply expenses.</p>
+            </div>
+          )}
+        </div>
+
+        {/* DESKTOP VIEW: Full Table (Visible on md and larger) */}
+        <div className="hidden md:block bg-white rounded-2xl border border-[#E2E8F0] shadow-xs overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
@@ -262,7 +327,7 @@ export default function BakerExpensesPage() {
                     <td className="py-3.5 px-4">
                       <div className="flex items-center gap-2.5">
                         <div className="w-8 h-8 rounded-lg bg-rose-50 border border-rose-200 flex items-center justify-center text-rose-700 font-bold shrink-0">
-                          🧾
+                          <Receipt size={15} />
                         </div>
                         <div>
                           <p className="font-extrabold text-[#0F172A]">{exp.name}</p>
