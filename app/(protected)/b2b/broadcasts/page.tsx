@@ -672,24 +672,25 @@ export default function BakerBroadcastsPage() {
                 </div>
               )}
 
-              <div className="flex flex-col sm:flex-row items-center gap-3">
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 pt-1">
                 {/* Send Notification to Client Apps - ONLY shown for SeyalPro linked stores */}
                 {canSendInAppNotification && (
                   <button
                     type="button"
                     disabled={isSending}
                     onClick={handleSendBroadcast}
-                    className="w-full sm:flex-1 py-3 px-4 rounded-xl text-xs sm:text-sm font-extrabold bg-blue-600 hover:bg-blue-700 text-white transition-all shadow-xs flex items-center justify-center gap-2.5 cursor-pointer active:scale-95 disabled:opacity-50"
+                    className="flex-1 h-11 sm:h-12 px-4 rounded-xl text-xs sm:text-sm font-bold bg-blue-600 hover:bg-blue-700 text-white transition-all shadow-xs hover:shadow flex items-center justify-center gap-2 cursor-pointer active:scale-[0.98] disabled:opacity-50 whitespace-nowrap min-w-0"
                   >
                     {isSending ? (
-                      <RefreshCw size={17} className="animate-spin shrink-0" />
+                      <RefreshCw size={16} className="animate-spin shrink-0" />
                     ) : (
-                      <Send size={17} className="shrink-0" />
+                      <Send size={16} className="shrink-0" />
                     )}
-                    <span>
+                    <span>Send In-App Notification</span>
+                    <span className="px-2 py-0.5 rounded-full text-[10.5px] font-black bg-blue-700/90 text-blue-100 border border-blue-400/30 shrink-0">
                       {targetType === "all"
-                        ? `Send Notification to Client Apps (${seyalProConnectedStores.length === 1 ? "1 SeyalPro Store" : `${seyalProConnectedStores.length} SeyalPro Stores`})`
-                        : `Send Notification to ${formatCafeName(selectedStore?.name || "Client App")}`}
+                        ? `${seyalProConnectedStores.length} ${seyalProConnectedStores.length === 1 ? "Store" : "Stores"}`
+                        : formatCafeName(selectedStore?.name || "1 Store")}
                     </span>
                   </button>
                 )}
@@ -711,18 +712,23 @@ export default function BakerBroadcastsPage() {
                     window.open(url, "_blank");
                   }}
                   className={cn(
-                    "py-3 px-4 rounded-xl text-xs sm:text-sm font-extrabold transition-all flex items-center justify-center gap-2 cursor-pointer whitespace-nowrap active:scale-95 shadow-2xs",
+                    "h-11 sm:h-12 px-4 rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center justify-center gap-2 cursor-pointer whitespace-nowrap active:scale-[0.98] shadow-2xs shrink-0",
                     !canSendInAppNotification
                       ? "w-full bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs"
-                      : "w-full sm:w-auto bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-300"
+                      : "w-full sm:w-auto bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300"
                   )}
                 >
-                  <Share2 size={16} className="shrink-0" />
+                  <Share2 size={16} className={cn("shrink-0", canSendInAppNotification ? "text-emerald-600" : "text-white")} />
                   <span>
                     {!canSendInAppNotification
-                      ? `Send Advisory via WhatsApp to ${formatCafeName(selectedStore?.name || "Client")}`
-                      : "Open WhatsApp Advisory"}
+                      ? "Send Advisory via WhatsApp"
+                      : "Share via WhatsApp"}
                   </span>
+                  {!canSendInAppNotification && selectedStore && (
+                    <span className="px-2 py-0.5 rounded-full text-[10.5px] font-black bg-emerald-700/90 text-emerald-100 border border-emerald-400/30 shrink-0 truncate max-w-[120px]">
+                      {formatCafeName(selectedStore.name)}
+                    </span>
+                  )}
                 </button>
               </div>
             </div>

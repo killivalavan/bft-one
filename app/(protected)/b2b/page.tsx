@@ -12,13 +12,10 @@ import {
   Clock, TrendingUp, TrendingDown, Package,
   BarChart3, Calendar, Table,
   Search,
-  ChevronDown, ChevronUp,
-  Sparkles, RefreshCw, Trash2, CheckCircle2
+  ChevronDown, ChevronUp
 } from "lucide-react";
-import { useToast } from "@/components/ui/Toast";
 import {
   seedRoyalBakerLocalStorage,
-  clearRoyalBakerLocalStorage,
   ROYAL_BAKER_BIZ_ID,
 } from "@/lib/data/royalBakerDemoData";
 import {
@@ -130,6 +127,25 @@ export default function HomeBakerDashboardPage() {
   const [slipsSearchQuery, setSlipsSearchQuery] = useState("");
   const [showAllInvoices, setShowAllInvoices] = useState(false);
   const [showAllDues, setShowAllDues] = useState(false);
+
+  // Auto-populate for Royal Baker if local storage is completely empty
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const isRoyal = bizId === ROYAL_BAKER_BIZ_ID || (business?.name || "").toLowerCase().includes("royal");
+      if (isRoyal) {
+        const stored = localStorage.getItem(`bftone_invoices_${bizId}`);
+        const parsed = stored ? JSON.parse(stored) : [];
+        if (!Array.isArray(parsed) || parsed.length === 0) {
+          const seeded = seedRoyalBakerLocalStorage(bizId);
+          if (seeded) {
+            setInvoices(seeded.invoices);
+            setStores(seeded.stores);
+            setExpenses(seeded.expenses);
+          }
+        }
+      }
+    }
+  }, [bizId, business?.name]);
 
   // Safe Date Parser Helper
   const parseRecordDate = (rec: { date?: string; createdAt?: string }): Date => {
