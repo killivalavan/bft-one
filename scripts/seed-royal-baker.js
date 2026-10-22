@@ -160,7 +160,19 @@ async function seed() {
       console.log('[SEED] Seeded sample daily_expenses in Supabase.');
     }
   } catch (e) {
-    console.log('[SEED] Note: daily_expenses table bypass (handled via localStorage cache):', e.message);
+    console.log('[SEED] Note on daily_expenses:', e.message);
+  }
+
+  // Also unlock baker_mode on default business so mobile visitors are never restricted
+  try {
+    const { data: defBiz } = await sb.from('businesses').select('enabled_modules').eq('id', 'a0000000-0000-0000-0000-000000000001').single();
+    if (defBiz) {
+      const defModules = { ...(defBiz.enabled_modules || {}), baker_mode: true, b2b_bridge: true };
+      await sb.from('businesses').update({ enabled_modules: defModules }).eq('id', 'a0000000-0000-0000-0000-000000000001');
+      console.log('[SEED] Unlocked baker_mode on default business for seamless mobile preview.');
+    }
+  } catch (e) {
+    console.warn('[SEED] Note on default business update:', e.message);
   }
 
   console.log('[SEED] Royal Baker server seeding complete!');

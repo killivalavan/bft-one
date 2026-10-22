@@ -5,12 +5,24 @@ import { useRouter } from "next/navigation";
 import { useTenant } from "@/lib/context/TenantContext";
 import { ShieldAlert } from "lucide-react";
 import Link from "next/link";
+import { seedRoyalBakerLocalStorage } from "@/lib/data/royalBakerDemoData";
 
 export default function BakerLayout({ children }: { children: React.ReactNode }) {
-  const { isModuleEnabled, loading } = useTenant();
+  const { isModuleEnabled, loading, business } = useTenant();
   const router = useRouter();
 
   const isBakerEnabled = isModuleEnabled ? isModuleEnabled("baker_mode") : false;
+
+  // Global multi-browser & mobile sync: guarantees data is immediately populated on ANY device/browser
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const activeBizId = business?.id || "default";
+      const stored = localStorage.getItem(`bftone_invoices_${activeBizId}`);
+      if (!stored || stored === "[]") {
+        seedRoyalBakerLocalStorage(activeBizId);
+      }
+    }
+  }, [business?.id]);
 
   useEffect(() => {
     if (!loading && !isBakerEnabled) {

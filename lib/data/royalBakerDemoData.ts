@@ -1133,7 +1133,13 @@ export function seedRoyalBakerLocalStorage(bizId = ROYAL_BAKER_BIZ_ID) {
   if (typeof window === "undefined") return null;
 
   const data = getRoyalBakerDemoData();
-  const targetIds = Array.from(new Set([bizId, ROYAL_BAKER_BIZ_ID, "default"]));
+  const targetIds = Array.from(new Set([
+    bizId,
+    ROYAL_BAKER_BIZ_ID,
+    "default",
+    "a0000000-0000-0000-0000-000000000001",
+    ""
+  ])).filter(Boolean);
 
   for (const id of targetIds) {
     try {
@@ -1148,6 +1154,16 @@ export function seedRoyalBakerLocalStorage(bizId = ROYAL_BAKER_BIZ_ID) {
     }
   }
 
+  // Also write non-suffixed keys as ultimate fallback
+  try {
+    localStorage.setItem("bftone_customers_default", JSON.stringify(data.stores));
+    localStorage.setItem("bftone_invoices_default", JSON.stringify(data.invoices));
+    localStorage.setItem("bftone_baker_products_default", JSON.stringify(data.products));
+    localStorage.setItem("bftone_baker_expenses_default", JSON.stringify(data.expenses));
+    localStorage.setItem("bftone_baker_payments_default", JSON.stringify(data.payments));
+    localStorage.setItem("bftone_baker_broadcasts_default", JSON.stringify(data.broadcasts));
+  } catch {}
+
   // Dispatch live update events so open components refresh immediately
   window.dispatchEvent(new CustomEvent(B2B_CUSTOMERS_UPDATED_EVENT, { detail: { clients: data.stores } }));
   window.dispatchEvent(new Event("storage"));
@@ -1161,7 +1177,12 @@ export function seedRoyalBakerLocalStorage(bizId = ROYAL_BAKER_BIZ_ID) {
 export function clearRoyalBakerLocalStorage(bizId = ROYAL_BAKER_BIZ_ID) {
   if (typeof window === "undefined") return;
 
-  const targetIds = Array.from(new Set([bizId, ROYAL_BAKER_BIZ_ID, "default"]));
+  const targetIds = Array.from(new Set([
+    bizId,
+    ROYAL_BAKER_BIZ_ID,
+    "default",
+    "a0000000-0000-0000-0000-000000000001",
+  ])).filter(Boolean);
 
   for (const id of targetIds) {
     try {
