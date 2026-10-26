@@ -6,10 +6,8 @@ export type UserFlags = {
     isAdmin: boolean;
     isStockManager: boolean;
     isSuperAdmin: boolean;
-    businessId: string;
+    businessId: string | null;
 };
-
-const DEFAULT_BUSINESS_ID = "a0000000-0000-0000-0000-000000000001";
 
 export function useProfile() {
     const { user, loading: userLoading } = useUser();
@@ -21,12 +19,11 @@ export function useProfile() {
                 if (key && (key.startsWith('bftone_flags') || key === 'bftone_flags')) {
                     const cached = JSON.parse(localStorage.getItem(key) || '{}');
                     if (cached && (cached.is_admin !== undefined || cached.isAdmin !== undefined)) {
-                        const isRootOwner = cached.email?.toLowerCase() === 'admin@seyalpro.com';
                         return {
                             isAdmin: !!(cached.is_admin ?? cached.isAdmin),
                             isStockManager: !!(cached.is_stock_manager ?? cached.isStockManager),
-                            isSuperAdmin: isRootOwner || !!((cached.is_super_admin ?? cached.isSuperAdmin) && !cached.business_id),
-                            businessId: cached.business_id || cached.businessId || DEFAULT_BUSINESS_ID,
+                            isSuperAdmin: !!(cached.is_super_admin ?? cached.isSuperAdmin),
+                            businessId: cached.business_id || cached.businessId || null,
                         };
                     }
                 }
@@ -54,10 +51,6 @@ export function useProfile() {
             return;
         }
 
-        // Try user-scoped cache first
-        const emailLower = user.email?.toLowerCase() || '';
-        const isRootOwnerEmail = emailLower === 'admin@seyalpro.com';
-
         try {
             const raw = typeof window !== 'undefined' ? localStorage.getItem(`bftone_flags_${user.id}`) : null;
             if (raw) {
@@ -66,8 +59,8 @@ export function useProfile() {
                     setFlags({
                         isAdmin: !!cached.is_admin,
                         isStockManager: !!cached.is_stock_manager,
-                        isSuperAdmin: isRootOwnerEmail || (!!cached.is_super_admin && !cached.business_id),
-                        businessId: cached.business_id || DEFAULT_BUSINESS_ID,
+                        isSuperAdmin: !!cached.is_super_admin,
+                        businessId: cached.business_id || null,
                     });
                 }
             }
@@ -75,11 +68,10 @@ export function useProfile() {
 
         async function fetchProfile() {
             try {
-                // Super Admin is strictly for the platform owner (admin@seyalpro.com or is_super_admin: true with no store bound)
                 let is_admin = false;
                 let is_stock_manager = false;
-                let is_super_admin = isRootOwnerEmail;
-                let business_id = DEFAULT_BUSINESS_ID;
+                let is_super_admin = false;
+                let business_id: string | null = null;
 
                 const fetchPromise = supabaseClient
                     .from('profiles')
@@ -106,13 +98,13 @@ export function useProfile() {
                     if (legacyProf) {
                         is_admin = !!legacyProf.is_admin;
                         is_stock_manager = !!legacyProf.is_stock_manager;
-                        is_super_admin = isRootOwnerEmail;
+                        is_super_admin = false;
                     }
                 } else if (prof) {
                     is_admin = !!prof.is_admin;
                     is_stock_manager = !!prof.is_stock_manager;
-                    is_super_admin = isRootOwnerEmail || (!!prof.is_super_admin && !prof.business_id);
-                    business_id = prof.business_id || DEFAULT_BUSINESS_ID;
+                    is_super_admin = !!prof.is_super_admin;
+                    business_id = prof.business_id || null;
                 }
 
                 const newFlags: UserFlags = {

@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { authenticateRequest } from "@/lib/auth/serverAuth";
 
+export const dynamic = "force-dynamic";
+
 // POST { product_ids: string[] }
 export async function POST(req: Request) {
   try {

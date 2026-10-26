@@ -10,6 +10,8 @@ import {
   EmployeeNotice,
 } from "@/lib/services/employeeHubService";
 
+export const dynamic = "force-dynamic";
+
 export async function GET(request: Request) {
   try {
     const auth = await authenticateRequest(request);

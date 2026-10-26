@@ -3,9 +3,11 @@ import { authenticateRequest } from "@/lib/auth/serverAuth";
 import { validatePasswordPolicy } from "@/lib/utils/passwordPolicy";
 import { logAuditEvent, extractClientMetadata } from "@/lib/services/auditLogger";
 
+export const dynamic = "force-dynamic";
+
 export async function POST(request: Request) {
   try {
-    const auth = await authenticateRequest(request, { requireSuperAdmin: true });
+    const auth = await authenticateRequest(request, { requireSuperAdmin: true, requireRecentAuthMinutes: 15 });
     if ("errorResponse" in auth) {
       return auth.errorResponse;
     }

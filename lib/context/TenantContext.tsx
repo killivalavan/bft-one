@@ -328,10 +328,10 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
 
   function normalizeBusiness(raw: Partial<Business> | Record<string, any>): Business {
     const r = raw as any;
-    const bizId = (r.id as string) || DEFAULT_BUSINESS.id;
+    const bizId = (r.id as string) || "";
     let localExtra: any = {};
     let localShopLoc: any = {};
-    if (typeof window !== "undefined") {
+    if (typeof window !== "undefined" && bizId) {
       try {
         const extraJson = localStorage.getItem(`bftone_tenant_extra_${bizId}`);
         if (extraJson) localExtra = JSON.parse(extraJson);
@@ -358,7 +358,7 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
         ? Number(localShopLoc.lat)
         : ((localExtra.geofence_lat !== undefined && localExtra.geofence_lat !== null && !isNaN(Number(localExtra.geofence_lat)))
           ? Number(localExtra.geofence_lat)
-          : (bizId === DEFAULT_BUSINESS.id ? DEFAULT_BUSINESS.geofence_lat : null)));
+          : null));
 
     const resolvedLng = (raw.geofence_lng !== null && raw.geofence_lng !== undefined && !isNaN(Number(raw.geofence_lng)))
       ? Number(raw.geofence_lng)
@@ -366,7 +366,7 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
         ? Number(localShopLoc.lng)
         : ((localExtra.geofence_lng !== undefined && localExtra.geofence_lng !== null && !isNaN(Number(localExtra.geofence_lng)))
           ? Number(localExtra.geofence_lng)
-          : (bizId === DEFAULT_BUSINESS.id ? DEFAULT_BUSINESS.geofence_lng : null)));
+          : null));
 
     const resolvedRadius = (raw.geofence_radius_meters && !isNaN(Number(raw.geofence_radius_meters)))
       ? Number(raw.geofence_radius_meters)

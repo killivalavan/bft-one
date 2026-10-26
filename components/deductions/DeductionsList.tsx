@@ -60,15 +60,59 @@ export function DeductionsList() {
                     return;
                 }
 
-                const res = await fetch(`/api/deductions?userId=${encodeURIComponent(user.id)}`);
+                // 1. Fetch via API endpoint with auth bearer token
+                const { data: { session } } = await supabaseClient.auth.getSession();
+                const token = session?.access_token;
 
-                if (!res.ok) {
-                    const errorBody = await res.json().catch(() => ({}));
-                    throw new Error(errorBody?.error || "Failed to load deductions");
+                let records: DeductionRecord[] = [];
+                try {
+                    const res = await fetch(`/api/deductions`, {
+                        headers: {
+                            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                        },
+                    });
+
+                    if (res.ok) {
+                        const payload = await res.json();
+                        if (Array.isArray(payload?.deductions)) {
+                            records = payload.deductions;
+                        }
+                    } else {
+                        console.warn("Deductions API returned non-OK status:", res.status);
+                    }
+                } catch (fetchErr) {
+                    console.warn("Deductions API fetch failed:", fetchErr);
                 }
 
-                const payload = await res.json();
-                const records = Array.isArray(payload?.deductions) ? payload.deductions : [];
+                // 2. Resilient direct query fallback if API returned 0 records or failed
+                if (records.length === 0) {
+                    const { data: entries } = await supabaseClient
+                        .from("salary_entries")
+                        .select(`
+                            id,
+                            entry_date,
+                            amount_cents,
+                            reason,
+                            kind,
+                            user_id,
+                            profiles(id, email)
+                        `)
+                        .eq("kind", "deduction")
+                        .order("entry_date", { ascending: false });
+
+                    if (entries && entries.length > 0) {
+                        records = entries
+                            .map((entry: any) => ({
+                                id: entry.id,
+                                user_email: entry.profiles?.email || (Array.isArray(entry.profiles) ? entry.profiles[0]?.email : null) || "Unknown",
+                                user_id: entry.user_id,
+                                reason: entry.reason,
+                                amount_cents: entry.amount_cents,
+                                entry_date: entry.entry_date,
+                            }))
+                            .filter((record: any) => typeof record.reason === "string" && record.reason.toLowerCase().includes("late"));
+                    }
+                }
 
                 if (mounted) {
                     setDeductions(records);
@@ -95,11 +139,13 @@ export function DeductionsList() {
     }
 
     // Filter deductions by selected month
-    const monthStart = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1);
-    const monthEnd = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 0);
+    const monthStart = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1, 0, 0, 0, 0);
+    const monthEnd = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 0, 23, 59, 59, 999);
     
     const filteredDeductions = deductions.filter(record => {
-        const recordDate = new Date(record.entry_date);
+        const [y, m, d] = (record.entry_date || "").split("-").map(Number);
+        if (!y || !m || !d) return false;
+        const recordDate = new Date(y, m - 1, d);
         return recordDate >= monthStart && recordDate <= monthEnd;
     });
 
@@ -211,24 +257,40 @@ export function DeductionsList() {
                                 {/* Summary Chips */}
                                 <div className="grid grid-cols-3 gap-2">
                                     {(() => {
-                                        const now = new Date();
-                                        const currentMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-                                        const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-                                        const sixMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 6, 1);
+                                        const allEmployeeRecords = deductions.filter(r => r.user_email === email);
+                                        const refDate = currentMonth || new Date();
+                                        const curMonthStart = new Date(refDate.getFullYear(), refDate.getMonth(), 1, 0, 0, 0, 0);
+                                        const curMonthEnd = new Date(refDate.getFullYear(), refDate.getMonth() + 1, 0, 23, 59, 59, 999);
 
-                                        const thisMonthAmount = records
-                                            .filter(r => new Date(r.entry_date) >= currentMonth)
-                                            .reduce((sum, r) => sum + r.amount_cents, 0);
+                                        const lastMonthStart = new Date(refDate.getFullYear(), refDate.getMonth() - 1, 1, 0, 0, 0, 0);
+                                        const lastMonthEnd = new Date(refDate.getFullYear(), refDate.getMonth(), 0, 23, 59, 59, 999);
 
-                                        const lastMonthAmount = records
+                                        const sixMonthsAgoStart = new Date(refDate.getFullYear(), refDate.getMonth() - 5, 1, 0, 0, 0, 0);
+
+                                        const parseEntryDate = (dateStr: string) => {
+                                            const [y, m, d] = (dateStr || "").split("-").map(Number);
+                                            return new Date(y, (m || 1) - 1, d || 1);
+                                        };
+
+                                        const thisMonthAmount = allEmployeeRecords
                                             .filter(r => {
-                                                const d = new Date(r.entry_date);
-                                                return d >= lastMonth && d < currentMonth;
+                                                const d = parseEntryDate(r.entry_date);
+                                                return d >= curMonthStart && d <= curMonthEnd;
                                             })
                                             .reduce((sum, r) => sum + r.amount_cents, 0);
 
-                                        const lastSixMonthsAmount = records
-                                            .filter(r => new Date(r.entry_date) >= sixMonthsAgo)
+                                        const lastMonthAmount = allEmployeeRecords
+                                            .filter(r => {
+                                                const d = parseEntryDate(r.entry_date);
+                                                return d >= lastMonthStart && d <= lastMonthEnd;
+                                            })
+                                            .reduce((sum, r) => sum + r.amount_cents, 0);
+
+                                        const lastSixMonthsAmount = allEmployeeRecords
+                                            .filter(r => {
+                                                const d = parseEntryDate(r.entry_date);
+                                                return d >= sixMonthsAgoStart && d <= curMonthEnd;
+                                            })
                                             .reduce((sum, r) => sum + r.amount_cents, 0);
 
                                         return (

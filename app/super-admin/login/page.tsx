@@ -58,16 +58,14 @@ export default function SuperAdminLoginPage() {
         throw new Error(authErr?.message || "Invalid credentials. Please verify your email and password.");
       }
 
-      // 2. Strict Super Admin Role Verification
+      // 2. Strict Super Admin Role Verification: Authoritative Database Flag Only
       const { data: profile } = await supabaseClient
         .from("profiles")
         .select("is_super_admin")
         .eq("id", authData.user.id)
         .maybeSingle();
 
-      const isSuper =
-        !!profile?.is_super_admin ||
-        normalizedEmail === "admin@seyalpro.com";
+      const isSuper = !!profile?.is_super_admin;
 
       if (!isSuper) {
         // Block client admins & staff from using this portal
@@ -201,6 +199,9 @@ export default function SuperAdminLoginPage() {
           throw new Error("Invalid verification code. Please confirm the secret key in your app.");
         }
       }
+
+      // Ensure session is refreshed with the AAL2 access token
+      await supabaseClient.auth.refreshSession().catch(() => {});
 
       // Success: Redirect to Super Admin Hub
       window.location.href = "/super-admin";

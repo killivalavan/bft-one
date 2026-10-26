@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { format, addDays, isAfter, isBefore, addMonths, startOfDay } from "date-fns";
 import { useEffect, useMemo, useState } from "react";
@@ -54,12 +55,6 @@ export default function TimesheetPage() {
       const userIsAdmin = !!prof?.is_admin;
       setIsAdmin(userIsAdmin);
 
-      if (userIsAdmin) {
-        // Admins don't need personal timesheet - redirect to manual staff attendance entry
-        router.replace("/admin/fill-timesheet");
-        return;
-      }
-
       const start = format(new Date(today.getFullYear(), today.getMonth(), 1), "yyyy-MM-01");
       const end = format(new Date(today.getFullYear(), today.getMonth() + 1, 0), "yyyy-MM-dd");
       const { data: ts } = await supabaseClient
@@ -77,8 +72,8 @@ export default function TimesheetPage() {
         .lte("leave_date", end);
       setLeaveDates(new Set((lv || []).map((l: any) => l.leave_date)));
 
-      // If non-admin employee, check shop geofence on load
-      if (!userIsAdmin && business?.geofence_enabled !== false) {
+      // Check shop geofence on load
+      if (business?.geofence_enabled !== false) {
         verifyLocation(true).catch(() => {});
       }
     })();
@@ -89,7 +84,7 @@ export default function TimesheetPage() {
       if (e?.detail?.businessId && business?.id && e.detail.businessId !== business.id) {
         return;
       }
-      if (!isAdmin && business?.geofence_enabled !== false) {
+      if (business?.geofence_enabled !== false) {
         verifyLocation(true).catch(() => {});
       }
     }
@@ -100,7 +95,7 @@ export default function TimesheetPage() {
   }, [isAdmin, business]);
 
   async function verifyLocation(silent = false): Promise<boolean> {
-    if (isAdmin || business?.geofence_enabled === false) {
+    if (business?.geofence_enabled === false) {
       setGeoStatus("inside");
       return true;
     }
@@ -305,6 +300,22 @@ export default function TimesheetPage() {
           )}
         </div>
 
+        {/* Admin Mode Quick Access Banner */}
+        {isAdmin && (
+          <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200/80 rounded-2xl p-3 sm:p-3.5 flex items-center justify-between gap-3 text-xs shadow-2xs">
+            <div className="flex items-center gap-2 text-blue-900 min-w-0">
+              <ShieldCheck className="w-4 h-4 text-blue-600 shrink-0" />
+              <span className="font-semibold truncate">Store Admin Mode — Timesheet View</span>
+            </div>
+            <Link
+              href="/admin/fill-timesheet"
+              className="px-2.5 py-1 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-[11px] shrink-0 transition-colors shadow-2xs"
+            >
+              Staff Register ↗
+            </Link>
+          </div>
+        )}
+
         {/* Components */}
         <div className="space-y-6">
           <TimesheetCalendar
@@ -317,7 +328,7 @@ export default function TimesheetPage() {
           <ActionTabs activeTab={tab} onChange={setTab} />
 
           {/* Employee Geofence Location Verification Card */}
-          {tab === "timesheet" && !isAdmin && business?.geofence_enabled !== false && (
+          {tab === "timesheet" && business?.geofence_enabled !== false && (
             <div
               className={cn(
                 "p-3.5 rounded-2xl border transition-all flex items-center justify-between gap-3 text-xs shadow-2xs",

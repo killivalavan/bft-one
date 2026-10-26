@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { authenticateRequest } from "@/lib/auth/serverAuth";
 import { formatCafeName } from "@/lib/utils/bakerUtils";
 
+export const dynamic = "force-dynamic";
+
 // GET: List all registered customer businesses
 export async function GET(request: Request) {
   try {

@@ -52,9 +52,9 @@ export function middleware(request: NextRequest) {
   const subdomain = extractSubdomain(hostname);
   const queryTenant = url.searchParams.get("tenant");
 
-  // 1. Resolve Tenant Slug (priority: query > cookie > subdomain > default)
-  let tenantSlug = "bft-navalur"; // default tenant
-  let source: "query" | "cookie" | "subdomain" | "default" = "default";
+  // 1. Resolve Tenant Slug (priority: query > cookie > subdomain > none)
+  let tenantSlug = "";
+  let source: "query" | "cookie" | "subdomain" | "none" = "none";
 
   // Priority 1: URL query param override (?tenant=mongo-s)
   if (queryTenant) {
@@ -77,7 +77,9 @@ export function middleware(request: NextRequest) {
 
   // 2. Clone request headers and inject tenant metadata
   const requestHeaders = new Headers(request.headers);
-  requestHeaders.set("x-tenant-slug", tenantSlug);
+  if (tenantSlug) {
+    requestHeaders.set("x-tenant-slug", tenantSlug);
+  }
 
   const response = NextResponse.next({
     request: {
@@ -87,7 +89,7 @@ export function middleware(request: NextRequest) {
 
   // Persist tenant cookie when resolved from query OR subdomain
   // (so subsequent navigations within the same session stay on the right tenant)
-  if (source === "query" || source === "subdomain") {
+  if ((source === "query" || source === "subdomain") && tenantSlug) {
     response.cookies.set("tenant_slug", tenantSlug, {
       path: "/",
       maxAge: 60 * 60 * 24 * 30, // 30 days
@@ -98,7 +100,16 @@ export function middleware(request: NextRequest) {
   // 3. Security headers
   response.headers.set("X-Content-Type-Options", "nosniff");
   response.headers.set("X-Frame-Options", "DENY");
-  response.headers.set("x-tenant-slug", tenantSlug);
+  response.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
+  if (tenantSlug) {
+    response.headers.set("x-tenant-slug", tenantSlug);
+  }
+
+  // 4. Cache-Control: Private no-store for authenticated API endpoints
+  if (url.pathname.startsWith("/api/")) {
+    response.headers.set("Cache-Control", "private, no-store, no-cache, max-age=0, must-revalidate");
+    response.headers.set("Pragma", "no-cache");
+  }
 
   return response;
 }

@@ -37,7 +37,7 @@ export default function SalesPage() {
     // Date State
     const getInitialDate = () => {
         const now = new Date();
-        return now.getHours() < 9 ? addDays(now, -1) : now;
+        return now.getHours() < 5 ? addDays(now, -1) : now;
     };
     const [date, setDate] = useState<Date>(getInitialDate);
     const [manualOverride, setManualOverride] = useState(false);
@@ -103,8 +103,11 @@ export default function SalesPage() {
             .select("*")
             .eq("sale_date", dateStr);
 
-        if (currentBusinessId) {
-            query = query.eq("business_id", currentBusinessId);
+        const effectiveBizId = currentBusinessId || (business?.id && business.id !== "default" ? business.id : null) || profileBusinessId;
+        if (effectiveBizId) {
+            query = query.eq("business_id", effectiveBizId);
+        } else {
+            return;
         }
 
         const { data } = await query.maybeSingle();
@@ -132,26 +135,25 @@ export default function SalesPage() {
         }
     }
 
-    // Auto-switch visible date to today when clock passes 9:00
+    // Auto-switch visible date to today when clock passes 5:00
     useEffect(() => {
         const id = setInterval(() => {
             const now = new Date();
-            if (now.getHours() >= 9 && !manualOverride) {
+            if (now.getHours() >= 5 && !manualOverride) {
                 const yesterday = addDays(now, -1);
                 if (isSameDay(date, yesterday)) {
                     setDate(now);
-                    toast({ title: "Date switched to today", description: "Automatically switched after 09:00", variant: "info" });
+                    toast({ title: "Date switched to today", description: "Automatically switched after 05:00", variant: "info" });
                 }
             }
         }, 60 * 1000);
         return () => clearInterval(id);
-    }, [date]);
+    }, [date, manualOverride]);
 
-    const DEFAULT_BUSINESS_ID = "a0000000-0000-0000-0000-000000000001";
-
-    async function getEffectiveBusinessId(): Promise<string> {
+    async function getEffectiveBusinessId(): Promise<string | null> {
         if (currentBusinessId) return currentBusinessId;
-        if (business?.id) return business.id;
+        if (business?.id && business.id !== "default") return business.id;
+        if (profileBusinessId) return profileBusinessId;
         if (userId) {
             const { data: prof } = await supabaseClient.from("profiles").select("business_id").eq("id", userId).maybeSingle();
             if (prof?.business_id) {
@@ -159,7 +161,7 @@ export default function SalesPage() {
                 return prof.business_id;
             }
         }
-        return DEFAULT_BUSINESS_ID;
+        return null;
     }
 
     async function saveCash() {
@@ -168,15 +170,20 @@ export default function SalesPage() {
             return;
         }
 
+        const bId = await getEffectiveBusinessId();
+        if (!bId) {
+            toast({ title: "Store Not Selected", description: "Cannot record sales without an active store context.", variant: "error" });
+            return;
+        }
+
         const cents = Math.round(Number(cash) * 100);
-        // If user is saving on 'today' before 9:00, record as yesterday
+        // If user is saving on 'today' before 5:00, record as yesterday
         const now = new Date();
         let targetDate = date;
-        if (isSameDay(date, new Date()) && now.getHours() < 9) {
+        if (isSameDay(date, new Date()) && now.getHours() < 5) {
             targetDate = addDays(date, -1);
         }
         const saveDateStr = format(targetDate, "yyyy-MM-dd");
-        const bId = await getEffectiveBusinessId();
 
         const { data: existing } = await supabaseClient
             .from("daily_sales")
@@ -228,11 +235,15 @@ export default function SalesPage() {
         if (!ok) return;
         const now = new Date();
         let targetDate = date;
-        if (isSameDay(date, new Date()) && now.getHours() < 9) {
+        if (isSameDay(date, new Date()) && now.getHours() < 5) {
             targetDate = addDays(date, -1);
         }
         const saveDateStr = format(targetDate, "yyyy-MM-dd");
         const bId = await getEffectiveBusinessId();
+        if (!bId) {
+            toast({ title: "Store Not Selected", description: "Cannot clear sales without an active store context.", variant: "error" });
+            return;
+        }
 
         const { data: existing } = await supabaseClient
             .from("daily_sales")
@@ -266,15 +277,20 @@ export default function SalesPage() {
             return;
         }
 
+        const bId = await getEffectiveBusinessId();
+        if (!bId) {
+            toast({ title: "Store Not Selected", description: "Cannot record sales without an active store context.", variant: "error" });
+            return;
+        }
+
         const cents = Math.round(Number(upi) * 100);
-        // If user is saving on 'today' before 9:00, record as yesterday
+        // If user is saving on 'today' before 5:00, record as yesterday
         const now = new Date();
         let targetDate = date;
-        if (isSameDay(date, new Date()) && now.getHours() < 9) {
+        if (isSameDay(date, new Date()) && now.getHours() < 5) {
             targetDate = addDays(date, -1);
         }
         const saveDateStr = format(targetDate, "yyyy-MM-dd");
-        const bId = await getEffectiveBusinessId();
 
         const { data: existing } = await supabaseClient
             .from("daily_sales")
@@ -396,10 +412,10 @@ export default function SalesPage() {
                         <span>Viewing past entry for <strong>{format(date, "MMMM do, yyyy")}</strong>. Any saved values will update closing records.</span>
                     </div>
                 )}
-                {new Date().getHours() < 9 && (
+                {new Date().getHours() < 5 && (
                     <div className="bg-blue-50 text-blue-900 text-xs px-4 py-2.5 rounded-xl border border-blue-200/80 flex items-center gap-2 shadow-2xs">
                         <Clock size={14} className="text-blue-600 shrink-0" />
-                        <span><strong>Note:</strong> You are entering sales for yesterday's shift closing. This will auto-switch to today at 9:00 AM.</span>
+                        <span><strong>Note:</strong> You are entering sales for yesterday's shift closing. This will auto-switch to today at 5:00 AM.</span>
                     </div>
                 )}
 

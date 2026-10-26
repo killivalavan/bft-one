@@ -26,6 +26,7 @@ import {
   Sparkles,
   Lock,
   ExternalLink,
+  ShieldCheck,
 } from "lucide-react";
 
 export default function GeofenceGate({ children }: { children: React.ReactNode }) {
@@ -40,6 +41,8 @@ export default function GeofenceGate({ children }: { children: React.ReactNode }
   const [userCoords, setUserCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [isRetrying, setIsRetrying] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
+
+  const [isAdminUser, setIsAdminUser] = useState(false);
 
   // Dynamically resolve exact shop location with multi-tier fallback
   const [shopCoords, setShopCoords] = useState(() => getShopGeofence(business));
@@ -70,7 +73,7 @@ export default function GeofenceGate({ children }: { children: React.ReactNode }
     }
 
     // Non-timesheet pages (profile, salary, notifications, etc.) are open everywhere
-    if (pathname !== "/timesheet") {
+    if (pathname && !pathname.startsWith("/timesheet")) {
       setAllowed(true);
       return;
     }
@@ -89,10 +92,8 @@ export default function GeofenceGate({ children }: { children: React.ReactNode }
       .eq("id", user.id)
       .maybeSingle();
 
-    if (profile?.is_admin || profile?.is_super_admin) {
-      setAllowed(true);
-      return;
-    }
+    const userIsAdmin = Boolean(profile?.is_admin || profile?.is_super_admin);
+    setIsAdminUser(userIsAdmin);
 
     if (typeof window === "undefined" || !navigator.geolocation) {
       setAllowed(false);
@@ -396,6 +397,39 @@ export default function GeofenceGate({ children }: { children: React.ReactNode }
 
           {/* Interactive Action Buttons */}
           <div className="space-y-2.5 pt-1">
+            {/* Store Admin Privilege Bypass Card */}
+            {isAdminUser && (
+              <div className="p-3.5 rounded-2xl bg-gradient-to-r from-blue-50/90 to-indigo-50/90 border border-blue-200/90 space-y-2.5 text-left animate-in fade-in duration-200">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="inline-flex items-center gap-1.5 text-xs font-bold text-blue-900">
+                    <ShieldCheck className="w-4 h-4 text-blue-600 shrink-0" />
+                    <span>Store Admin Testing Mode</span>
+                  </span>
+                  <span className="text-[10px] font-extrabold uppercase bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full border border-blue-200">
+                    Admin
+                  </span>
+                </div>
+                <p className="text-[11px] text-blue-800/80 leading-relaxed">
+                  You are previewing the employee geofence proximity screen as an administrator. You can test live GPS rechecking, bypass into the timesheet, or switch to the manual attendance register.
+                </p>
+                <div className="flex flex-wrap items-center gap-2 pt-0.5">
+                  <button
+                    type="button"
+                    onClick={() => setAllowed(true)}
+                    className="flex-1 py-2 px-3 rounded-xl bg-blue-600 hover:bg-blue-700 active:scale-95 text-white text-xs font-bold shadow-2xs transition-all cursor-pointer text-center"
+                  >
+                    Enter Timesheet (Bypass Range) →
+                  </button>
+                  <Link
+                    href="/admin/fill-timesheet"
+                    className="py-2 px-3 rounded-xl bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 text-xs font-semibold shadow-2xs transition-all text-center whitespace-nowrap"
+                  >
+                    Staff Register ↗
+                  </Link>
+                </div>
+              </div>
+            )}
+
             <button
               type="button"
               onClick={handleManualRetry}

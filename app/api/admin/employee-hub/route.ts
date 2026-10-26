@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { authenticateRequest } from "@/lib/auth/serverAuth";
 
+export const dynamic = "force-dynamic";
+
 export async function POST(request: Request) {
   try {
     const auth = await authenticateRequest(request, { requireAdmin: true });

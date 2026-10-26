@@ -8,8 +8,6 @@ import Link from "next/link";
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const [status, setStatus] = useState<"loading" | "authorized" | "denied">("loading");
-  const { isModuleEnabled } = useTenant();
-  const isBakerEnabled = isModuleEnabled ? isModuleEnabled("baker_mode") : false;
 
   useEffect(() => {
     let isMounted = true;
@@ -18,12 +16,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         const { data: { user } } = await supabaseClient.auth.getUser();
         if (!user) {
           if (isMounted) setStatus("denied");
-          return;
-        }
-
-        // B2B Supply workspace users have full access to management features
-        if (isBakerEnabled) {
-          if (isMounted) setStatus("authorized");
           return;
         }
 
@@ -65,7 +57,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     return () => {
       isMounted = false;
     };
-  }, [isBakerEnabled]);
+  }, []);
 
   if (status === "loading") {
     return (
@@ -88,9 +80,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         </p>
         <Link
           href="/"
-          className="mt-6 inline-flex items-center justify-center px-4 py-2.5 rounded-xl bg-blue-600 text-white font-semibold text-sm hover:bg-blue-700 transition-all shadow-xs"
+          className="mt-6 w-full inline-flex items-center justify-center px-5 py-3 rounded-2xl bg-[#2563EB] hover:bg-[#1D4ED8] active:scale-[0.99] text-white font-bold text-sm shadow-xs transition-all cursor-pointer"
         >
-          Return Home
+          Return to Home
         </Link>
       </div>
     );

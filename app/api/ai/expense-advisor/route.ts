@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { auditExpenses, ExpenseRecord, PriceListItem } from "@/lib/ai/expense-agent";
 import { authenticateRequest } from "@/lib/auth/serverAuth";
 
+export const dynamic = "force-dynamic";
+
 export async function POST(req: NextRequest) {
     try {
         const auth = await authenticateRequest(req);

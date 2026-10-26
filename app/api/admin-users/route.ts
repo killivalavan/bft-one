@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { authenticateRequest } from "@/lib/auth/serverAuth";
 
+export const dynamic = "force-dynamic";
+
 export async function DELETE(request: Request) {
   try {
     const auth = await authenticateRequest(request, { requireAdmin: true });
@@ -27,14 +29,19 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: "Forbidden: Platform Super Admin accounts cannot be deleted." }, { status: 403 });
     }
 
-    if (!caller.isSuperAdmin && targetProfile.business_id && targetProfile.business_id !== caller.businessId) {
+    if (!caller.isSuperAdmin && (!targetProfile.business_id || targetProfile.business_id !== caller.businessId)) {
       return NextResponse.json({ error: "Unauthorized: Cannot delete users belonging to another business." }, { status: 403 });
     }
 
-    // Delete dependent rows that reference the profile
+    // Delete dependent operational rows that reference the profile
     await supa.from("salary_entries").delete().eq("user_id", userId);
     await supa.from("leaves").delete().eq("user_id", userId);
-    await supa.from("daily_sales").delete().or(`cash_submitted_by.eq.${userId},upi_submitted_by.eq.${userId}`);
+    
+    // CRITICAL (SEC-07): Do NOT delete financial ledger records in daily_sales!
+    // Nullify submitter references instead of destroying historical financial entries.
+    await supa.from("daily_sales").update({ cash_submitted_by: null }).eq("cash_submitted_by", userId);
+    await supa.from("daily_sales").update({ upi_submitted_by: null }).eq("upi_submitted_by", userId);
+    
     await supa.from("timesheets").delete().eq("user_id", userId);
 
     // Remove the profile record

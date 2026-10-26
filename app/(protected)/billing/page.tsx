@@ -611,7 +611,16 @@ ${order.taxCents > 0 ? `🏛️ *GST (5%):* ₹${(order.taxCents / 100).toFixed(
     setIsSubmitting(true);
     try {
       const { data: { user } } = await supabaseClient.auth.getUser().catch(() => ({ data: { user: null } }));
-      const bizId = (business?.id && business.id !== "default") ? business.id : DEFAULT_BUSINESS.id;
+      const bizId = (business?.id && business.id !== "default") ? business.id : null;
+      if (!bizId) {
+        toast({
+          title: "Active Business Not Selected",
+          description: "Cannot complete order without an active store context. Please select a store first.",
+          variant: "error",
+        });
+        setIsSubmitting(false);
+        return;
+      }
       const orderRecordId = crypto.randomUUID();
       const displayOrderId = "ORD-" + orderRecordId.slice(0, 8).toUpperCase();
 
@@ -669,6 +678,7 @@ ${order.taxCents > 0 ? `🏛️ *GST (5%):* ₹${(order.taxCents / 100).toFixed(
       // 3. Enqueue idempotent synchronization mutations
       await enqueueSyncOperation({
         businessId: bizId,
+        userId: user?.id || null,
         tableName: "orders",
         action: "INSERT",
         payload: {
@@ -690,6 +700,7 @@ ${order.taxCents > 0 ? `🏛️ *GST (5%):* ₹${(order.taxCents / 100).toFixed(
 
       await enqueueSyncOperation({
         businessId: bizId,
+        userId: user?.id || null,
         tableName: "order_items",
         action: "INSERT",
         payload: rows,
@@ -697,6 +708,7 @@ ${order.taxCents > 0 ? `🏛️ *GST (5%):* ₹${(order.taxCents / 100).toFixed(
 
       await enqueueSyncOperation({
         businessId: bizId,
+        userId: user?.id || null,
         tableName: "stock_adjust",
         action: "RPC",
         payload: {

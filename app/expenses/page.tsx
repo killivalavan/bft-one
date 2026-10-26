@@ -12,7 +12,7 @@ import {
     Flame, TrendingUp, TrendingDown, ArrowRight, ChevronDown,
     LineChart as LineChartIcon, AreaChart as AreaChartIcon, PieChart as PieChartIcon,
     Wallet, Building2, CheckCircle2, Power, Zap, AlertCircle, ArrowUpRight, ArrowDownRight,
-    History, Info, Filter, SlidersHorizontal, RefreshCw, ShieldCheck, Users
+    History, Info, Clock, Filter, SlidersHorizontal, RefreshCw, ShieldCheck, Users
 } from "lucide-react";
 import {
     format, addDays, isSameDay, addWeeks, addMonths, addYears,
@@ -177,8 +177,13 @@ export default function ExpensesPage() {
     const [isAdmin, setIsAdmin] = useState(false);
     const [userId, setUserId] = useState<string | null>(null);
 
-    // Date being viewed (admin can browse history, regular users stay on today)
-    const [date, setDate] = useState<Date>(new Date());
+    // Date being viewed (before 5 AM defaults to yesterday's shift closing)
+    const getInitialDate = () => {
+        const now = new Date();
+        return now.getHours() < 5 ? addDays(now, -1) : now;
+    };
+    const [date, setDate] = useState<Date>(getInitialDate);
+    const [manualOverride, setManualOverride] = useState(false);
     const isToday = isSameDay(date, new Date());
 
     const [expenses, setExpenses] = useState<ExpenseRow[]>([]);
@@ -267,6 +272,21 @@ export default function ExpensesPage() {
         if (userId) fetchMonthlyExpenses();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [userId, business?.id]);
+
+    // Auto-switch visible date to today when clock passes 5:00
+    useEffect(() => {
+        const id = setInterval(() => {
+            const now = new Date();
+            if (now.getHours() >= 5 && !manualOverride) {
+                const yesterday = addDays(now, -1);
+                if (isSameDay(date, yesterday)) {
+                    setDate(now);
+                    toast({ title: "Date switched to today", description: "Automatically switched after 05:00", variant: "info" });
+                }
+            }
+        }, 60 * 1000);
+        return () => clearInterval(id);
+    }, [date, manualOverride]);
 
     async function checkUser() {
         try {
@@ -787,7 +807,13 @@ export default function ExpensesPage() {
         setSaving(true);
         const bizId = business?.id || "default";
         const newExpenseId = crypto.randomUUID();
-        const dateStr = format(date, "yyyy-MM-dd");
+        // If user is saving on 'today' before 5:00, record as yesterday
+        const now = new Date();
+        let targetDate = date;
+        if (isSameDay(date, new Date()) && now.getHours() < 5) {
+            targetDate = addDays(date, -1);
+        }
+        const dateStr = format(targetDate, "yyyy-MM-dd");
 
         const localExp: LocalDailyExpense = {
             id: newExpenseId,
@@ -1359,14 +1385,14 @@ export default function ExpensesPage() {
                                     Admin Only
                                 </span>
                                 <div className="flex items-center gap-1 bg-white border border-zinc-200 rounded-lg p-1 shadow-sm">
-                                    <button onClick={() => setDate(d => addDays(d, -1))} className="p-2 hover:bg-zinc-50 rounded-md text-zinc-600">
+                                    <button onClick={() => { setDate(d => addDays(d, -1)); setManualOverride(true); }} className="p-2 hover:bg-zinc-50 rounded-md text-zinc-600">
                                         <ChevronLeft size={18} />
                                     </button>
                                     <div className="px-2 text-sm font-semibold text-zinc-900 min-w-[90px] text-center">
                                         {isToday ? "Today" : format(date, "MMM dd")}
                                     </div>
                                     <button
-                                        onClick={() => setDate(d => addDays(d, 1))}
+                                        onClick={() => { setDate(d => addDays(d, 1)); setManualOverride(true); }}
                                         className="p-2 hover:bg-zinc-50 rounded-md text-zinc-600 disabled:opacity-30"
                                         disabled={isToday}
                                     >
@@ -1377,12 +1403,17 @@ export default function ExpensesPage() {
                         )}
                     </div>
 
-                    {!isToday && activeTab === "add" && (
+                    {new Date().getHours() < 5 && isSameDay(date, addDays(new Date(), -1)) && activeTab === "add" ? (
+                        <div className="bg-blue-50 text-blue-900 text-xs px-3 py-2.5 rounded-lg border border-blue-200/80 flex items-center gap-2 shadow-2xs">
+                            <Clock size={14} className="text-blue-600 shrink-0" />
+                            <span><strong>Note:</strong> You are entering expenses for yesterday's shift closing. This will auto-switch to today at 5:00 AM.</span>
+                        </div>
+                    ) : !isToday && activeTab === "add" ? (
                         <div className="bg-amber-50 text-amber-800 text-xs px-3 py-2 rounded-lg border border-amber-200 flex items-center gap-2">
                             <Calendar size={12} />
                             Viewing past entries: <strong>{format(date, "MMMM do, yyyy")}</strong>
                         </div>
-                    )}
+                    ) : null}
                 </div>
 
                 {/* Tabs — Overview, Monthly and AI Advisor are admin-only */}

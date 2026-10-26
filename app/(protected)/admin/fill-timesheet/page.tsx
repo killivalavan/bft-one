@@ -501,13 +501,25 @@ export default function FillTimesheetPage() {
                                                     }
                                                 }
 
-                                                const dayAdjs = monthlyAdjustments[dKey]?.[u.id];
+                                                const dayAdjs = (monthlyAdjustments[dKey]?.[u.id] || []).filter(adj => {
+                                                    const r = (adj.reason || "").toLowerCase().trim();
+                                                    return r !== 'leave' && r !== 'leave deduction' && r !== 'half day' && r !== 'weekly off';
+                                                });
+                                                const hasOvertime = log?.status === 'present' && !!log?.extraHours && log.extraHours > 0;
 
                                                 return (
                                                     <td key={u.id} className="px-4 py-3 text-center border-l border-dashed border-zinc-100 last:border-r-0">
                                                         <div className="flex flex-col items-center gap-0.5">
                                                             <span className={cellClass}>{content}</span>
-                                                            {dayAdjs && dayAdjs.length > 0 && (
+                                                            {hasOvertime && (
+                                                                <span
+                                                                    className="text-[9px] font-bold px-1 rounded tabular-nums bg-emerald-100 text-emerald-800 border border-emerald-200/60"
+                                                                    title={`Overtime: ${log.extraHours} hr(s)`}
+                                                                >
+                                                                    +{log.extraHours}h OT
+                                                                </span>
+                                                            )}
+                                                            {dayAdjs.length > 0 && (
                                                                 <div className="flex flex-wrap justify-center gap-0.5 mt-0.5">
                                                                     {dayAdjs.map(adj => (
                                                                         <span

@@ -142,24 +142,10 @@ export default function Navbar({
   const visibleLinks = isFocusMode ? focusLinks : allLinks;
 
   async function handleLogout() {
-    try {
-      await Promise.race([
-        supabaseClient.auth.signOut(),
-        new Promise(resolve => setTimeout(resolve, 2000))
-      ]);
-    } catch (e) {
-      console.error("Logout error/timeout", e);
-    } finally {
-      setMenuOpen(false);
-      try { localStorage.removeItem('bftone_display_email'); } catch { }
-      try { localStorage.removeItem('bftone_tenant_cache'); } catch { }
-      try { localStorage.removeItem('bftone_flags'); } catch { }
-      try { localStorage.removeItem('seyalpro_app_mode'); } catch { }
-      if (typeof document !== 'undefined') {
-        document.cookie = "tenant_slug=; path=/; max-age=0; SameSite=Lax";
-      }
-      window.location.href = getTargetLoginUrl();
-    }
+    setMenuOpen(false);
+    const targetUrl = getTargetLoginUrl();
+    const { performClientLogout } = await import("@/lib/auth/clientLogout");
+    await performClientLogout(targetUrl);
   }
 
   return (

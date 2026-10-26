@@ -85,56 +85,78 @@ body {
   line-height: 1.125em;
   border-radius: 12px;
 }
+
 .react-calendar__navigation button {
   color: #0f172a !important;
   background: transparent !important;
   font-weight: 600 !important;
 }
+
 .react-calendar__month-view__weekdays abbr {
   color: #64748b !important;
   text-decoration: none;
   font-weight: 600;
 }
+
 .react-calendar__tile {
   border-radius: 8px !important;
   color: #0f172a !important;
   font-weight: 600;
   font-size: 14px;
 }
+
 .react-calendar__tile:enabled:hover,
 .react-calendar__tile:enabled:focus {
   background: #eff6ff !important;
 }
+
 .react-calendar__tile--now {
   background: #eff6ff !important;
 }
+
 .tile-filled {
   background-color: #2563eb !important;
   color: white !important;
-  box-shadow: inset 0 0 0 2px rgba(255,255,255,0.6);
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.6);
 }
+
 .tile-empty {
   background-color: #94a3b8 !important;
   color: white !important;
-  box-shadow: inset 0 0 0 2px rgba(255,255,255,0.6);
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.6);
 }
+
 .tile-leave {
   background-color: #64748b !important;
   color: white !important;
-  box-shadow: inset 0 0 0 2px rgba(255,255,255,0.6);
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.6);
 }
 
 /* Utility: hide scrollbars */
 .no-scrollbar::-webkit-scrollbar,
-.scrollbar-none::-webkit-scrollbar { display: none; }
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
 .no-scrollbar,
-.scrollbar-none { -ms-overflow-style: none; scrollbar-width: none; }
+.scrollbar-none {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
 
 /* Tiny pop animation for counters */
 @keyframes pop {
-  0% { transform: scale(0.9); }
-  60% { transform: scale(1.06); }
-  100% { transform: scale(1); }
+  0% {
+    transform: scale(0.9);
+  }
+
+  60% {
+    transform: scale(1.06);
+  }
+
+  100% {
+    transform: scale(1);
+  }
 }
 
 /* Hide number input spinners / arrows */
@@ -143,38 +165,46 @@ input[type="number"]::-webkit-outer-spin-button {
   -webkit-appearance: none;
   margin: 0;
 }
+
 input[type="number"] {
   -moz-appearance: textfield;
   appearance: textfield;
 }
 
-.animate-pop { animation: pop 180ms ease-out; }
+.animate-pop {
+  animation: pop 180ms ease-out;
+}
 
 /* Toast countdown progress bar */
 @keyframes toast-progress {
-  from { width: 100%; }
-  to { width: 0%; }
+  from {
+    width: 100%;
+  }
+
+  to {
+    width: 0%;
+  }
 }
 
 /* ==========================================================================
    Page Scroll Optimization: Only scroll when content exceeds viewport
    ========================================================================== */
 /* Neutralize artificial full-viewport heights on direct page containers inside main */
-main > div[class*="min-h-screen"],
-main > main[class*="min-h-screen"],
-main > div > div[class*="min-h-screen"] {
+main>div[class*="min-h-screen"],
+main>main[class*="min-h-screen"],
+main>div>div[class*="min-h-screen"] {
   min-height: 0 !important;
 }
 
 /* Neutralize legacy phantom bottom paddings on direct page containers inside main */
-main > div[class*="pb-16"],
-main > div[class*="pb-20"],
-main > div[class*="pb-24"],
-main > div[class*="pb-28"],
-main > main[class*="pb-16"],
-main > main[class*="pb-20"],
-main > main[class*="pb-24"],
-main > main[class*="pb-28"] {
+main>div[class*="pb-16"],
+main>div[class*="pb-20"],
+main>div[class*="pb-24"],
+main>div[class*="pb-28"],
+main>main[class*="pb-16"],
+main>main[class*="pb-20"],
+main>main[class*="pb-24"],
+main>main[class*="pb-28"] {
   padding-bottom: 0 !important;
 }
 
@@ -220,4 +250,3 @@ select option:checked {
   color: #1d4ed8 !important;
   font-weight: 700;
 }
-

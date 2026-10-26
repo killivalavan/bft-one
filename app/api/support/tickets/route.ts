@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { authenticateRequest } from "@/lib/auth/serverAuth";
 import { logAuditEvent, extractClientMetadata } from "@/lib/services/auditLogger";
 
+export const dynamic = "force-dynamic";
+
 // GET: Fetch support tickets (Super Admin gets all with business details; Store Admin gets their own)
 export async function GET(request: Request) {
   try {

@@ -239,6 +239,7 @@ export interface SyncQueueItem {
   id: string; // unique UUID for operation
   client_operation_id: string; // Idempotency token
   business_id: string;
+  user_id?: string | null;
   table_name: string;
   action: "INSERT" | "UPDATE" | "DELETE" | "RPC";
   payload: any;

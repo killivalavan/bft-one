@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { authenticateRequest } from "@/lib/auth/serverAuth";
 
+export const dynamic = "force-dynamic";
+
 export async function GET(request: Request) {
   try {
     const auth = await authenticateRequest(request);
@@ -13,6 +15,9 @@ export async function GET(request: Request) {
     const requestedUserId = url.searchParams.get("userId");
 
     const businessId = caller.businessId;
+    if (!caller.isSuperAdmin && !businessId) {
+      return NextResponse.json({ deductions: [] });
+    }
 
     let query = supa
       .from("salary_entries")
@@ -28,22 +33,20 @@ export async function GET(request: Request) {
       `)
       .eq("kind", "deduction");
 
-    // Non-admin staff users can strictly access only their own deductions
-    if (!caller.isAdmin && !caller.isSuperAdmin) {
-      query = query.eq("user_id", caller.id);
-    } else if (requestedUserId) {
+    // Optional employee filter if explicitly requested
+    if (requestedUserId) {
       query = query.eq("user_id", requestedUserId);
     }
 
-    // Tenant scoping
+    // Tenant scoping (Store users see team deductions within their store)
     if (!caller.isSuperAdmin) {
-      query = query.or(`business_id.eq.${businessId},business_id.is.null`);
+      query = query.eq("business_id", businessId);
     }
 
     const { data, error } = await query.order("entry_date", { ascending: false });
 
     if (error) {
-      // Fallback query scoped strictly to caller's identity/business
+      // Fallback query scoped strictly to caller's tenant business
       let fallbackQuery = supa
         .from("salary_entries")
         .select(`
@@ -53,13 +56,16 @@ export async function GET(request: Request) {
           reason,
           kind,
           user_id,
+          business_id,
           profiles!inner(id, email)
         `)
         .eq("kind", "deduction");
 
-      if (!caller.isAdmin && !caller.isSuperAdmin) {
-        fallbackQuery = fallbackQuery.eq("user_id", caller.id);
-      } else if (requestedUserId) {
+      if (!caller.isSuperAdmin) {
+        fallbackQuery = fallbackQuery.eq("business_id", businessId);
+      }
+
+      if (requestedUserId) {
         fallbackQuery = fallbackQuery.eq("user_id", requestedUserId);
       }
 
@@ -79,7 +85,7 @@ function formatDeductions(data: any[]) {
   const deductions = (data || [])
     .map((entry: any) => ({
       id: entry.id,
-      user_email: entry.profiles?.email || "Unknown",
+      user_email: entry.profiles?.email || (Array.isArray(entry.profiles) ? entry.profiles[0]?.email : null) || "Unknown",
       user_id: entry.user_id,
       reason: entry.reason,
       amount_cents: entry.amount_cents,

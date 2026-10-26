@@ -8,6 +8,7 @@ export interface AuthenticatedUser {
   isSuperAdmin: boolean;
   isStockManager: boolean;
   businessId: string;
+  aal?: "aal1" | "aal2";
 }
 
 export interface AuthSuccess {
@@ -17,6 +18,13 @@ export interface AuthSuccess {
 
 export interface AuthFailure {
   errorResponse: NextResponse;
+}
+
+export interface AuthenticateRequestOptions {
+  requireAdmin?: boolean;
+  requireSuperAdmin?: boolean;
+  requireAAL2?: boolean;
+  requireRecentAuthMinutes?: number;
 }
 
 // In-memory rate limiter for traffic control on sensitive endpoints with automatic eviction
@@ -49,6 +57,18 @@ export function checkRateLimit(key: string, limit = 60, windowMs = 60000): boole
   return true;
 }
 
+function parseJwtPayload(token: string): Record<string, any> | null {
+  try {
+    const parts = token.split(".");
+    if (parts.length < 2) return null;
+    const base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    const jsonStr = Buffer.from(base64, "base64").toString("utf8");
+    return JSON.parse(jsonStr);
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Validates request authentication and resolves the caller's tenant context.
  * Supports:
@@ -57,7 +77,7 @@ export function checkRateLimit(key: string, limit = 60, windowMs = 60000): boole
  */
 export async function authenticateRequest(
   request: Request,
-  options: { requireAdmin?: boolean; requireSuperAdmin?: boolean } = {}
+  options: AuthenticateRequestOptions = {}
 ): Promise<AuthSuccess | AuthFailure> {
   const ip = request.headers.get("x-forwarded-for") || "unknown";
 
@@ -148,7 +168,12 @@ export async function authenticateRequest(
   const userId = authData.user.id;
   const userEmail = authData.user.email || "";
 
-  // 3. Resolve profile, role flags, and business_id
+  // Extract JWT claims for MFA Assurance Level (AAL)
+  const jwtPayload = parseJwtPayload(token);
+  const aal = (jwtPayload?.aal as "aal1" | "aal2") || "aal1";
+  const amr = Array.isArray(jwtPayload?.amr) ? jwtPayload.amr : [];
+
+  // 3. Resolve profile, role flags, and business_id from authoritative DB record
   const { data: profile, error: profErr } = await supa
     .from("profiles")
     .select("is_admin, is_stock_manager, is_super_admin, business_id")
@@ -165,11 +190,8 @@ export async function authenticateRequest(
   }
 
   const isAdmin = !!profile.is_admin;
-  const emailLower = userEmail.toLowerCase();
-  const isSuperAdmin =
-    emailLower === "admin@seyalpro.com" ||
-    emailLower === "admin@bft.com" ||
-    !!profile.is_super_admin;
+  // Super Admin status derives SOLELY from the authoritative database record
+  const isSuperAdmin = !!profile.is_super_admin;
   const isStockManager = !!profile.is_stock_manager;
 
   // STRICT MULTI-TENANT BOUNDARY:
@@ -187,13 +209,51 @@ export async function authenticateRequest(
   const businessId = profile.business_id || "";
 
   // 4. Role Authorization Checks
-  if (options.requireSuperAdmin && !isSuperAdmin) {
-    return {
-      errorResponse: NextResponse.json(
-        { error: "Forbidden: Super Admin access required." },
-        { status: 403 }
-      ),
-    };
+  if (options.requireSuperAdmin) {
+    if (!isSuperAdmin) {
+      return {
+        errorResponse: NextResponse.json(
+          { error: "Forbidden: Super Admin access required." },
+          { status: 403 }
+        ),
+      };
+    }
+
+    // Enforce TOTP MFA AAL2 assurance by default for Super Admin
+    const shouldRequireAAL2 = options.requireAAL2 !== false;
+    if (shouldRequireAAL2 && aal !== "aal2") {
+      return {
+        errorResponse: NextResponse.json(
+          {
+            error: "Forbidden: Super Admin access requires MFA Authenticator Assurance Level 2 (AAL2).",
+            mfaRequired: true,
+          },
+          { status: 403 }
+        ),
+      };
+    }
+
+    // Recent authentication verification for high-impact actions
+    if (options.requireRecentAuthMinutes && options.requireRecentAuthMinutes > 0) {
+      const nowSec = Math.floor(Date.now() / 1000);
+      const maxAgeSec = options.requireRecentAuthMinutes * 60;
+      const latestAuthTime = amr.reduce((latest: number, entry: any) => {
+        const ts = Number(entry?.timestamp || 0);
+        return ts > latest ? ts : latest;
+      }, Number(jwtPayload?.iat || 0));
+
+      if (latestAuthTime > 0 && nowSec - latestAuthTime > maxAgeSec) {
+        return {
+          errorResponse: NextResponse.json(
+            {
+              error: `Security Requirement: Recent re-authentication required (${options.requireRecentAuthMinutes} minutes limit exceeded).`,
+              reauthRequired: true,
+            },
+            { status: 403 }
+          ),
+        };
+      }
+    }
   }
 
   if (options.requireAdmin && !isAdmin && !isSuperAdmin) {
@@ -213,6 +273,7 @@ export async function authenticateRequest(
       isSuperAdmin,
       isStockManager,
       businessId,
+      aal,
     },
     supa,
   };

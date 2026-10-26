@@ -4,6 +4,8 @@ import { supabaseAdmin } from "@/lib/supabaseServer";
 import { validatePasswordPolicy, validateEmailFormat } from "@/lib/utils/passwordPolicy";
 import { logAuditEvent, extractClientMetadata } from "@/lib/services/auditLogger";
 
+export const dynamic = "force-dynamic";
+
 export async function POST(request: Request) {
   try {
     const supa = supabaseAdmin();
@@ -105,11 +107,19 @@ export async function POST(request: Request) {
       // User exists: verify tenant permission before modifying
       const { data: existingProfile } = await supa
         .from("profiles")
-        .select("business_id")
+        .select("business_id, is_super_admin")
         .eq("id", userId)
         .maybeSingle();
 
-      if (!caller.isSuperAdmin && existingProfile?.business_id && existingProfile.business_id !== assignedBusinessId) {
+      // Protected: Super Admin accounts can never be altered by regular tenant admins
+      if (existingProfile?.is_super_admin && !caller.isSuperAdmin) {
+        return NextResponse.json(
+          { error: "Forbidden: Platform Super Admin accounts cannot be modified." },
+          { status: 403 }
+        );
+      }
+
+      if (!caller.isSuperAdmin && (!existingProfile?.business_id || existingProfile.business_id !== assignedBusinessId)) {
         return NextResponse.json(
           { error: "Forbidden: Cannot modify users of another business tenant." },
           { status: 403 }
@@ -154,6 +164,11 @@ export async function POST(request: Request) {
       is_stock_manager: isStockManager,
       business_id: assignedBusinessId,
     };
+
+    // Strict boundary: non-super-admins cannot set is_super_admin = true
+    if (!caller.isSuperAdmin) {
+      profilePayload.is_super_admin = false;
+    }
 
     const { error: e2 } = await supa.from("profiles").upsert(profilePayload, { onConflict: "id" });
     if (e2) return NextResponse.json({ error: e2.message }, { status: 500 });

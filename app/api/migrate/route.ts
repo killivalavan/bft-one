@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server";
 import { authenticateRequest } from "@/lib/auth/serverAuth";
 
+export const dynamic = "force-dynamic";
+
 export async function POST(req: Request) {
   try {
-    const auth = await authenticateRequest(req);
+    const auth = await authenticateRequest(req, { requireAdmin: true });
     if ("errorResponse" in auth) {
       return auth.errorResponse;
     }
@@ -14,6 +16,10 @@ export async function POST(req: Request) {
     const targetBizId = body.business_id && body.business_id !== "default"
       ? body.business_id
       : caller.businessId;
+
+    if (!targetBizId) {
+      return NextResponse.json({ error: "Missing tenant business identifier" }, { status: 400 });
+    }
 
     if (!caller.isSuperAdmin && targetBizId !== caller.businessId) {
       return NextResponse.json(

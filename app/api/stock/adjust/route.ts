@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { authenticateRequest } from "@/lib/auth/serverAuth";
 
+export const dynamic = "force-dynamic";
+
 // Body: { items: Array<{ product_id:string; qty:number }> }
 export async function POST(req: Request) {
   try {
@@ -11,6 +13,10 @@ export async function POST(req: Request) {
 
     const { user, supa } = auth;
     const callerBusinessId = user.businessId;
+
+    if (!callerBusinessId) {
+      return NextResponse.json({ error: "Tenant context missing or invalid" }, { status: 400 });
+    }
 
     const body = (await req.json().catch(() => ({}))) as { items?: Array<{ product_id: string; qty: number }> };
     const items = Array.isArray(body.items) ? body.items : [];
@@ -25,10 +31,10 @@ export async function POST(req: Request) {
 
     const ids = Array.from(usage.keys());
 
-    // Fetch stocks and products
+    // Fetch stocks and products strictly scoped to tenant
     const [{ data: stocks }, { data: prods }] = await Promise.all([
-      supa.from("product_stocks").select("product_id,max_qty,available_qty,notify_at_count").in("product_id", ids),
-      supa.from("products").select("id,name").in("id", ids),
+      supa.from("product_stocks").select("product_id,max_qty,available_qty,notify_at_count").in("product_id", ids).eq("business_id", callerBusinessId),
+      supa.from("products").select("id,name").in("id", ids).eq("business_id", callerBusinessId),
     ]);
     const nameById = new Map<string, string>((prods || []).map((p: any) => [p.id, p.name]));
     const stockById = new Map<string, any>((stocks || []).map((s: any) => [s.product_id, s]));
@@ -43,7 +49,7 @@ export async function POST(req: Request) {
       const max = s.max_qty || 0;
       const after = Math.max(0, before - useQty);
       if (after === before) continue;
-      updates.push({ product_id: pid, max_qty: max, available_qty: after });
+      updates.push({ product_id: pid, business_id: callerBusinessId, max_qty: max, available_qty: after });
 
       // notifications
       const custom = (s.notify_at_count ?? null) as number | null;
@@ -73,7 +79,7 @@ export async function POST(req: Request) {
       }
     }
 
-    // Upsert updates
+    // Upsert updates with business_id scoping
     if (updates.length > 0) {
       const { error: upErr } = await supa.from("product_stocks").upsert(updates, { onConflict: "product_id" });
       if (upErr) return NextResponse.json({ error: upErr.message }, { status: 500 });

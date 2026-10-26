@@ -303,42 +303,63 @@ export function UserAttendanceCard({
                         </div>
                     </div>
 
-                    {/* Existing adjustments list for this day */}
-                    {adjustments && adjustments.length > 0 && (
-                        <div className="pt-1.5 space-y-1">
-                            <p className="text-[9px] font-semibold text-zinc-400 uppercase">Today&apos;s Adjustments:</p>
-                            <div className="flex flex-col gap-1 max-h-24 overflow-y-auto pr-0.5">
-                                {adjustments.map((item) => (
-                                    <div
-                                        key={item.id}
-                                        className={cn(
-                                            "flex items-center justify-between px-2 py-1 rounded-md text-[10px] font-medium border",
-                                            item.kind === 'deduction'
-                                                ? "bg-rose-50 border-rose-200 text-rose-800"
-                                                : "bg-emerald-50 border-emerald-200 text-emerald-800"
-                                        )}
-                                    >
-                                        <div className="flex items-center gap-1 truncate mr-1">
-                                            <span className="font-bold">
-                                                {item.kind === 'deduction' ? '-' : '+'}₹{(item.amountCents / 100).toFixed(0)}
-                                            </span>
-                                            <span className="truncate opacity-90">{item.reason}</span>
+                    {/* Existing adjustments & overtime list for this day (hide leave deductions) */}
+                    {(() => {
+                        const nonLeaveAdjustments = (adjustments || []).filter((item) => {
+                            const r = (item.reason || "").toLowerCase().trim();
+                            return r !== 'leave' && r !== 'leave deduction' && r !== 'half day' && r !== 'weekly off';
+                        });
+
+                        const showOvertimeBadge = status === 'present' && extraHours > 0;
+                        const hasItems = nonLeaveAdjustments.length > 0 || showOvertimeBadge;
+
+                        if (!hasItems) return null;
+
+                        return (
+                            <div className="pt-1.5 space-y-1">
+                                <p className="text-[9px] font-semibold text-zinc-400 uppercase">Today&apos;s Adjustments:</p>
+                                <div className="flex flex-col gap-1 max-h-24 overflow-y-auto pr-0.5">
+                                    {showOvertimeBadge && (
+                                        <div className="flex items-center justify-between px-2 py-1 rounded-md text-[10px] font-medium border bg-emerald-50 border-emerald-200 text-emerald-800">
+                                            <div className="flex items-center gap-1.5 truncate mr-1">
+                                                <span className="font-bold text-emerald-700">+{extraHours}h</span>
+                                                <span className="truncate opacity-90 font-medium">Overtime added</span>
+                                            </div>
+                                            <span className="text-[9px] uppercase font-bold text-emerald-600 bg-emerald-100 px-1 py-0.2 rounded">OT</span>
                                         </div>
-                                        {onDeleteAdjustment && (
-                                            <button
-                                                type="button"
-                                                onClick={() => onDeleteAdjustment(item.id, user.id)}
-                                                className="text-zinc-400 hover:text-zinc-700 p-0.5 shrink-0 transition-colors cursor-pointer"
-                                                title="Delete this adjustment"
-                                            >
-                                                <X size={12} />
-                                            </button>
-                                        )}
-                                    </div>
-                                ))}
+                                    )}
+                                    {nonLeaveAdjustments.map((item) => (
+                                        <div
+                                            key={item.id}
+                                            className={cn(
+                                                "flex items-center justify-between px-2 py-1 rounded-md text-[10px] font-medium border",
+                                                item.kind === 'deduction'
+                                                    ? "bg-rose-50 border-rose-200 text-rose-800"
+                                                    : "bg-emerald-50 border-emerald-200 text-emerald-800"
+                                            )}
+                                        >
+                                            <div className="flex items-center gap-1 truncate mr-1">
+                                                <span className="font-bold">
+                                                    {item.kind === 'deduction' ? '-' : '+'}₹{(item.amountCents / 100).toFixed(0)}
+                                                </span>
+                                                <span className="truncate opacity-90">{item.reason}</span>
+                                            </div>
+                                            {onDeleteAdjustment && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => onDeleteAdjustment(item.id, user.id)}
+                                                    className="text-zinc-400 hover:text-zinc-700 p-0.5 shrink-0 transition-colors cursor-pointer"
+                                                    title="Delete this adjustment"
+                                                >
+                                                    <X size={12} />
+                                                </button>
+                                            )}
+                                        </div>
+                                    ))}
+                                </div>
                             </div>
-                        </div>
-                    )}
+                        );
+                    })()}
                 </div>
             </div>
 

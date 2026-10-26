@@ -147,6 +147,7 @@ export async function enqueueSyncOperation(params: {
   tableName: string;
   action: "INSERT" | "UPDATE" | "DELETE" | "RPC";
   payload: any;
+  userId?: string | null;
   customId?: string;
 }): Promise<SyncQueueItem> {
   const operationId = params.customId || crypto.randomUUID();
@@ -154,6 +155,7 @@ export async function enqueueSyncOperation(params: {
     id: operationId,
     client_operation_id: operationId,
     business_id: params.businessId,
+    user_id: params.userId || null,
     table_name: params.tableName,
     action: params.action,
     payload: params.payload,
@@ -282,7 +284,6 @@ export async function processSyncQueue(businessId?: string): Promise<{
 // ==========================================
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const DEFAULT_BUSINESS_UUID = "a0000000-0000-0000-0000-000000000001";
 
 async function getEffectiveBusinessId(requestedBizId?: string): Promise<string> {
   try {
@@ -317,11 +318,40 @@ async function getEffectiveBusinessId(requestedBizId?: string): Promise<string> 
   if (requestedBizId && UUID_REGEX.test(requestedBizId) && requestedBizId !== "default") {
     return requestedBizId;
   }
-  return DEFAULT_BUSINESS_UUID;
+  
+  // SEC-01 & SEC-04: Fail closed. Never default unassigned mutations to Navalur!
+  throw new Error("Cannot sync offline operation: Tenant business ID could not be resolved.");
 }
 
 async function executeCloudMutation(op: SyncQueueItem): Promise<void> {
   const { table_name, action, payload } = op;
+
+  // SEC-04: Validate tenant session boundary.
+  // Prevent Store B's logged-in session from absorbing Store A's pending offline mutations.
+  const { data: { session } } = await supabaseClient.auth.getSession().catch(() => ({ data: { session: null } }));
+  if (session?.user?.id) {
+    let currentProf: { business_id?: string; is_super_admin?: boolean } | null = null;
+    try {
+      const res = await supabaseClient
+        .from("profiles")
+        .select("business_id, is_super_admin")
+        .eq("id", session.user.id)
+        .maybeSingle();
+      currentProf = res.data;
+    } catch {}
+
+    if (
+      currentProf &&
+      !currentProf.is_super_admin &&
+      currentProf.business_id &&
+      op.business_id &&
+      op.business_id !== "default" &&
+      currentProf.business_id !== op.business_id
+    ) {
+      throw new Error(`Tenant mismatch: Pending mutation belongs to business ${op.business_id}, but active session belongs to business ${currentProf.business_id}.`);
+    }
+  }
+
   const effectiveBizId = await getEffectiveBusinessId(op.business_id);
 
   // Auto-sanitize top-level business_id on payload if applicable

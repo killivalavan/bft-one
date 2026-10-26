@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { authenticateRequest } from "@/lib/auth/serverAuth";
 
+export const dynamic = "force-dynamic";
+
 // POST { order_id: string }
 export async function POST(req: Request) {
   try {
@@ -27,10 +29,12 @@ export async function POST(req: Request) {
     if (ordErr) return NextResponse.json({ error: ordErr.message }, { status: 500 });
     if (!ord) return NextResponse.json({ error: "Order not found" }, { status: 404 });
 
-    // Strict Tenant Boundary Check
-    if (!isSuperAdmin && ord.business_id && ord.business_id !== callerBusinessId) {
+    // Strict Tenant Boundary Check: fail closed if business_id is missing or belongs to another business
+    if (!isSuperAdmin && (!ord.business_id || ord.business_id !== callerBusinessId)) {
       return NextResponse.json({ error: "Unauthorized: Cannot cancel order of another business" }, { status: 403 });
     }
+
+    const targetBizId = ord.business_id || callerBusinessId;
 
     // Fetch items
     const { data: items, error: itemsErr } = await supa
@@ -40,7 +44,7 @@ export async function POST(req: Request) {
     if (itemsErr) return NextResponse.json({ error: itemsErr.message }, { status: 500 });
 
     // Restock each item
-    const updates: Array<{ product_id: string; available_qty: number }> = [];
+    const updates: Array<{ product_id: string; business_id: string; available_qty: number }> = [];
     for (const it of items || []) {
       const pid = it.product_id;
       const qty = Math.max(0, Math.floor(it.qty || 0));
@@ -49,11 +53,12 @@ export async function POST(req: Request) {
         .from("product_stocks")
         .select("available_qty")
         .eq("product_id", pid)
+        .eq("business_id", targetBizId)
         .maybeSingle();
       if (sErr) return NextResponse.json({ error: sErr.message }, { status: 500 });
       const before = s?.available_qty || 0;
       const after = before + qty;
-      updates.push({ product_id: pid, available_qty: after });
+      updates.push({ product_id: pid, business_id: targetBizId, available_qty: after });
     }
 
     if (updates.length > 0) {

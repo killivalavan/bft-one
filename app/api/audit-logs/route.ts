@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { authenticateRequest } from "@/lib/auth/serverAuth";
 import { supabaseAdmin } from "@/lib/supabaseServer";
 
+export const dynamic = "force-dynamic";
+
 export async function GET(request: Request) {
   try {
     const auth = await authenticateRequest(request, { requireAdmin: true });

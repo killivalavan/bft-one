@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { parseCoordinatesInput } from "@/lib/geofence";
 import { authenticateRequest } from "@/lib/auth/serverAuth";
 
+export const dynamic = "force-dynamic";
+
 function isSafeGoogleMapsUrl(targetUrl: string): boolean {
   try {
     const parsed = new URL(targetUrl);

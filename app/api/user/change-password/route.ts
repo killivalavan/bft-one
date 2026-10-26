@@ -4,6 +4,8 @@ import { supabaseAdmin } from "@/lib/supabaseServer";
 import { validatePasswordPolicy } from "@/lib/utils/passwordPolicy";
 import { logAuditEvent, extractClientMetadata } from "@/lib/services/auditLogger";
 
+export const dynamic = "force-dynamic";
+
 export async function POST(request: Request) {
   try {
     const supa = supabaseAdmin();
