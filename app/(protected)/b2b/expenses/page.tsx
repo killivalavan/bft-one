@@ -11,6 +11,7 @@ import {
   Receipt, Plus, Trash2, TrendingDown, DollarSign, Calendar,
   PieChart, Search, ArrowRight, ShoppingBag
 } from "lucide-react";
+import { useB2BExpenses, useRecordExpenseMutation } from "@/lib/hooks/useB2BData";
 
 export interface BakerExpense {
   id: string;
@@ -45,7 +46,19 @@ export default function BakerExpensesPage() {
   const [category, setCategory] = useState<string>("Raw Materials & Supplies");
   const [notes, setNotes] = useState("");
 
-  // Load from LocalStorage and Supabase daily_expenses
+  // Authoritative cloud expenses via TanStack Query
+  const { data: cloudExpenses } = useB2BExpenses(bizId);
+  const recordExpenseMutation = useRecordExpenseMutation(bizId);
+
+  // Synchronize cloud expenses from TanStack Query
+  useEffect(() => {
+    if (cloudExpenses && Array.isArray(cloudExpenses) && cloudExpenses.length > 0) {
+      setExpenses(cloudExpenses);
+      try {
+        localStorage.setItem(`bftone_baker_expenses_${bizId}`, JSON.stringify(cloudExpenses));
+      } catch {}
+    }
+  }, [cloudExpenses, bizId]);
   useEffect(() => {
     try {
       const stored = localStorage.getItem(`bftone_baker_expenses_${bizId}`);
@@ -105,7 +118,10 @@ export default function BakerExpensesPage() {
     const updated = [newExp, ...expenses];
     saveExpenses(updated);
 
-    // Sync to Supabase daily_expenses
+    // Asynchronously persist to Supabase via TanStack mutation
+    recordExpenseMutation.mutateAsync(newExp).catch((err) => {
+      console.warn("Cloud expense note:", err);
+    });
     if (business?.id) {
       supabaseClient.from("daily_expenses").insert({
         business_id: business.id,

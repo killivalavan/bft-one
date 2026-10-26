@@ -31,6 +31,7 @@ import { BakerProduct, INITIAL_BAKER_PRODUCTS } from "../products/page";
 import { formatCafeName, DEFAULT_BAKER_SAMPLE_STORES, sanitizeBakerStores } from "@/lib/utils/bakerUtils";
 import { fetchB2BClients, B2B_CUSTOMERS_UPDATED_EVENT } from "@/lib/services/b2bClients";
 import { SelectDropdown } from "@/components/ui/SelectDropdown";
+import { useB2BBroadcasts, usePublishBroadcastMutation } from "@/lib/hooks/useB2BData";
 
 interface ClientStore {
   id: string;
@@ -79,7 +80,19 @@ export default function BakerBroadcastsPage() {
   const [discountRate, setDiscountRate] = useState("");
   const [isSending, setIsSending] = useState(false);
 
-  // Load stores strictly from this baker's own customer ledgers
+  // Authoritative cloud broadcasts via TanStack Query
+  const { data: cloudBroadcasts } = useB2BBroadcasts(bizId);
+  const publishBroadcastMutation = usePublishBroadcastMutation(bizId);
+
+  // Synchronize cloud broadcasts from TanStack Query
+  useEffect(() => {
+    if (cloudBroadcasts && Array.isArray(cloudBroadcasts) && cloudBroadcasts.length > 0) {
+      setBroadcasts(cloudBroadcasts);
+      try {
+        localStorage.setItem(`bftone_baker_broadcasts_${bizId}`, JSON.stringify(cloudBroadcasts));
+      } catch {}
+    }
+  }, [cloudBroadcasts, bizId]);
   useEffect(() => {
     try {
       const storedCusts = localStorage.getItem(`bftone_customers_${bizId}`);
@@ -270,9 +283,12 @@ export default function BakerBroadcastsPage() {
         throw new Error(apiResult.error || "Failed to dispatch broadcast");
       }
 
-      // 2. Save to local broadcast feed
+      // 2. Save to local broadcast feed & persist to Supabase via TanStack mutation
       const updated = [newBroadcast, ...broadcasts];
       saveBroadcasts(updated);
+      publishBroadcastMutation.mutateAsync(newBroadcast).catch((err) => {
+        console.warn("Cloud broadcast note:", err);
+      });
 
       toast({
         title: "Broadcast Published!",

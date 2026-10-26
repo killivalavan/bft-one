@@ -16,6 +16,7 @@ import {
 import { formatCafeName } from "@/lib/utils/bakerUtils";
 import { fetchB2BClients, B2B_CUSTOMERS_UPDATED_EVENT } from "@/lib/services/b2bClients";
 import { SelectDropdown, SelectOption } from "@/components/ui/SelectDropdown";
+import { useB2BWorkspace, useRecordPaymentMutation } from "@/lib/hooks/useB2BData";
 
 export interface BakerPaymentRecord {
   id: string;
@@ -34,6 +35,10 @@ export default function BakerPaymentsPage() {
   const initialStore = searchParams?.get("store") || "";
   const initialAction = searchParams?.get("action") || "";
   const bizId = business?.id || "default";
+
+  // Authoritative cloud workspace data & mutation hook via TanStack Query
+  const { data: cloudWorkspace } = useB2BWorkspace(bizId);
+  const recordPaymentMutation = useRecordPaymentMutation(bizId);
 
   const [invoices, setInvoices] = useState<any[]>([]);
   const [stores, setStores] = useState<any[]>([]);
@@ -73,6 +78,19 @@ export default function BakerPaymentsPage() {
       }
     } catch {}
 
+    // Synchronize cloud data from TanStack Query
+    if (cloudWorkspace) {
+      if (Array.isArray(cloudWorkspace.payments) && cloudWorkspace.payments.length > 0) {
+        setPaymentsHistory(cloudWorkspace.payments);
+      }
+      if (Array.isArray(cloudWorkspace.invoices) && cloudWorkspace.invoices.length > 0) {
+        setInvoices(cloudWorkspace.invoices);
+      }
+      if (Array.isArray(cloudWorkspace.stores) && cloudWorkspace.stores.length > 0) {
+        setStores(cloudWorkspace.stores);
+      }
+    }
+
     // Fetch live B2B clients from server
     if (bizId && bizId !== "default") {
       fetchB2BClients(bizId).then((serverClients) => {
@@ -89,29 +107,30 @@ export default function BakerPaymentsPage() {
     };
     window.addEventListener(B2B_CUSTOMERS_UPDATED_EVENT, handleStoresUpdated);
 
-    if (business?.id) {
-      supabaseClient.from("invoices").select("*").eq("business_id", business.id).then(({ data }) => {
-        if (data && data.length > 0) {
-          const mapped = data.map((d: any) => ({
-            id: d.id,
-            invoiceNumber: d.invoice_number,
-            customerName: d.customer_name,
-            customerPhone: d.customer_phone,
-            totalAmount: (d.total_cents || 0) / 100,
-            status: d.status || "unpaid",
-            date: d.invoice_date || format(new Date(), "MMM dd, yyyy"),
-            paymentMode: d.payment_mode || "UPI",
-            items: d.items || [],
-          }));
-          setInvoices(mapped);
-        }
-      });
-    }
-
     return () => {
       window.removeEventListener(B2B_CUSTOMERS_UPDATED_EVENT, handleStoresUpdated);
     };
   }, [bizId, business?.id]);
+
+  // Synchronize cross-tab or local storage updates
+  useEffect(() => {
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === `bftone_invoices_${bizId}` && e.newValue) {
+        try {
+          const parsed = JSON.parse(e.newValue);
+          if (Array.isArray(parsed)) setInvoices(parsed);
+        } catch {}
+      }
+      if (e.key === `bftone_customers_${bizId}` && e.newValue) {
+        try {
+          const parsed = JSON.parse(e.newValue);
+          if (Array.isArray(parsed)) setStores(parsed);
+        } catch {}
+      }
+    };
+    window.addEventListener("storage", handleStorage);
+    return () => window.removeEventListener("storage", handleStorage);
+  }, [bizId]);
 
   // Synchronize when initialStore query param updates
   useEffect(() => {
@@ -133,7 +152,8 @@ export default function BakerPaymentsPage() {
       if (s.name?.trim()) storeNamesSet.add(s.name.trim());
     });
     invoices.forEach((inv) => {
-      if (inv.customerName?.trim()) storeNamesSet.add(inv.customerName.trim());
+      const name = inv.customerName || inv.client_name;
+      if (name?.trim()) storeNamesSet.add(name.trim());
     });
     return Array.from(storeNamesSet).sort((a, b) => a.localeCompare(b));
   }, [stores, invoices]);
@@ -153,18 +173,37 @@ export default function BakerPaymentsPage() {
     > = {};
 
     availableStores.forEach((storeName) => {
-      const storeInvs = invoices.filter(
-        (inv) => (inv.customerName || "").toLowerCase().trim() === storeName.toLowerCase().trim()
-      );
+      const storeInvs = invoices.filter((inv) => {
+        const invName = (inv.customerName || inv.client_name || "").toLowerCase().trim();
+        const sName = storeName.toLowerCase().trim();
+        return invName === sName || (invName && sName && (invName.replace(/[^a-z0-9]/g, "") === sName.replace(/[^a-z0-9]/g, "")));
+      });
       const storeObj = stores.find((s) => (s.name || "").toLowerCase().trim() === storeName.toLowerCase().trim());
 
-      const totalBilled = storeInvs.reduce((acc, inv) => acc + (inv.totalAmount || 0), 0);
-      const unpaidDues = storeInvs
-        .filter((inv) => inv.status === "unpaid")
-        .reduce((acc, inv) => acc + (inv.totalAmount || 0), 0);
-      const paidAmount = totalBilled - unpaidDues;
-      const unpaidCount = storeInvs.filter((inv) => inv.status === "unpaid").length;
-      const paidCount = storeInvs.filter((inv) => inv.status === "paid").length;
+      const rawBilled = storeInvs.reduce((acc, inv) => {
+        const val = Number(inv.totalAmount !== undefined ? inv.totalAmount : (inv.total_amount ?? 0));
+        return acc + (Number.isFinite(val) ? val : 0);
+      }, 0);
+      const totalBilled = Number.isFinite(rawBilled) ? rawBilled : 0;
+
+      const rawUnpaid = storeInvs
+        .filter((inv) => {
+          const s = String(inv.status || "").toLowerCase();
+          const due = Number(inv.balanceDue ?? inv.balance_due ?? (Number(inv.totalAmount || inv.total_amount || 0) - Number(inv.paidAmount || inv.paid_amount || 0)));
+          return (s === "unpaid" || s === "pending") || due > 0;
+        })
+        .reduce((acc, inv) => {
+          const val = Number(inv.balanceDue !== undefined ? inv.balanceDue : (inv.balance_due !== undefined ? inv.balance_due : (inv.totalAmount || inv.total_amount || 0)));
+          return acc + (Number.isFinite(val) ? val : 0);
+        }, 0);
+      const unpaidDues = Number.isFinite(rawUnpaid) ? rawUnpaid : 0;
+      const paidAmount = Math.max(0, totalBilled - unpaidDues);
+      const unpaidCount = storeInvs.filter((inv) => {
+        const s = String(inv.status || "").toLowerCase();
+        const due = Number(inv.balanceDue ?? inv.balance_due ?? (Number(inv.totalAmount || inv.total_amount || 0) - Number(inv.paidAmount || inv.paid_amount || 0)));
+        return (s === "unpaid" || s === "pending") || due > 0;
+      }).length;
+      const paidCount = storeInvs.filter((inv) => inv.status === "paid" && (inv.balanceDue === undefined || inv.balanceDue <= 0)).length;
 
       map[storeName] = {
         totalBilled,
@@ -172,7 +211,7 @@ export default function BakerPaymentsPage() {
         paidAmount,
         unpaidCount,
         paidCount,
-        phone: storeObj?.phone || storeInvs[0]?.customerPhone,
+        phone: storeObj?.phone || storeInvs[0]?.customerPhone || storeInvs[0]?.client_phone,
       };
     });
 
@@ -274,6 +313,22 @@ export default function BakerPaymentsPage() {
     try {
       localStorage.setItem(`bftone_baker_payments_${bizId}`, JSON.stringify(nextHistory));
     } catch {}
+
+    // Asynchronously persist payment transaction & reconciled invoices to Supabase
+    recordPaymentMutation.mutateAsync({
+      payment: {
+        id: newRecord.id,
+        client_name: newRecord.storeName,
+        amount: newRecord.amount,
+        payment_method: newRecord.paymentMode,
+        reference_no: newRecord.invoiceNumber || "",
+        notes: newRecord.notes,
+        date: new Date().toISOString().split("T")[0],
+      },
+      updatedInvoices: nextInvoices,
+    }).catch((e) => {
+      console.warn("Cloud payment recording note:", e);
+    });
 
     setIsRecordModalOpen(false);
     setSelectedInvoiceId(null);

@@ -9,8 +9,10 @@ export const B2B_CUSTOMERS_UPDATED_EVENT = "bftone_customers_updated";
  */
 export async function fetchB2BClients(bizId: string): Promise<BakerCustomerStore[]> {
   if (!bizId || bizId === "default") {
-    return DEFAULT_BAKER_SAMPLE_STORES;
+    return [];
   }
+
+  const isDemo = bizId === "e99fb445-d15e-4208-a8e6-0108ffdbe32a";
 
   // 1. Read existing local storage cache
   let localList: BakerCustomerStore[] = [];
@@ -62,8 +64,9 @@ export async function fetchB2BClients(bizId: string): Promise<BakerCustomerStore
     console.warn("fetchB2BClients error, using local fallback:", err);
   }
 
-  // Fallback to local or default
-  return localList.length > 0 ? localList : DEFAULT_BAKER_SAMPLE_STORES;
+  // Fallback to local, or sample only if it's the demo baker
+  if (localList.length > 0) return localList;
+  return isDemo ? DEFAULT_BAKER_SAMPLE_STORES : [];
 }
 
 /**

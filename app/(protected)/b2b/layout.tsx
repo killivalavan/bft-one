@@ -5,24 +5,51 @@ import { useRouter } from "next/navigation";
 import { useTenant } from "@/lib/context/TenantContext";
 import { ShieldAlert } from "lucide-react";
 import Link from "next/link";
-import { seedRoyalBakerLocalStorage } from "@/lib/data/royalBakerDemoData";
+import { runClientDataMigration } from "@/lib/services/dataMigrationService";
+import { useB2BWorkspace } from "@/lib/hooks/useB2BData";
 
 export default function BakerLayout({ children }: { children: React.ReactNode }) {
   const { isModuleEnabled, loading, business } = useTenant();
   const router = useRouter();
 
   const isBakerEnabled = isModuleEnabled ? isModuleEnabled("baker_mode") : false;
+  const activeBizId = business?.id || "default";
 
-  // Global multi-browser & mobile sync: guarantees data is immediately populated on ANY device/browser
+  // Pre-warm TanStack Query cache for instant child page navigation
+  const { data: workspaceData } = useB2BWorkspace(activeBizId);
+
+  // Background migration: non-destructively backs up and migrates any local storage data to Supabase
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      const activeBizId = business?.id || "default";
-      const stored = localStorage.getItem(`bftone_invoices_${activeBizId}`);
-      if (!stored || stored === "[]") {
-        seedRoyalBakerLocalStorage(activeBizId);
-      }
+    if (typeof window !== "undefined" && activeBizId && activeBizId !== "default") {
+      runClientDataMigration(activeBizId);
     }
-  }, [business?.id]);
+  }, [activeBizId]);
+
+  // Synchronize cloud state into local storage cache for instant 0ms offline rendering
+  useEffect(() => {
+    if (typeof window !== "undefined" && workspaceData && activeBizId && activeBizId !== "default") {
+      try {
+        if (Array.isArray(workspaceData.invoices)) {
+          localStorage.setItem(`bftone_invoices_${activeBizId}`, JSON.stringify(workspaceData.invoices));
+        }
+        if (Array.isArray(workspaceData.products)) {
+          localStorage.setItem(`bftone_baker_products_${activeBizId}`, JSON.stringify(workspaceData.products));
+        }
+        if (Array.isArray(workspaceData.stores)) {
+          localStorage.setItem(`bftone_customers_${activeBizId}`, JSON.stringify(workspaceData.stores));
+        }
+        if (Array.isArray(workspaceData.payments)) {
+          localStorage.setItem(`bftone_baker_payments_${activeBizId}`, JSON.stringify(workspaceData.payments));
+        }
+        if (Array.isArray(workspaceData.expenses)) {
+          localStorage.setItem(`bftone_baker_expenses_${activeBizId}`, JSON.stringify(workspaceData.expenses));
+        }
+        if (Array.isArray(workspaceData.broadcasts)) {
+          localStorage.setItem(`bftone_baker_broadcasts_${activeBizId}`, JSON.stringify(workspaceData.broadcasts));
+        }
+      } catch {}
+    }
+  }, [workspaceData, activeBizId]);
 
   useEffect(() => {
     if (!loading && !isBakerEnabled) {

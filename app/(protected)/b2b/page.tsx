@@ -18,6 +18,7 @@ import {
   seedRoyalBakerLocalStorage,
   ROYAL_BAKER_BIZ_ID,
 } from "@/lib/data/royalBakerDemoData";
+import { useB2BWorkspace } from "@/lib/hooks/useB2BData";
 import {
   ResponsiveContainer,
   BarChart,
@@ -83,7 +84,7 @@ export default function HomeBakerDashboardPage() {
 
   // Initial State loaded safely via lazy initializers (React 19 compliant, zero hydration cascading renders)
   const [invoices, setInvoices] = useState<InvoiceRecord[]>(() => {
-    if (typeof window !== "undefined") {
+    if (typeof window !== "undefined" && bizId && bizId !== "default") {
       try {
         const stored = localStorage.getItem(`bftone_invoices_${bizId}`);
         if (stored) return JSON.parse(stored);
@@ -93,7 +94,7 @@ export default function HomeBakerDashboardPage() {
   });
 
   const [stores, setStores] = useState<MonitorStoreRecord[]>(() => {
-    if (typeof window !== "undefined") {
+    if (typeof window !== "undefined" && bizId && bizId !== "default") {
       try {
         const stored = localStorage.getItem(`bftone_customers_${bizId}`);
         if (stored) return JSON.parse(stored);
@@ -103,7 +104,7 @@ export default function HomeBakerDashboardPage() {
   });
 
   const [expenses, setExpenses] = useState<ExpenseRecord[]>(() => {
-    if (typeof window !== "undefined") {
+    if (typeof window !== "undefined" && bizId && bizId !== "default") {
       try {
         const stored = localStorage.getItem(`bftone_baker_expenses_${bizId}`);
         if (stored) return JSON.parse(stored);
@@ -128,24 +129,61 @@ export default function HomeBakerDashboardPage() {
   const [showAllInvoices, setShowAllInvoices] = useState(false);
   const [showAllDues, setShowAllDues] = useState(false);
 
-  // Auto-populate for Royal Baker if local storage is completely empty
+  // Authoritative Cloud Data via TanStack Query (2-minute freshness, zero redundant network calls)
+  const { data: cloudData } = useB2BWorkspace(bizId);
+
+  // Strict tenant switch handler: reset and reload local state whenever active business changes
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      const isRoyal = bizId === ROYAL_BAKER_BIZ_ID || (business?.name || "").toLowerCase().includes("royal");
-      if (isRoyal) {
-        const stored = localStorage.getItem(`bftone_invoices_${bizId}`);
-        const parsed = stored ? JSON.parse(stored) : [];
-        if (!Array.isArray(parsed) || parsed.length === 0) {
-          const seeded = seedRoyalBakerLocalStorage(bizId);
-          if (seeded) {
-            setInvoices(seeded.invoices);
-            setStores(seeded.stores);
-            setExpenses(seeded.expenses);
-          }
+    if (typeof window !== "undefined" && bizId && bizId !== "default") {
+      try {
+        const storedInv = localStorage.getItem(`bftone_invoices_${bizId}`);
+        setInvoices(storedInv ? JSON.parse(storedInv) : []);
+        const storedStores = localStorage.getItem(`bftone_customers_${bizId}`);
+        setStores(storedStores ? JSON.parse(storedStores) : []);
+        const storedExp = localStorage.getItem(`bftone_baker_expenses_${bizId}`);
+        setExpenses(storedExp ? JSON.parse(storedExp) : []);
+      } catch {
+        setInvoices([]);
+        setStores([]);
+        setExpenses([]);
+      }
+    } else {
+      setInvoices([]);
+      setStores([]);
+      setExpenses([]);
+    }
+  }, [bizId]);
+
+  // Synchronize authoritative cloud data into component state (accurately handles 0-item states)
+  useEffect(() => {
+    if (cloudData) {
+      if (Array.isArray(cloudData.invoices)) {
+        setInvoices(cloudData.invoices);
+      }
+      if (Array.isArray(cloudData.stores)) {
+        setStores(cloudData.stores);
+      }
+      if (Array.isArray(cloudData.expenses)) {
+        setExpenses(cloudData.expenses);
+      }
+    }
+  }, [cloudData]);
+
+  // Fallback seeder strictly isolated to Royal Baker demo workspace only
+  useEffect(() => {
+    if (typeof window !== "undefined" && bizId === ROYAL_BAKER_BIZ_ID) {
+      const stored = localStorage.getItem(`bftone_invoices_${bizId}`);
+      const parsed = stored ? JSON.parse(stored) : [];
+      if (!Array.isArray(parsed) || parsed.length === 0) {
+        const seeded = seedRoyalBakerLocalStorage(bizId);
+        if (seeded) {
+          setInvoices(seeded.invoices);
+          setStores(seeded.stores);
+          setExpenses(seeded.expenses);
         }
       }
     }
-  }, [bizId, business?.name]);
+  }, [bizId]);
 
   // Safe Date Parser Helper
   const parseRecordDate = (rec: { date?: string; createdAt?: string }): Date => {
@@ -179,31 +217,7 @@ export default function HomeBakerDashboardPage() {
     };
     window.addEventListener(B2B_CUSTOMERS_UPDATED_EVENT, handleStoresUpdated);
 
-    // Fetch live Invoices from Supabase
     if (business?.id) {
-      supabaseClient
-        .from("invoices")
-        .select("*")
-        .eq("business_id", business.id)
-        .order("created_at", { ascending: false })
-        .then(({ data }) => {
-          if (data && data.length > 0) {
-            const mapped: InvoiceRecord[] = (data as Array<Record<string, unknown>>).map((d) => ({
-              id: String(d.id || ""),
-              invoiceNumber: String(d.invoice_number || ""),
-              customerName: String(d.customer_name || ""),
-              customerPhone: d.customer_phone ? String(d.customer_phone) : undefined,
-              totalAmount: (Number(d.total_cents) || 0) / 100,
-              status: (d.status === "paid" ? "paid" : "unpaid"),
-              date: d.invoice_date ? String(d.invoice_date) : format(new Date(), "MMM dd, yyyy"),
-              createdAt: d.created_at ? String(d.created_at) : undefined,
-              title: d.title ? String(d.title) : undefined,
-              items: Array.isArray(d.items) ? (d.items as InvoiceItem[]) : [],
-            }));
-            setInvoices(mapped);
-          }
-        });
-
       // Fetch live Expenses from Supabase
       supabaseClient
         .from("daily_expenses")
@@ -328,8 +342,18 @@ export default function HomeBakerDashboardPage() {
   }, [invoices, expenses, periodDateRanges]);
 
   // 4. Financial Calculations & KPIs
-  const grossSales = currentInvoices.reduce((acc, inv) => acc + (inv.totalAmount || 0), 0);
-  const totalRawCost = currentExpenses.reduce((acc, exp) => acc + (exp.amount || 0), 0);
+  const rawGrossSales = currentInvoices.reduce((acc, inv) => {
+    const val = Number(inv.totalAmount || 0);
+    return acc + (Number.isFinite(val) ? val : 0);
+  }, 0);
+  const grossSales = Number.isFinite(rawGrossSales) ? rawGrossSales : 0;
+
+  const rawCost = currentExpenses.reduce((acc, exp) => {
+    const val = Number(exp.amount || 0);
+    return acc + (Number.isFinite(val) ? val : 0);
+  }, 0);
+  const totalRawCost = Number.isFinite(rawCost) ? rawCost : 0;
+
   const netProfit = grossSales - totalRawCost;
   const isProfitPositive = netProfit >= 0;
   const netMargin = grossSales > 0 ? ((netProfit / grossSales) * 100).toFixed(1) : "0";
@@ -337,22 +361,34 @@ export default function HomeBakerDashboardPage() {
   // Collected vs Unpaid Receivables
   const collectedPayments = currentInvoices
     .filter((inv) => inv.status === "paid")
-    .reduce((acc, inv) => acc + (inv.totalAmount || 0), 0);
+    .reduce((acc, inv) => {
+      const val = Number(inv.totalAmount || 0);
+      return acc + (Number.isFinite(val) ? val : 0);
+    }, 0);
 
   const pendingDues = currentInvoices
     .filter((inv) => inv.status === "unpaid")
-    .reduce((acc, inv) => acc + (inv.totalAmount || 0), 0);
+    .reduce((acc, inv) => {
+      const val = Number(inv.totalAmount || 0);
+      return acc + (Number.isFinite(val) ? val : 0);
+    }, 0);
 
-  const collectionRate = grossSales > 0 ? Math.round((collectedPayments / grossSales) * 100) : 0;
+  const collectionRate = grossSales > 0 ? Math.round(((Number.isFinite(collectedPayments) ? collectedPayments : 0) / grossSales) * 100) : 0;
 
   const totalDeliveredPieces = currentInvoices.reduce((acc, inv) => {
-    return acc + (inv.items || []).reduce((s: number, it: InvoiceItem) => s + (Number(it.qty) || 0), 0);
+    return acc + (inv.items || []).reduce((s: number, it: InvoiceItem) => {
+      const qty = Number(it.qty || 0);
+      return s + (Number.isFinite(qty) ? qty : 0);
+    }, 0);
   }, 0);
 
   const avgPiecesPerSlip = currentInvoices.length > 0 ? (totalDeliveredPieces / currentInvoices.length).toFixed(1) : "0";
 
   // Previous Period Comparisons
-  const prevGrossSales = prevInvoices.reduce((acc, inv) => acc + (inv.totalAmount || 0), 0);
+  const prevGrossSales = prevInvoices.reduce((acc, inv) => {
+    const val = Number(inv.totalAmount || 0);
+    return acc + (Number.isFinite(val) ? val : 0);
+  }, 0);
   const hasPreviousPeriodData = periodDateRanges.hasPrevComparison && prevInvoices.length > 0;
   const salesDeltaPct =
     hasPreviousPeriodData && prevGrossSales > 0

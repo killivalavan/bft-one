@@ -15,11 +15,11 @@ import {
 } from "lucide-react";
 import { generateBillPdf, BillPdfData } from "@/lib/utils/billPdf";
 import { putItem, STORES, LocalInvoice } from "@/lib/offline/db";
-import { BakerProduct, INITIAL_BAKER_PRODUCTS, capitalizeWords } from "../products/page";
+import { BakerProduct, INITIAL_BAKER_PRODUCTS, capitalizeWords, normalizeBakerProduct } from "../products/page";
 import { formatCafeName, DEFAULT_BAKER_SAMPLE_STORES, sanitizeBakerStores } from "@/lib/utils/bakerUtils";
 import { fetchB2BClients, saveB2BClient, B2B_CUSTOMERS_UPDATED_EVENT } from "@/lib/services/b2bClients";
 import { generateWhatsAppSlipMessage } from "@/lib/utils/b2bSlipWhatsapp";
-
+import { useB2BWorkspace, useCreateDispatchMutation } from "@/lib/hooks/useB2BData";
 import { useSearchParams } from "next/navigation";
 
 interface BakerStore {
@@ -36,6 +36,10 @@ export default function BakerDispatchPage() {
   const searchParams = useSearchParams();
   const tabParam = searchParams?.get("tab");
   const bizId = business?.id || "default";
+
+  // Authoritative cloud workspace data & mutation hook via TanStack Query
+  const { data: cloudWorkspace } = useB2BWorkspace(bizId);
+  const createDispatchMutation = useCreateDispatchMutation(bizId);
 
   // Tab State: "entry" (Delivery) | "return" (Return Intake) | "history" (Saved Slips)
   const [activeTab, setActiveTab] = useState<"entry" | "return" | "history">(() => {
@@ -91,12 +95,12 @@ export default function BakerDispatchPage() {
       if (storedProds) {
         const parsed = JSON.parse(storedProds);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          setProducts(parsed.filter((p: BakerProduct) => p.is_active));
+          setProducts(parsed.map(normalizeBakerProduct).filter((p: BakerProduct) => p.is_active));
         } else {
-          setProducts(INITIAL_BAKER_PRODUCTS);
+          setProducts(INITIAL_BAKER_PRODUCTS.map(normalizeBakerProduct));
         }
       } else {
-        setProducts(INITIAL_BAKER_PRODUCTS);
+        setProducts(INITIAL_BAKER_PRODUCTS.map(normalizeBakerProduct));
       }
 
       // 2. Stores (Baker's own B2B client customer shops)
@@ -116,6 +120,19 @@ export default function BakerDispatchPage() {
       }
     } catch {}
 
+    // Synchronize cloud data from TanStack Query
+    if (cloudWorkspace) {
+      if (Array.isArray(cloudWorkspace.invoices) && cloudWorkspace.invoices.length > 0) {
+        setSavedInvoices(cloudWorkspace.invoices);
+      }
+      if (Array.isArray(cloudWorkspace.products) && cloudWorkspace.products.length > 0) {
+        setProducts(cloudWorkspace.products.map(normalizeBakerProduct).filter((p: any) => p.is_active));
+      }
+      if (Array.isArray(cloudWorkspace.stores) && cloudWorkspace.stores.length > 0) {
+        setStores(cloudWorkspace.stores);
+      }
+    }
+
     // Fetch live B2B clients from server
     if (bizId && bizId !== "default") {
       fetchB2BClients(bizId).then((serverClients) => {
@@ -131,34 +148,6 @@ export default function BakerDispatchPage() {
       }
     };
     window.addEventListener(B2B_CUSTOMERS_UPDATED_EVENT, handleStoresUpdated);
-
-    // Fetch live from Supabase
-    if (business?.id) {
-      supabaseClient
-        .from("invoices")
-        .select("*")
-        .eq("business_id", business.id)
-        .order("created_at", { ascending: false })
-        .then(({ data }) => {
-          if (data && data.length > 0) {
-            const mapped = data.map((d: any) => ({
-              id: d.id,
-              invoiceNumber: d.invoice_number,
-              title: d.title || "DELIVERY SLIP",
-              customerName: d.customer_name,
-              customerPhone: d.customer_phone,
-              customerAddress: d.customer_address,
-              date: d.invoice_date || format(new Date(), "MMM dd, yyyy"),
-              items: d.items || [],
-              totalAmount: (d.total_cents || 0) / 100,
-              subtotal: (d.subtotal_cents || 0) / 100,
-              status: d.status || "unpaid",
-              createdAt: d.created_at,
-            }));
-            setSavedInvoices(mapped);
-          }
-        });
-    }
 
     return () => {
       window.removeEventListener(B2B_CUSTOMERS_UPDATED_EVENT, handleStoresUpdated);
@@ -250,21 +239,37 @@ export default function BakerDispatchPage() {
     return products
       .map((p) => {
         const qty = quantities[p.id] || 0;
-        const total = qty * p.selling_price;
-        const profit = qty * p.unit_profit;
+        const rawPrice = Number(p.selling_price !== undefined && p.selling_price !== null ? p.selling_price : (p.rate ?? p.price ?? 0));
+        const validPrice = Number.isFinite(rawPrice) ? Math.max(0, rawPrice) : 0;
+        const rawCost = Number(p.making_cost !== undefined && p.making_cost !== null ? p.making_cost : (validPrice > 0 ? Math.round(validPrice * 0.42) : 0));
+        const validCost = Number.isFinite(rawCost) ? Math.max(0, rawCost) : 0;
+        const rawProfit = Number(p.unit_profit !== undefined && p.unit_profit !== null ? p.unit_profit : (validPrice - validCost));
+        const validProfit = Number.isFinite(rawProfit) ? rawProfit : validPrice - validCost;
+
+        const total = qty * validPrice;
+        const profit = qty * validProfit;
         return {
-          product: { ...p, name: capitalizeWords(p.name) },
+          product: {
+            ...p,
+            selling_price: validPrice,
+            rate: validPrice,
+            making_cost: validCost,
+            unit_profit: validProfit,
+            name: capitalizeWords(p.name)
+          },
           qty,
-          total,
-          profit,
+          total: Number.isFinite(total) ? total : 0,
+          profit: Number.isFinite(profit) ? profit : 0,
         };
       })
       .filter((it) => it.qty > 0);
   }, [products, quantities]);
 
-  const billTotalAmount = lineItems.reduce((acc, it) => acc + it.total, 0);
+  const rawBillTotal = lineItems.reduce((acc, it) => acc + it.total, 0);
+  const billTotalAmount = Number.isFinite(rawBillTotal) ? rawBillTotal : 0;
   const totalUnitsDelivered = lineItems.reduce((acc, it) => acc + it.qty, 0);
-  const estimatedProfit = lineItems.reduce((acc, it) => acc + it.profit, 0);
+  const rawEstimatedProfit = lineItems.reduce((acc, it) => acc + it.profit, 0);
+  const estimatedProfit = Number.isFinite(rawEstimatedProfit) ? rawEstimatedProfit : 0;
   const overallMargin = billTotalAmount > 0 ? ((estimatedProfit / billTotalAmount) * 100).toFixed(1) : "0";
 
   // Phone input handler enforcing max 10 digits for India (+91)
@@ -366,17 +371,24 @@ export default function BakerDispatchPage() {
       customerName: selectedStore.name,
       customerPhone: selectedStore.phone || "",
       customerAddress: selectedStore.address || "",
-      items: lineItems.map((it, idx) => ({
-        id: `row-${idx}`,
-        name: capitalizeWords(it.product.name),
-        qty: it.qty,
-        unit: it.product.unit,
-        rate: it.product.selling_price,
-        amount: isReturnMode ? -it.total : it.total,
-        isReturn: isReturnMode,
-      })),
-      subtotal: slipSubtotal,
-      totalAmount: slipTotal,
+      items: lineItems.map((it, idx) => {
+        const itemRate = Number(it.product.selling_price ?? it.product.rate ?? 0);
+        const validItemRate = Number.isFinite(itemRate) ? itemRate : 0;
+        const validItemTotal = Number.isFinite(it.total) ? it.total : 0;
+        return {
+          id: `row-${idx}`,
+          name: capitalizeWords(it.product.name),
+          qty: it.qty,
+          unit: it.product.unit || "Unit",
+          rate: validItemRate,
+          amount: isReturnMode ? -validItemTotal : validItemTotal,
+          isReturn: isReturnMode,
+        };
+      }),
+      subtotal: Number.isFinite(slipSubtotal) ? slipSubtotal : 0,
+      totalAmount: Number.isFinite(slipTotal) ? slipTotal : 0,
+      balanceDue: Number.isFinite(slipTotal) ? slipTotal : 0,
+      paidAmount: 0,
       status: "unpaid" as const,
       paymentMode: isReturnMode ? "Account Credit" : "UPI",
       createdAt: new Date().toISOString(),
@@ -388,6 +400,11 @@ export default function BakerDispatchPage() {
     try {
       localStorage.setItem(`bftone_invoices_${bizId}`, JSON.stringify(updatedList));
     } catch {}
+
+    // Asynchronously persist to Supabase via TanStack mutation
+    createDispatchMutation.mutateAsync(newInvoice).catch((e) => {
+      console.warn("Cloud dispatch persistence note:", e);
+    });
 
     // Save to IDB
     putItem<LocalInvoice>(STORES.invoices, {
@@ -979,7 +996,14 @@ export default function BakerDispatchPage() {
                 {products.map((p) => {
                   const qty = quantities[p.id] || 0;
                   const capName = capitalizeWords(p.name);
-                  const itemTotal = qty * p.selling_price;
+                  const rawPrice = Number(p.selling_price !== undefined && p.selling_price !== null ? p.selling_price : (p.rate ?? p.price ?? 0));
+                  const safePrice = Number.isFinite(rawPrice) ? Math.max(0, rawPrice) : 0;
+                  const rawCost = Number(p.making_cost !== undefined && p.making_cost !== null ? p.making_cost : (safePrice > 0 ? Math.round(safePrice * 0.42) : 0));
+                  const safeCost = Number.isFinite(rawCost) ? Math.max(0, rawCost) : 0;
+                  const rawProfit = Number(p.unit_profit !== undefined && p.unit_profit !== null ? p.unit_profit : (safePrice - safeCost));
+                  const safeProfit = Number.isFinite(rawProfit) ? rawProfit : safePrice - safeCost;
+                  const rawItemTotal = qty * safePrice;
+                  const safeItemTotal = Number.isFinite(rawItemTotal) ? rawItemTotal : 0;
 
                   return (
                     <div
@@ -1003,16 +1027,16 @@ export default function BakerDispatchPage() {
                           </div>
 
                           <div className="flex items-center gap-1.5 flex-wrap mt-1 text-[11px] font-semibold text-[#64748B]">
-                            <span className="text-[#0F172A] font-bold">₹{p.selling_price}</span>
+                            <span className="text-[#0F172A] font-bold">₹{safePrice}</span>
                             <span>/ {p.unit || "pc"}</span>
                             {!isReturnMode ? (
-                              p.unit_profit >= 0 ? (
+                              safeProfit >= 0 ? (
                                 <span className="text-emerald-600 text-[10px] font-bold bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200">
-                                  +₹{p.unit_profit} profit
+                                  +₹{safeProfit} profit
                                 </span>
                               ) : (
                                 <span className="text-rose-600 text-[10px] font-bold bg-rose-50 px-1.5 py-0.2 rounded border border-rose-200">
-                                  -₹{Math.abs(p.unit_profit)} margin
+                                  -₹{Math.abs(safeProfit)} margin
                                 </span>
                               )
                             ) : (
@@ -1027,7 +1051,7 @@ export default function BakerDispatchPage() {
                                   ? "bg-amber-100 text-amber-900 border-amber-300"
                                   : "bg-blue-100 text-blue-950 border-blue-300"
                               )}>
-                                = {isReturnMode ? "-" : ""}₹{itemTotal.toLocaleString("en-IN")}
+                                = {isReturnMode ? "-" : ""}₹{safeItemTotal.toLocaleString("en-IN")}
                               </span>
                             )}
                           </div>
@@ -1130,7 +1154,7 @@ export default function BakerDispatchPage() {
                       "text-base sm:text-2xl font-black whitespace-nowrap",
                       isReturnMode ? "text-amber-700" : "text-[#0F172A]"
                     )}>
-                      {isReturnMode ? `-₹${billTotalAmount.toLocaleString("en-IN")}` : `₹${billTotalAmount.toLocaleString("en-IN")}`}
+                      {isReturnMode ? `-₹${(Number.isFinite(billTotalAmount) ? billTotalAmount : 0).toLocaleString("en-IN")}` : `₹${(Number.isFinite(billTotalAmount) ? billTotalAmount : 0).toLocaleString("en-IN")}`}
                     </span>
                   </div>
                 </div>
@@ -1149,17 +1173,17 @@ export default function BakerDispatchPage() {
                       <div key={it.product.id} className="p-3 bg-slate-50/50 flex items-center justify-between text-xs">
                         <div>
                           <span className="font-extrabold text-[#0F172A]">{it.qty}x {capitalizeWords(it.product.name)}</span>
-                          <span className="text-slate-400 ml-2">(@ ₹{it.product.selling_price})</span>
+                          <span className="text-slate-400 ml-2">(@ ₹{Number(it.product.selling_price ?? it.product.rate ?? 0)})</span>
                         </div>
                         <div className="text-right">
                           <span className={cn(
                             "font-black",
                             isReturnMode ? "text-amber-700" : "text-[#0F172A]"
                           )}>
-                            {isReturnMode ? `-₹${it.total.toLocaleString("en-IN")}` : `₹${it.total.toLocaleString("en-IN")}`}
+                            {isReturnMode ? `-₹${(Number.isFinite(it.total) ? it.total : 0).toLocaleString("en-IN")}` : `₹${(Number.isFinite(it.total) ? it.total : 0).toLocaleString("en-IN")}`}
                           </span>
                           {!isReturnMode ? (
-                            <span className="text-[10px] text-emerald-600 font-bold block">(+₹{it.profit} profit)</span>
+                            <span className="text-[10px] text-emerald-600 font-bold block">(+₹{Number.isFinite(it.profit) ? it.profit : 0} profit)</span>
                           ) : (
                             <span className="text-[10px] text-amber-700 font-bold block">(returned item)</span>
                           )}
@@ -1176,7 +1200,7 @@ export default function BakerDispatchPage() {
                           Client Outstanding Balance Deduction
                         </span>
                         <span className="text-base sm:text-lg font-black text-amber-700">
-                          -₹{billTotalAmount.toLocaleString("en-IN")}
+                          -₹{(Number.isFinite(billTotalAmount) ? billTotalAmount : 0).toLocaleString("en-IN")}
                         </span>
                       </div>
                       <div className="text-right shrink-0">
@@ -1192,12 +1216,12 @@ export default function BakerDispatchPage() {
                           Estimated Net Profit
                         </span>
                         <span className="text-base sm:text-lg font-black text-emerald-700">
-                          ₹{estimatedProfit.toLocaleString("en-IN")}
+                          ₹{(Number.isFinite(estimatedProfit) ? estimatedProfit : 0).toLocaleString("en-IN")}
                         </span>
                       </div>
                       <div className="text-right shrink-0">
                         <span className="text-xs font-black text-emerald-800 px-3 py-1 rounded-full bg-emerald-100 border border-emerald-300/80 whitespace-nowrap inline-flex items-center shadow-2xs">
-                          {overallMargin}% Margin
+                          {Number.isFinite(Number(overallMargin)) ? overallMargin : "0"}% Margin
                         </span>
                       </div>
                     </div>
@@ -1237,8 +1261,8 @@ export default function BakerDispatchPage() {
                         : isSaving
                           ? isReturnMode ? "Recording Return Slip..." : "Recording Delivery Slip..."
                           : isReturnMode
-                            ? `Submit & Record Return Slip (-₹${billTotalAmount.toLocaleString("en-IN")})`
-                            : `Submit & Record Delivery Slip (₹${billTotalAmount.toLocaleString("en-IN")})`}
+                            ? `Submit & Record Return Slip (-₹${(Number.isFinite(billTotalAmount) ? billTotalAmount : 0).toLocaleString("en-IN")})`
+                            : `Submit & Record Delivery Slip (₹${(Number.isFinite(billTotalAmount) ? billTotalAmount : 0).toLocaleString("en-IN")})`}
                   </span>
                 </button>
                 <p className="text-center text-[11px] text-[#64748B] mt-2 font-medium">

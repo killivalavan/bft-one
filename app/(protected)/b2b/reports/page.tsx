@@ -14,11 +14,15 @@ import {
 } from "lucide-react";
 import { INITIAL_BAKER_PRODUCTS, BakerProduct, capitalizeWords } from "../products/page";
 import { formatCafeName } from "@/lib/utils/bakerUtils";
+import { useB2BWorkspace } from "@/lib/hooks/useB2BData";
 
 export default function BakerReportsPage() {
   const { business } = useTenant();
   const { toast } = useToast();
   const bizId = business?.id || "default";
+
+  // Authoritative cloud workspace synchronization via TanStack Query
+  const { data: cloudWorkspace } = useB2BWorkspace(bizId);
 
   const [invoices, setInvoices] = useState<any[]>([]);
   const [expenses, setExpenses] = useState<any[]>([]);
@@ -53,40 +57,58 @@ export default function BakerReportsPage() {
         }
       }
     } catch {}
+  }, [bizId]);
 
-    if (business?.id) {
-      supabaseClient
-        .from("invoices")
-        .select("*")
-        .eq("business_id", business.id)
-        .order("created_at", { ascending: false })
-        .then(({ data }) => {
-          if (data && data.length > 0) {
-            const mapped = data.map((d: any) => ({
-              id: d.id,
-              invoiceNumber: d.invoice_number,
-              customerName: d.customer_name,
-              totalAmount: (d.total_cents || 0) / 100,
-              status: d.status || "unpaid",
-              date: d.invoice_date || format(new Date(), "MMM dd, yyyy"),
-              createdAt: d.created_at,
-              items: d.items || [],
-            }));
-            setInvoices(mapped);
-          }
-        });
+  // Synchronize cloud data from TanStack Query
+  useEffect(() => {
+    if (cloudWorkspace) {
+      if (Array.isArray(cloudWorkspace.invoices) && cloudWorkspace.invoices.length > 0) {
+        setInvoices(cloudWorkspace.invoices);
+      }
+      if (Array.isArray(cloudWorkspace.expenses) && cloudWorkspace.expenses.length > 0) {
+        setExpenses(cloudWorkspace.expenses);
+      }
+      if (Array.isArray(cloudWorkspace.products) && cloudWorkspace.products.length > 0) {
+        setProducts(cloudWorkspace.products);
+      }
     }
-  }, [bizId, business?.id]);
+  }, [cloudWorkspace]);
+
+  // Cross-tab / storage synchronization
+  useEffect(() => {
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === `bftone_invoices_${bizId}` && e.newValue) {
+        try {
+          const parsed = JSON.parse(e.newValue);
+          if (Array.isArray(parsed)) setInvoices(parsed);
+        } catch {}
+      }
+      if (e.key === `bftone_baker_expenses_${bizId}` && e.newValue) {
+        try {
+          const parsed = JSON.parse(e.newValue);
+          if (Array.isArray(parsed)) setExpenses(parsed);
+        } catch {}
+      }
+    };
+    window.addEventListener("storage", handleStorage);
+    return () => window.removeEventListener("storage", handleStorage);
+  }, [bizId]);
 
   // Product Map for quick cost lookup
   const productCostMap = useMemo(() => {
     const map: Record<string, { selling_price: number; making_cost: number; unit_profit: number }> = {};
     products.forEach((p) => {
-      const cleanKey = p.name.trim().toLowerCase();
+      const cleanKey = (p.name || "").trim().toLowerCase();
+      const rawPrice = Number(p.selling_price !== undefined && p.selling_price !== null ? p.selling_price : (p.rate ?? p.price ?? 0));
+      const sPrice = Number.isFinite(rawPrice) ? Math.max(0, rawPrice) : 0;
+      const rawCost = Number(p.making_cost !== undefined && p.making_cost !== null ? p.making_cost : (sPrice > 0 ? Math.round(sPrice * 0.42) : 0));
+      const mCost = Number.isFinite(rawCost) ? Math.max(0, rawCost) : 0;
+      const rawProfit = Number(p.unit_profit !== undefined && p.unit_profit !== null ? p.unit_profit : (sPrice - mCost));
+      const uProfit = Number.isFinite(rawProfit) ? rawProfit : sPrice - mCost;
       map[cleanKey] = {
-        selling_price: p.selling_price,
-        making_cost: p.making_cost,
-        unit_profit: p.unit_profit,
+        selling_price: sPrice,
+        making_cost: mCost,
+        unit_profit: uProfit,
       };
     });
     return map;
@@ -161,7 +183,7 @@ export default function BakerReportsPage() {
     > = {};
 
     filteredInvoices.forEach((inv) => {
-      const cafeName = formatCafeName(inv.customerName || "Store");
+      const cafeName = formatCafeName(inv.customerName || inv.client_name || "Store");
       if (!map[cafeName]) {
         map[cafeName] = {
           cafeName,
@@ -174,11 +196,12 @@ export default function BakerReportsPage() {
       }
 
       map[cafeName].slipsCount += 1;
-      const slipAmount = inv.totalAmount || 0;
+      const slipAmount = Number(inv.totalAmount !== undefined ? inv.totalAmount : (inv.total_amount ?? 0));
       map[cafeName].revenue += slipAmount;
 
-      if (inv.status === "unpaid") {
-        map[cafeName].unpaidDues += slipAmount;
+      const isUnpaid = inv.status === "unpaid" || inv.status === "pending" || (Number(inv.balanceDue ?? inv.balance_due ?? 0) > 0);
+      if (isUnpaid) {
+        map[cafeName].unpaidDues += Number(inv.balanceDue !== undefined ? inv.balanceDue : (inv.balance_due !== undefined ? inv.balance_due : slipAmount));
       }
 
       // Compute item-level cost and profit
@@ -222,12 +245,15 @@ export default function BakerReportsPage() {
       (inv.items || []).forEach((it: any) => {
         const pName = capitalizeWords(it.name || "Product Item");
         const cleanKey = (it.name || "").trim().toLowerCase();
-        const qty = Number(it.qty) || 0;
-        const rate = Number(it.rate) || 0;
-        const amount = Number(it.amount) || qty * rate;
+        const rawQty = Number(it.qty) || 0;
+        const qty = Number.isFinite(rawQty) ? rawQty : 0;
+        const rawRate = Number(it.rate !== undefined && it.rate !== null ? it.rate : (it.price ?? 0));
+        const rate = Number.isFinite(rawRate) ? rawRate : 0;
+        const rawAmount = Number(it.amount !== undefined ? it.amount : qty * rate);
+        const amount = Number.isFinite(rawAmount) ? rawAmount : qty * rate;
 
         const pInfo = productCostMap[cleanKey];
-        const unitCost = pInfo ? pInfo.making_cost : rate * 0.4;
+        const unitCost = pInfo ? pInfo.making_cost : Math.round(rate * 0.42);
         const totalCost = qty * unitCost;
         const profit = amount - totalCost;
 
@@ -252,7 +278,7 @@ export default function BakerReportsPage() {
 
     const list = Object.values(map).map((p) => ({
       ...p,
-      marginPct: p.revenue > 0 ? Math.round((p.profit / p.revenue) * 100) : 0,
+      marginPct: p.revenue > 0 ? Math.round(((p.profit / p.revenue) * 100)) : 0,
     }));
 
     return list.sort((a, b) => b.profit - a.profit);
@@ -260,11 +286,14 @@ export default function BakerReportsPage() {
 
   // Aggregate Metrics for Selected Period
   const periodTotalRevenue = useMemo(() => {
-    return filteredInvoices.reduce((acc, inv) => acc + (inv.totalAmount || 0), 0);
+    return filteredInvoices.reduce((acc, inv) => {
+      const val = Number(inv.totalAmount || 0);
+      return acc + (Number.isFinite(val) ? val : 0);
+    }, 0);
   }, [filteredInvoices]);
 
   const periodTotalCost = useMemo(() => {
-    return cafeProfitData.reduce((acc, c) => acc + c.cost, 0);
+    return cafeProfitData.reduce((acc, c) => acc + (Number.isFinite(c.cost) ? c.cost : 0), 0);
   }, [cafeProfitData]);
 
   const periodTotalProfit = periodTotalRevenue - periodTotalCost;

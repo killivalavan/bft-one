@@ -164,9 +164,6 @@ export async function authenticateRequest(
     };
   }
 
-  // Fallback default business if not yet backfilled in DB
-  const defaultBftId = "a0000000-0000-0000-0000-000000000001";
-  const businessId = profile.business_id || defaultBftId;
   const isAdmin = !!profile.is_admin;
   const emailLower = userEmail.toLowerCase();
   const isSuperAdmin =
@@ -174,6 +171,20 @@ export async function authenticateRequest(
     emailLower === "admin@bft.com" ||
     !!profile.is_super_admin;
   const isStockManager = !!profile.is_stock_manager;
+
+  // STRICT MULTI-TENANT BOUNDARY:
+  // Non-super-admins MUST be explicitly bound to their store's business_id.
+  // Never default an unassigned user to another store.
+  if (!isSuperAdmin && !profile.business_id) {
+    return {
+      errorResponse: NextResponse.json(
+        { error: "Forbidden: No business workspace is assigned to this account." },
+        { status: 403 }
+      ),
+    };
+  }
+
+  const businessId = profile.business_id || "";
 
   // 4. Role Authorization Checks
   if (options.requireSuperAdmin && !isSuperAdmin) {

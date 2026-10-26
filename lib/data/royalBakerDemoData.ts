@@ -1132,37 +1132,22 @@ export function getRoyalBakerDemoData() {
 export function seedRoyalBakerLocalStorage(bizId = ROYAL_BAKER_BIZ_ID) {
   if (typeof window === "undefined") return null;
 
-  const data = getRoyalBakerDemoData();
-  const targetIds = Array.from(new Set([
-    bizId,
-    ROYAL_BAKER_BIZ_ID,
-    "default",
-    "a0000000-0000-0000-0000-000000000001",
-    ""
-  ])).filter(Boolean);
-
-  for (const id of targetIds) {
-    try {
-      localStorage.setItem(`bftone_customers_${id}`, JSON.stringify(data.stores));
-      localStorage.setItem(`bftone_invoices_${id}`, JSON.stringify(data.invoices));
-      localStorage.setItem(`bftone_baker_products_${id}`, JSON.stringify(data.products));
-      localStorage.setItem(`bftone_baker_expenses_${id}`, JSON.stringify(data.expenses));
-      localStorage.setItem(`bftone_baker_payments_${id}`, JSON.stringify(data.payments));
-      localStorage.setItem(`bftone_baker_broadcasts_${id}`, JSON.stringify(data.broadcasts));
-    } catch (e) {
-      console.warn(`Failed to seed localStorage for ID ${id}:`, e);
-    }
+  // STRICT MULTI-TENANT ISOLATION: Never seed demo data into another business or default
+  if (bizId !== ROYAL_BAKER_BIZ_ID) {
+    return null;
   }
 
-  // Also write non-suffixed keys as ultimate fallback
+  const data = getRoyalBakerDemoData();
   try {
-    localStorage.setItem("bftone_customers_default", JSON.stringify(data.stores));
-    localStorage.setItem("bftone_invoices_default", JSON.stringify(data.invoices));
-    localStorage.setItem("bftone_baker_products_default", JSON.stringify(data.products));
-    localStorage.setItem("bftone_baker_expenses_default", JSON.stringify(data.expenses));
-    localStorage.setItem("bftone_baker_payments_default", JSON.stringify(data.payments));
-    localStorage.setItem("bftone_baker_broadcasts_default", JSON.stringify(data.broadcasts));
-  } catch {}
+    localStorage.setItem(`bftone_customers_${ROYAL_BAKER_BIZ_ID}`, JSON.stringify(data.stores));
+    localStorage.setItem(`bftone_invoices_${ROYAL_BAKER_BIZ_ID}`, JSON.stringify(data.invoices));
+    localStorage.setItem(`bftone_baker_products_${ROYAL_BAKER_BIZ_ID}`, JSON.stringify(data.products));
+    localStorage.setItem(`bftone_baker_expenses_${ROYAL_BAKER_BIZ_ID}`, JSON.stringify(data.expenses));
+    localStorage.setItem(`bftone_baker_payments_${ROYAL_BAKER_BIZ_ID}`, JSON.stringify(data.payments));
+    localStorage.setItem(`bftone_baker_broadcasts_${ROYAL_BAKER_BIZ_ID}`, JSON.stringify(data.broadcasts));
+  } catch (e) {
+    console.warn(`Failed to seed localStorage for Royal Baker:`, e);
+  }
 
   // Dispatch live update events so open components refresh immediately
   window.dispatchEvent(new CustomEvent(B2B_CUSTOMERS_UPDATED_EVENT, { detail: { clients: data.stores } }));
@@ -1177,24 +1162,17 @@ export function seedRoyalBakerLocalStorage(bizId = ROYAL_BAKER_BIZ_ID) {
 export function clearRoyalBakerLocalStorage(bizId = ROYAL_BAKER_BIZ_ID) {
   if (typeof window === "undefined") return;
 
-  const targetIds = Array.from(new Set([
-    bizId,
-    ROYAL_BAKER_BIZ_ID,
-    "default",
-    "a0000000-0000-0000-0000-000000000001",
-  ])).filter(Boolean);
-
-  for (const id of targetIds) {
-    try {
-      localStorage.removeItem(`bftone_customers_${id}`);
-      localStorage.removeItem(`bftone_invoices_${id}`);
-      localStorage.removeItem(`bftone_baker_products_${id}`);
-      localStorage.removeItem(`bftone_baker_expenses_${id}`);
-      localStorage.removeItem(`bftone_baker_payments_${id}`);
-      localStorage.removeItem(`bftone_baker_broadcasts_${id}`);
-    } catch {}
-  }
+  // STRICT MULTI-TENANT ISOLATION: Only remove Royal Baker keys
+  try {
+    localStorage.removeItem(`bftone_customers_${ROYAL_BAKER_BIZ_ID}`);
+    localStorage.removeItem(`bftone_invoices_${ROYAL_BAKER_BIZ_ID}`);
+    localStorage.removeItem(`bftone_baker_products_${ROYAL_BAKER_BIZ_ID}`);
+    localStorage.removeItem(`bftone_baker_expenses_${ROYAL_BAKER_BIZ_ID}`);
+    localStorage.removeItem(`bftone_baker_payments_${ROYAL_BAKER_BIZ_ID}`);
+    localStorage.removeItem(`bftone_baker_broadcasts_${ROYAL_BAKER_BIZ_ID}`);
+  } catch {}
 
   window.dispatchEvent(new CustomEvent(B2B_CUSTOMERS_UPDATED_EVENT, { detail: { clients: [] } }));
   window.dispatchEvent(new Event("storage"));
 }
+

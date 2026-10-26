@@ -32,6 +32,7 @@ import {
   LocalCustomer,
 } from "@/lib/offline/db";
 import { enqueueSyncOperation } from "@/lib/offline/syncEngine";
+import { getAuthHeaders } from "@/lib/auth/clientAuth";
 
 export type InvoiceRow = {
   id: string;
@@ -214,7 +215,7 @@ export default function InvoicesPage() {
     minSize: 60,
   });
 
-  // 1. Initial Load: Invoices from Local Storage & Supabase + Catalog + Customers
+  // 1. Initial Load: Invoices from Supabase & Cloud API + Catalog + Customers
   useEffect(() => {
     const bizId = business?.id || "default";
 
@@ -226,52 +227,53 @@ export default function InvoicesPage() {
       }
     } catch {}
 
-    // Load from local storage immediately
+    // Load from local storage cache immediately (instant render)
     try {
       const stored = localStorage.getItem(`bftone_invoices_${bizId}`);
       if (stored) {
         setInvoices(JSON.parse(stored));
-      } else {
-        // Mock sample initial invoice if empty
-        const sample: SavedInvoice = {
-          id: "inv-sample-1",
-          invoiceNumber: "A00018",
-          title: "INVOICE AUG 2026",
-          date: "Aug 31, 2026",
-          dueDate: "Sep 15, 2026",
-          customerName: "Protechsoft Technologies Pvt Ltd",
-          customerPhone: "+91 98765 43210",
-          customerAddress: "PACIFICA TECH PARK, Survey No.76, No.23, 2nd Floor, Block-1, Module No.2E, Core-3, Rajiv Gandhi Salai (OMR), Navalur, Chennai, Tamil Nadu, India - 600130",
-          customerGstin: "33AAAAA0000A1Z5",
-          items: [
-            { id: "1", name: "Plain Tea", qty: 1920, unit: "Unit", rate: 13, amount: 24960 },
-            { id: "2", name: "Coffee", qty: 1250, unit: "Unit", rate: 18, amount: 22500 },
-            { id: "3", name: "Milk", qty: 458, unit: "Unit", rate: 15, amount: 6870 },
-            { id: "4", name: "Black coffee", qty: 245, unit: "Unit", rate: 10, amount: 2450 },
-            { id: "5", name: "Lemon tea", qty: 195, unit: "Unit", rate: 15, amount: 2925 },
-            { id: "6", name: "Green tea bag", qty: 100, unit: "Unit", rate: 7, amount: 700 },
-            { id: "7", name: "BFT Plain (Small)", qty: 1, unit: "Unit", rate: 10, amount: 10 },
-            { id: "8", name: "Lemon", qty: 14, unit: "Unit", rate: 3, amount: 42 },
-            { id: "9", name: "B Sugar", qty: 14, unit: "Unit", rate: 5, amount: 70 },
-          ],
-          subtotal: 60527,
-          taxRate: 0,
-          taxAmount: 0,
-          tdsAmount: 605,
-          discountAmount: 0,
-          additionalCharges: 0,
-          adjustments: [
-            { id: "adj-sample", key: "tds", label: "TDS", amount: 605, type: "deduction" }
-          ],
-          totalAmount: 59922,
-          status: "paid",
-          paymentMode: "Bank Transfer",
-          createdAt: new Date().toISOString(),
-        };
-        setInvoices([sample]);
-        localStorage.setItem(`bftone_invoices_${bizId}`, JSON.stringify([sample]));
       }
     } catch {}
+
+    // Asynchronously fetch authoritative cloud invoices from Supabase
+    (async () => {
+      try {
+        const headers = await getAuthHeaders();
+        const res = await fetch(`/api/invoices?business_id=${bizId}`, { headers });
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data.invoices) && data.invoices.length > 0) {
+            const mapped = data.invoices.map((inv: any) => ({
+              id: inv.id,
+              invoiceNumber: inv.invoice_number || inv.invoiceNumber || "INV-001",
+              title: inv.title || "TAX INVOICE",
+              date: inv.date,
+              dueDate: inv.due_date || inv.dueDate,
+              customerName: inv.customer_name || inv.customerName,
+              customerPhone: inv.customer_phone || inv.customerPhone,
+              customerAddress: inv.customer_address || inv.customerAddress,
+              customerGstin: inv.customer_gstin || inv.customerGstin,
+              items: inv.items || [],
+              subtotal: Number(inv.subtotal || 0),
+              taxRate: Number(inv.tax_rate || inv.taxRate || 0),
+              taxAmount: Number(inv.tax_amount || inv.taxAmount || 0),
+              tdsAmount: Number(inv.tds_amount || inv.tdsAmount || 0),
+              discountAmount: Number(inv.discount_amount || inv.discountAmount || 0),
+              additionalCharges: Number(inv.additional_charges || 0),
+              adjustments: inv.adjustments || [],
+              totalAmount: Number(inv.total_amount || inv.totalAmount || 0),
+              status: inv.status || "pending",
+              paymentMode: inv.payment_mode || inv.paymentMode || "UPI",
+              createdAt: inv.created_at || inv.createdAt,
+            }));
+            setInvoices(mapped);
+            localStorage.setItem(`bftone_invoices_${bizId}`, JSON.stringify(mapped));
+          }
+        }
+      } catch (e) {
+        console.warn("Failed to fetch cloud invoices, using cache:", e);
+      }
+    })();
 
     // Load Store Profile Branding
     if (business) {
@@ -319,6 +321,23 @@ export default function InvoicesPage() {
     try {
       localStorage.setItem(`bftone_invoices_${bizId}`, JSON.stringify(updated));
     } catch {}
+
+    // Asynchronously push to authoritative Supabase cloud API
+    (async () => {
+      try {
+        const headers = await getAuthHeaders();
+        for (const inv of updated) {
+          fetch("/api/invoices", {
+            method: "POST",
+            headers,
+            body: JSON.stringify({
+              ...inv,
+              business_id: bizId,
+            }),
+          }).catch(() => {});
+        }
+      } catch {}
+    })();
 
     // Save to IndexedDB & queue sync mutations
     updated.forEach((inv) => {

@@ -6,6 +6,7 @@ import { ConfirmProvider } from "@/components/ui/ConfirmDialog";
 import { TenantProvider } from "@/lib/context/TenantContext";
 import { OfflineBanner } from "@/components/offline/OfflineBanner";
 import { PWARegister } from "@/components/offline/PWARegister";
+import { QueryProvider } from "@/components/providers/QueryProvider";
 import { AppShell } from "@/components/layout/AppShell";
 
 export const metadata: Metadata = {
@@ -66,13 +67,15 @@ export default function RootLayout({
         className={`${plusJakartaSans.variable} ${geistMono.variable} font-sans antialiased bg-[#F8FAFC] text-[#0F172A] min-h-screen selection:bg-[#2563EB] selection:text-white`}
       >
         <TenantProvider>
-          <ToastProvider>
-            <ConfirmProvider>
-              <PWARegister />
-              <OfflineBanner />
-              <AppShell>{children}</AppShell>
-            </ConfirmProvider>
-          </ToastProvider>
+          <QueryProvider>
+            <ToastProvider>
+              <ConfirmProvider>
+                <PWARegister />
+                <OfflineBanner />
+                <AppShell>{children}</AppShell>
+              </ConfirmProvider>
+            </ToastProvider>
+          </QueryProvider>
         </TenantProvider>
       </body>
     </html>

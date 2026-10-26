@@ -22,6 +22,7 @@ import {
   fetchB2BClients,
   B2B_CUSTOMERS_UPDATED_EVENT,
 } from "@/lib/services/b2bClients";
+import { useB2BWorkspace } from "@/lib/hooks/useB2BData";
 import {
   getSlipDate,
   getDateRangeInterval,
@@ -56,6 +57,9 @@ export default function ClientLedgerDedicatedPage() {
   const { business } = useTenant();
   const { toast } = useToast();
   const bizId = business?.id || "default";
+
+  // Authoritative cloud workspace synchronization via TanStack Query
+  const { data: cloudWorkspace } = useB2BWorkspace(bizId);
 
   // Data Stores
   const [stores, setStores] = useState<any[]>([]);
@@ -100,64 +104,75 @@ export default function ClientLedgerDedicatedPage() {
       }
     };
     window.addEventListener(B2B_CUSTOMERS_UPDATED_EVENT, handleStoresUpdated);
-
-    if (business?.id) {
-      supabaseClient
-        .from("invoices")
-        .select("*")
-        .eq("business_id", business.id)
-        .order("created_at", { ascending: false })
-        .then(({ data }) => {
-          if (data && data.length > 0) {
-            const mapped = data.map((d: any) => ({
-              id: d.id,
-              invoiceNumber: d.invoice_number,
-              title: d.title || "DELIVERY SLIP",
-              isReturn: Boolean(d.title?.includes("RETURN") || (d.invoice_number || "").startsWith("RET-") || (d.total_cents || 0) < 0),
-              customerName: d.customer_name,
-              customerPhone: d.customer_phone,
-              customerAddress: d.customer_address,
-              totalAmount: (d.total_cents || 0) / 100,
-              subtotal: (d.subtotal_cents || 0) / 100,
-              status: d.status || "unpaid",
-              date: d.invoice_date || format(new Date(), "MMM dd, yyyy"),
-              items: d.items || [],
-              createdAt: d.created_at,
-            }));
-            setInvoices(mapped);
-          }
-          setIsLoaded(true);
-        });
-    } else {
-      setIsLoaded(true);
-    }
+    setIsLoaded(true);
 
     return () => {
       window.removeEventListener(B2B_CUSTOMERS_UPDATED_EVENT, handleStoresUpdated);
     };
   }, [bizId, business?.id]);
 
+  // Synchronize cloud data from TanStack Query
+  useEffect(() => {
+    if (cloudWorkspace) {
+      if (Array.isArray(cloudWorkspace.invoices) && cloudWorkspace.invoices.length > 0) {
+        setInvoices(cloudWorkspace.invoices);
+      }
+      if (Array.isArray(cloudWorkspace.stores) && cloudWorkspace.stores.length > 0) {
+        setStores(cloudWorkspace.stores);
+      }
+      setIsLoaded(true);
+    }
+  }, [cloudWorkspace]);
+
+  // Cross-tab / storage synchronization
+  useEffect(() => {
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === `bftone_invoices_${bizId}` && e.newValue) {
+        try {
+          const parsed = JSON.parse(e.newValue);
+          if (Array.isArray(parsed)) setInvoices(parsed);
+        } catch {}
+      }
+      if (e.key === `bftone_customers_${bizId}` && e.newValue) {
+        try {
+          const parsed = JSON.parse(e.newValue);
+          if (Array.isArray(parsed)) setStores(parsed);
+        } catch {}
+      }
+    };
+    window.addEventListener("storage", handleStorage);
+    return () => window.removeEventListener("storage", handleStorage);
+  }, [bizId]);
+
   // Identify Client
   const client = useMemo(() => {
     if (!rawId) return null;
     const lower = rawId.toLowerCase().trim();
+    const cleanRaw = lower.replace(/[^a-z0-9]/g, "");
 
-    // 1. Match by id
+    // 1. Match by id in stores
     const byId = stores.find((s) => s.id === rawId || (s.id && s.id.toLowerCase() === lower));
     if (byId) return byId;
 
     // 2. Match by name in stores
-    const byName = stores.find((s) => s.name && s.name.toLowerCase().trim() === lower);
+    const byName = stores.find((s) => {
+      const sName = (s.name || "").toLowerCase().trim();
+      return sName === lower || (cleanRaw && sName.replace(/[^a-z0-9]/g, "") === cleanRaw);
+    });
     if (byName) return byName;
 
-    // 3. Match by name in invoices
-    const matchingInv = invoices.find((inv) => (inv.customerName || "").toLowerCase().trim() === lower);
+    // 3. Match in invoices
+    const matchingInv = invoices.find((inv) => {
+      const invName = (inv.customerName || inv.client_name || "").toLowerCase().trim();
+      const invClientId = inv.clientId || inv.client_id;
+      return (invClientId && invClientId === rawId) || invName === lower || (cleanRaw && invName.replace(/[^a-z0-9]/g, "") === cleanRaw);
+    });
     if (matchingInv) {
       return {
         id: rawId,
-        name: matchingInv.customerName,
-        phone: matchingInv.customerPhone || "",
-        address: matchingInv.customerAddress || "",
+        name: matchingInv.customerName || matchingInv.client_name,
+        phone: matchingInv.customerPhone || matchingInv.client_phone || "",
+        address: matchingInv.customerAddress || matchingInv.client_address || "",
       };
     }
 
@@ -173,9 +188,18 @@ export default function ClientLedgerDedicatedPage() {
   const clientInvoices = useMemo(() => {
     if (!client?.name) return [];
     const clientNameLower = client.name.toLowerCase().trim();
-    return invoices.filter(
-      (inv) => (inv.customerName || "").toLowerCase().trim() === clientNameLower
-    );
+    const cleanClientName = clientNameLower.replace(/[^a-z0-9]/g, "");
+    const clientId = client.id;
+
+    return invoices.filter((inv) => {
+      const invName = (inv.customerName || inv.client_name || inv.customer_name || "").toLowerCase().trim();
+      const invClientId = inv.clientId || inv.client_id || inv.storeId;
+      const idMatch = Boolean(clientId && invClientId && String(clientId) === String(invClientId));
+      const exactNameMatch = Boolean(invName && clientNameLower && invName === clientNameLower);
+      const cleanInvName = invName.replace(/[^a-z0-9]/g, "");
+      const looseMatch = Boolean(cleanInvName && cleanClientName && cleanInvName === cleanClientName);
+      return idMatch || exactNameMatch || looseMatch;
+    });
   }, [client, invoices]);
 
   // Date Filter calculations
@@ -196,8 +220,10 @@ export default function ClientLedgerDedicatedPage() {
     const sorted = [...filteredClientSlips].sort((a, b) => getSlipDate(a).getTime() - getSlipDate(b).getTime());
 
     sorted.forEach((slip) => {
-      const isRet = Boolean(slip.isReturn || (slip.invoiceNumber || "").startsWith("RET-") || (slip.totalAmount || 0) < 0);
+      const isRet = Boolean(slip.isReturn || (slip.invoiceNumber || slip.slip_number || "").startsWith("RET-") || (Number(slip.totalAmount ?? slip.total_amount ?? 0) < 0));
       const items = slip.items && slip.items.length > 0 ? slip.items : null;
+      const slipNum = slip.invoiceNumber || slip.slip_number || "SLIP";
+      const stName = slip.customerName || slip.client_name || client?.name || "Partner Store";
 
       if (items) {
         items.forEach((it: any) => {
@@ -207,9 +233,9 @@ export default function ClientLedgerDedicatedPage() {
 
           list.push({
             date: slip.date || format(getSlipDate(slip), "MMM dd, yyyy"),
-            slipNumber: slip.invoiceNumber,
+            slipNumber: slipNum,
             isReturn: isRet,
-            storeName: slip.customerName,
+            storeName: stName,
             productName: capitalizeWords(it.name || "Assorted Bakery"),
             qty,
             unit: it.unit || "pcs",
@@ -219,12 +245,12 @@ export default function ClientLedgerDedicatedPage() {
           });
         });
       } else {
-        const amt = slip.totalAmount || 0;
+        const amt = Number(slip.totalAmount ?? slip.total_amount ?? 0);
         list.push({
           date: slip.date || format(getSlipDate(slip), "MMM dd, yyyy"),
-          slipNumber: slip.invoiceNumber,
+          slipNumber: slipNum,
           isReturn: isRet,
-          storeName: slip.customerName,
+          storeName: stName,
           productName: isRet ? "Returned Item Credit" : "Bakery Dispatch",
           qty: 1,
           unit: "lot",
@@ -236,42 +262,47 @@ export default function ClientLedgerDedicatedPage() {
     });
 
     return list;
-  }, [filteredClientSlips]);
+  }, [filteredClientSlips, client?.name]);
 
   // Financial summary numbers
   const periodDeliverySlips = useMemo(() => {
     return filteredClientSlips.filter(
-      (s) => !s.isReturn && !(s.invoiceNumber || "").startsWith("RET-") && (s.totalAmount || 0) >= 0
+      (s) => !s.isReturn && !(s.invoiceNumber || s.slip_number || "").startsWith("RET-") && (Number(s.totalAmount ?? s.total_amount ?? 0) >= 0)
     );
   }, [filteredClientSlips]);
 
   const periodReturnSlips = useMemo(() => {
     return filteredClientSlips.filter(
-      (s) => s.isReturn || (s.invoiceNumber || "").startsWith("RET-") || (s.totalAmount || 0) < 0
+      (s) => s.isReturn || (s.invoiceNumber || s.slip_number || "").startsWith("RET-") || (Number(s.totalAmount ?? s.total_amount ?? 0) < 0)
     );
   }, [filteredClientSlips]);
 
   const periodDeliveryValue = useMemo(() => {
-    return periodDeliverySlips.reduce((acc, s) => acc + Math.abs(s.totalAmount || 0), 0);
+    return periodDeliverySlips.reduce((acc, s) => acc + Math.abs(Number(s.totalAmount ?? s.total_amount ?? 0)), 0);
   }, [periodDeliverySlips]);
 
   const periodReturnValue = useMemo(() => {
-    return periodReturnSlips.reduce((acc, s) => acc + Math.abs(s.totalAmount || 0), 0);
+    return periodReturnSlips.reduce((acc, s) => acc + Math.abs(Number(s.totalAmount ?? s.total_amount ?? 0)), 0);
   }, [periodReturnSlips]);
 
   const periodBilled = periodDeliveryValue - periodReturnValue;
 
-  const periodPaid = useMemo(() => {
-    return periodDeliverySlips
-      .filter((s) => s.status === "paid")
-      .reduce((acc, s) => acc + (s.totalAmount || 0), 0);
-  }, [periodDeliverySlips]);
-
   const periodUnpaid = useMemo(() => {
     return periodDeliverySlips
-      .filter((s) => s.status === "unpaid")
-      .reduce((acc, s) => acc + (s.totalAmount || 0), 0);
+      .filter((s) => {
+        const status = String(s.status || "").toLowerCase();
+        const due = Number(s.balanceDue ?? s.balance_due ?? (Number(s.totalAmount || s.total_amount || 0) - Number(s.paidAmount || s.paid_amount || 0)));
+        return (status === "unpaid" || status === "pending") || due > 0;
+      })
+      .reduce((acc, s) => {
+        const val = Number(s.balanceDue !== undefined ? s.balanceDue : (s.balance_due !== undefined ? s.balance_due : (s.totalAmount || s.total_amount || 0)));
+        return acc + (Number.isFinite(val) ? val : 0);
+      }, 0);
   }, [periodDeliverySlips]);
+
+  const periodPaid = useMemo(() => {
+    return Math.max(0, periodBilled - periodUnpaid);
+  }, [periodBilled, periodUnpaid]);
 
   const isAllTime = detailDatePreset === "all";
   const billedLabel = isAllTime ? "Lifetime Billed" : "Period Billed";

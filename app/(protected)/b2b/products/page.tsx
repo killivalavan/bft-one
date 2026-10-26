@@ -10,16 +10,22 @@ import {
   Boxes, Plus, Trash2, Edit3, TrendingUp, Sparkles,
   ArrowRight, Search, Check, RefreshCw, DollarSign, Package
 } from "lucide-react";
+import { useB2BProducts, useSaveProductMutation } from "@/lib/hooks/useB2BData";
 
 export interface BakerProduct {
   id: string;
   name: string;
   selling_price: number;
+  rate?: number;
+  price?: number;
   making_cost: number;
   unit_profit: number;
   profit_margin_pct: number;
   unit: string;
   is_active: boolean;
+  category?: string;
+  min_order_qty?: number;
+  stock_available?: number;
 }
 
 export function capitalizeWords(str: string): string {
@@ -30,6 +36,53 @@ export function capitalizeWords(str: string): string {
     .split(" ")
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
     .join(" ");
+}
+
+export function normalizeBakerProduct(p: any): BakerProduct {
+  if (!p) {
+    return {
+      id: `bp-${Date.now()}`,
+      name: "Product Item",
+      selling_price: 0,
+      rate: 0,
+      making_cost: 0,
+      unit_profit: 0,
+      profit_margin_pct: 0,
+      unit: "Pcs",
+      is_active: true,
+    };
+  }
+
+  const rawPrice = Number(p.selling_price !== undefined && p.selling_price !== null ? p.selling_price : (p.rate ?? p.price ?? 0));
+  const validPrice = Number.isFinite(rawPrice) ? Math.max(0, rawPrice) : 0;
+
+  const rawCost = Number(p.making_cost !== undefined && p.making_cost !== null ? p.making_cost : (validPrice > 0 ? Math.round(validPrice * 0.42) : 0));
+  const validCost = Number.isFinite(rawCost) ? Math.max(0, rawCost) : 0;
+
+  const rawProfit = Number(p.unit_profit !== undefined && p.unit_profit !== null ? p.unit_profit : (validPrice - validCost));
+  const validProfit = Number.isFinite(rawProfit) ? rawProfit : validPrice - validCost;
+
+  const rawMargin = Number(
+    p.profit_margin_pct !== undefined && p.profit_margin_pct !== null
+      ? p.profit_margin_pct
+      : (validPrice > 0 ? Math.round(((validProfit / validPrice) * 100) * 10) / 10 : 0)
+  );
+  const validMargin = Number.isFinite(rawMargin) ? rawMargin : 0;
+
+  return {
+    id: String(p.id || `bp-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`),
+    name: capitalizeWords(String(p.name || "Bakery Item")),
+    selling_price: validPrice,
+    rate: validPrice,
+    making_cost: validCost,
+    unit_profit: validProfit,
+    profit_margin_pct: validMargin,
+    unit: String(p.unit || "Pcs"),
+    is_active: p.is_active !== undefined ? Boolean(p.is_active) : true,
+    category: p.category || "General",
+    min_order_qty: Number(p.min_order_qty || 1),
+    stock_available: Number(p.stock_available || 0),
+  };
 }
 
 export const INITIAL_BAKER_PRODUCTS: BakerProduct[] = [
@@ -58,29 +111,61 @@ export default function BakerProductsPage() {
   const [makingCost, setMakingCost] = useState("");
   const [unit, setUnit] = useState("Pcs");
 
-  // Load from local storage
+  // Authoritative cloud products via TanStack Query
+  const { data: cloudProducts } = useB2BProducts(bizId);
+  const saveProductMutation = useSaveProductMutation(bizId);
+
+  // Load from local storage cache initially
   useEffect(() => {
     try {
       const stored = localStorage.getItem(`bftone_baker_products_${bizId}`);
       if (stored) {
         const parsed = JSON.parse(stored);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          setProducts(parsed);
+          setProducts(parsed.map(normalizeBakerProduct));
           return;
         }
       }
-      setProducts(INITIAL_BAKER_PRODUCTS);
-      localStorage.setItem(`bftone_baker_products_${bizId}`, JSON.stringify(INITIAL_BAKER_PRODUCTS));
+      setProducts(INITIAL_BAKER_PRODUCTS.map(normalizeBakerProduct));
     } catch {
-      setProducts(INITIAL_BAKER_PRODUCTS);
+      setProducts(INITIAL_BAKER_PRODUCTS.map(normalizeBakerProduct));
     }
   }, [bizId]);
 
+  // Synchronize cloud products from TanStack Query
+  useEffect(() => {
+    if (cloudProducts && Array.isArray(cloudProducts) && cloudProducts.length > 0) {
+      const normalized = cloudProducts.map(normalizeBakerProduct);
+      setProducts(normalized);
+      try {
+        localStorage.setItem(`bftone_baker_products_${bizId}`, JSON.stringify(normalized));
+      } catch {}
+    }
+  }, [cloudProducts, bizId]);
+
   const saveProductsToStorage = (updated: BakerProduct[]) => {
-    setProducts(updated);
+    const normalizedList = updated.map(normalizeBakerProduct);
+    setProducts(normalizedList);
     try {
-      localStorage.setItem(`bftone_baker_products_${bizId}`, JSON.stringify(updated));
+      localStorage.setItem(`bftone_baker_products_${bizId}`, JSON.stringify(normalizedList));
     } catch {}
+
+    // Asynchronously push to Supabase via TanStack mutation
+    if (normalizedList.length > 0) {
+      const lastModified = normalizedList[0];
+      saveProductMutation.mutateAsync({
+        id: lastModified.id,
+        name: lastModified.name,
+        selling_price: lastModified.selling_price,
+        rate: lastModified.selling_price,
+        making_cost: lastModified.making_cost,
+        unit_profit: lastModified.unit_profit,
+        profit_margin_pct: lastModified.profit_margin_pct,
+        unit: lastModified.unit,
+        is_active: lastModified.is_active,
+        category: lastModified.category,
+      }).catch((e) => console.warn("Cloud product note:", e));
+    }
   };
 
   const handleOpenAddModal = () => {
@@ -355,19 +440,19 @@ export default function BakerProductsPage() {
                 <div className="grid grid-cols-4 gap-2 p-2.5 rounded-xl bg-slate-50 border border-slate-200/60 text-center">
                   <div className="min-w-0">
                     <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block truncate">Selling</span>
-                    <span className="text-xs font-black text-[#0F172A] mt-0.5 block truncate">₹{p.selling_price}</span>
+                    <span className="text-xs font-black text-[#0F172A] mt-0.5 block truncate">₹{p.selling_price ?? p.rate ?? 0}</span>
                   </div>
                   <div className="min-w-0 border-l border-slate-200">
                     <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block truncate">Cost</span>
-                    <span className="text-xs font-semibold text-slate-600 mt-0.5 block truncate">₹{p.making_cost}</span>
+                    <span className="text-xs font-semibold text-slate-600 mt-0.5 block truncate">₹{p.making_cost ?? 0}</span>
                   </div>
                   <div className="min-w-0 border-l border-slate-200">
                     <span className="text-[10px] font-bold text-emerald-700 uppercase tracking-wider block truncate">Profit</span>
-                    <span className="text-xs font-black text-emerald-600 mt-0.5 block truncate">+₹{p.unit_profit}</span>
+                    <span className="text-xs font-black text-emerald-600 mt-0.5 block truncate">+₹{p.unit_profit ?? 0}</span>
                   </div>
                   <div className="min-w-0 border-l border-slate-200">
                     <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block truncate">Margin</span>
-                    <span className="text-xs font-black text-emerald-700 mt-0.5 block truncate">{p.profit_margin_pct}%</span>
+                    <span className="text-xs font-black text-emerald-700 mt-0.5 block truncate">{p.profit_margin_pct ?? 0}%</span>
                   </div>
                 </div>
               </div>
@@ -411,15 +496,15 @@ export default function BakerProductsPage() {
                         </p>
                       </div>
                     </td>
-                    <td className="py-3.5 px-3 text-[#64748B] font-bold text-center whitespace-nowrap">{p.unit}</td>
-                    <td className="py-3.5 px-4 font-black text-[#0F172A] whitespace-nowrap">₹{p.selling_price}</td>
-                    <td className="py-3.5 px-4 font-semibold text-[#64748B] whitespace-nowrap">₹{p.making_cost}</td>
+                    <td className="py-3.5 px-3 text-[#64748B] font-bold text-center whitespace-nowrap">{p.unit || "Unit"}</td>
+                    <td className="py-3.5 px-4 font-black text-[#0F172A] whitespace-nowrap">₹{p.selling_price ?? p.rate ?? 0}</td>
+                    <td className="py-3.5 px-4 font-semibold text-[#64748B] whitespace-nowrap">₹{p.making_cost ?? 0}</td>
                     <td className="py-3.5 px-4 font-black text-emerald-600 whitespace-nowrap">
-                      +₹{p.unit_profit}
+                      +₹{p.unit_profit ?? 0}
                     </td>
                     <td className="py-3.5 px-3 whitespace-nowrap">
                       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-black bg-emerald-50 text-emerald-700 border border-emerald-200">
-                        {p.profit_margin_pct}%
+                        {p.profit_margin_pct ?? 0}%
                       </span>
                     </td>
                     <td className="py-3.5 px-3 text-center whitespace-nowrap">

@@ -25,7 +25,7 @@ export async function POST(request: Request) {
         .eq("id", targetUserId)
         .maybeSingle();
       if (!p) return false;
-      return !p.business_id || p.business_id === caller.businessId;
+      return Boolean(p.business_id && p.business_id === caller.businessId);
     }
 
     // 1. UPDATE EMPLOYEE PROFILE & INCREMENT POLICY
