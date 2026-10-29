@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useTenant } from "@/lib/context/TenantContext";
@@ -11,7 +11,8 @@ import { format } from "date-fns";
 import {
   Send, Plus, Minus, Download, Store, Package, Sparkles, CheckCircle2,
   Calendar, RefreshCw, AlertCircle, ArrowRight, Phone, MapPin, Search,
-  FileText, History, Check, Eye, Trash2, CreditCard, RotateCcw, X
+  FileText, History, Check, Eye, Trash2, CreditCard, RotateCcw, X,
+  LayoutGrid, List, ChevronDown
 } from "lucide-react";
 import { generateBillPdf, BillPdfData } from "@/lib/utils/billPdf";
 import { putItem, STORES, LocalInvoice } from "@/lib/offline/db";
@@ -69,6 +70,10 @@ export default function BakerDispatchPage() {
   const [stores, setStores] = useState<BakerStore[]>(DEFAULT_BAKER_SAMPLE_STORES);
   const [selectedStoreId, setSelectedStoreId] = useState<string>("");
   const [storeSearch, setStoreSearch] = useState("");
+  // Step 1 view mode: cards grid or a compact dropdown picker
+  const [storeViewMode, setStoreViewMode] = useState<"grid" | "list">("grid");
+  const [isStorePickerOpen, setIsStorePickerOpen] = useState(false);
+  const storePickerRef = useRef<HTMLDivElement | null>(null);
 
   // Add Store Modal State
   const [isAddStoreOpen, setIsAddStoreOpen] = useState(false);
@@ -170,6 +175,25 @@ export default function BakerDispatchPage() {
       }
     };
   }, [createdSlipModal, viewingSlipDetails, isAddStoreOpen]);
+
+  // Close the searchable store picker on outside click or Escape
+  useEffect(() => {
+    if (!isStorePickerOpen) return;
+    const handlePointerDown = (e: MouseEvent) => {
+      if (storePickerRef.current && !storePickerRef.current.contains(e.target as Node)) {
+        setIsStorePickerOpen(false);
+      }
+    };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setIsStorePickerOpen(false);
+    };
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isStorePickerOpen]);
 
   const selectedStore = useMemo(() => {
     if (!selectedStoreId) return null;
@@ -557,10 +581,10 @@ export default function BakerDispatchPage() {
   }, [savedInvoices, historySearch]);
 
   return (
-    <div className="space-y-6">
+    <div className="w-full max-w-6xl group-data-[sidebar-collapsed=true]:max-w-none mx-auto space-y-6">
       {/* Top Header with Tab Switcher - docks cleanly below AppShell mobile header on mobile */}
-      <div className="bg-white border-b border-[#E2E8F0] sticky top-14 md:top-0 z-20 shadow-2xs">
-        <div className="max-w-5xl mx-auto px-4 py-3 sm:py-3.5 sm:flex sm:items-center sm:justify-between gap-4">
+      <div className="sticky top-14 md:top-0 z-20 w-full px-1 sm:px-2 md:px-0 bg-[#F8FAFC] pt-1.5 sm:pt-2 md:pt-3 pb-2.5 sm:pb-3 transition-all">
+        <div className="w-full px-3.5 sm:px-5 py-3 sm:py-3.5 flex flex-col md:flex-row md:items-center md:justify-between gap-3 sm:gap-4 bg-white rounded-3xl border border-[#E2E8F0] shadow-xs">
           <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
             <div className={cn(
               "w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center font-bold text-lg sm:text-xl shadow-2xs shrink-0 transition-all",
@@ -571,8 +595,8 @@ export default function BakerDispatchPage() {
               {isReturnMode ? "🔄" : "📦"}
             </div>
             <div className="min-w-0">
-              <div className="flex items-center gap-2 whitespace-nowrap">
-                <h1 className="text-sm sm:text-xl font-extrabold text-[#0F172A] tracking-tight whitespace-nowrap">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h1 className="text-sm sm:text-xl font-extrabold text-[#0F172A] tracking-tight">
                   {isReturnMode ? "Item Returns & Credit Slips" : "Delivery Slips & Sales"}
                 </h1>
                 <span className={cn(
@@ -584,7 +608,7 @@ export default function BakerDispatchPage() {
                   {savedInvoices.length} Slips Recorded
                 </span>
               </div>
-              <p className="text-[11px] sm:text-xs text-[#64748B] hidden sm:block">
+              <p className="text-[11px] sm:text-xs text-[#64748B] hidden sm:block mt-0.5">
                 {isReturnMode
                   ? "Select café, tap expired or returned items, and issue return credit slip"
                   : "Select café, tap item counts, and dispatch or view past slips anytime"}
@@ -593,7 +617,7 @@ export default function BakerDispatchPage() {
           </div>
 
           {/* Tab Navigation Pill: Delivery | Returns | Saved Slips */}
-          <div className="mt-2.5 sm:mt-0 grid grid-cols-3 sm:flex sm:items-center gap-1 p-1 bg-slate-100/90 rounded-xl border border-slate-200 w-full sm:w-auto shrink-0 shadow-2xs">
+          <div className="grid grid-cols-3 sm:flex sm:items-center gap-1 p-1 bg-slate-100/90 rounded-xl border border-slate-200 w-full md:w-auto shrink-0 shadow-2xs">
             <button
               type="button"
               onClick={() => {
@@ -601,7 +625,7 @@ export default function BakerDispatchPage() {
                 setActiveTab("entry");
               }}
               className={cn(
-                "px-1.5 sm:px-3.5 py-1.5 rounded-lg text-[11px] sm:text-xs font-bold transition-all flex items-center justify-center gap-1 sm:gap-1.5 cursor-pointer whitespace-nowrap min-w-0 leading-tight",
+                "px-2 sm:px-3.5 py-1.5 rounded-lg text-[11px] sm:text-xs font-bold transition-all flex items-center justify-center gap-1 sm:gap-1.5 cursor-pointer whitespace-nowrap min-w-0 leading-tight",
                 activeTab === "entry"
                   ? "bg-blue-600 text-white shadow-xs"
                   : "text-slate-600 hover:text-slate-900"
@@ -619,7 +643,7 @@ export default function BakerDispatchPage() {
                 setActiveTab("return");
               }}
               className={cn(
-                "px-1.5 sm:px-3.5 py-1.5 rounded-lg text-[11px] sm:text-xs font-bold transition-all flex items-center justify-center gap-1 sm:gap-1.5 cursor-pointer whitespace-nowrap min-w-0 leading-tight",
+                "px-2 sm:px-3.5 py-1.5 rounded-lg text-[11px] sm:text-xs font-bold transition-all flex items-center justify-center gap-1 sm:gap-1.5 cursor-pointer whitespace-nowrap min-w-0 leading-tight",
                 activeTab === "return"
                   ? "bg-amber-600 text-white shadow-xs"
                   : "text-slate-600 hover:text-amber-800 hover:bg-amber-50/50"
@@ -648,7 +672,7 @@ export default function BakerDispatchPage() {
         </div>
       </div>
 
-      <div className="max-w-5xl mx-auto px-4 py-6 space-y-6">
+      <div className="w-full px-1 sm:px-2 md:px-0 pt-1 pb-6 space-y-5 sm:space-y-6">
 
         {/* ======================================================== */}
         {/* TAB 1 & 2: QUICK SALES ENTRY OR RETURN INTAKE ENTRY      */}
@@ -658,7 +682,7 @@ export default function BakerDispatchPage() {
             {/* ==================================================== */}
             {/* STEP 1: SELECT STORE / CAFÉ                          */}
             {/* ==================================================== */}
-            <div id="dispatch-step-1" className="bg-white rounded-3xl border border-[#E2E8F0] shadow-xs overflow-hidden scroll-mt-24">
+            <div id="dispatch-step-1" className="bg-white rounded-3xl border border-[#E2E8F0] shadow-xs overflow-hidden scroll-mt-28">
               {/* Step Header */}
               <div className="p-3.5 sm:p-5 border-b border-[#F1F5F9] bg-gradient-to-r from-slate-50/60 to-white flex items-center justify-between gap-2">
                 <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 flex-1">
@@ -706,33 +730,220 @@ export default function BakerDispatchPage() {
                 </button>
               </div>
 
-              <div className="p-5 space-y-3.5">
-                {/* Search Filter bar & Store count */}
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-1">
-                  <div className="relative flex-1 max-w-sm">
-                    <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                    <input
-                      type="text"
-                      placeholder="Search stores or clients by name or phone..."
-                      value={storeSearch}
-                      onChange={(e) => setStoreSearch(e.target.value)}
-                      className={cn(
-                        "w-full pl-8 pr-3 py-1.5 rounded-xl border border-slate-200 text-xs font-medium focus:outline-none bg-slate-50/60",
-                        isReturnMode ? "focus:ring-2 focus:ring-amber-500" : "focus:ring-2 focus:ring-blue-500"
+              <div className="p-3.5 sm:p-5 space-y-3.5">
+                {/* Search Filter bar / Store Dropdown Picker & Store count */}
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-2.5 pb-1">
+                  {storeViewMode === "grid" ? (
+                    /* Search input for Card grid view */
+                    <div className="relative flex-1 min-w-[200px] max-w-full md:max-w-md">
+                      <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                      <input
+                        type="text"
+                        placeholder="Search stores or clients by name or phone..."
+                        value={storeSearch}
+                        onChange={(e) => setStoreSearch(e.target.value)}
+                        className={cn(
+                          "w-full pl-8 pr-8 py-2 rounded-xl border border-slate-200 text-xs font-medium focus:outline-none bg-slate-50/60 shadow-2xs transition-all",
+                          isReturnMode ? "focus:ring-2 focus:ring-amber-500" : "focus:ring-2 focus:ring-blue-500"
+                        )}
+                      />
+                      {storeSearch && (
+                        <button
+                          type="button"
+                          onClick={() => setStoreSearch("")}
+                          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 cursor-pointer"
+                          title="Clear search"
+                        >
+                          <X size={12} />
+                        </button>
                       )}
-                    />
-                  </div>
-                  <div className="flex items-center gap-2 text-[11px] font-bold text-[#64748B] whitespace-nowrap">
-                    <span>Showing <strong className="text-[#0F172A]">{filteredStores.length}</strong> of {stores.length} partner stores</span>
+                    </div>
+                  ) : (
+                    /* Searchable Dropdown Picker accommodated directly in the top row (same spot as card search) */
+                    <div className="relative flex-1 min-w-[200px] max-w-full md:max-w-md" ref={storePickerRef}>
+                      <button
+                        type="button"
+                        id="store-picker-trigger"
+                        aria-haspopup="listbox"
+                        aria-expanded={isStorePickerOpen}
+                        onClick={() => {
+                          setIsStorePickerOpen((open) => !open);
+                          if (!isStorePickerOpen) setStoreSearch("");
+                        }}
+                        className={cn(
+                          "relative w-full pl-8 py-2 rounded-xl border text-xs font-bold bg-white cursor-pointer focus:outline-none focus:ring-2 flex items-center text-left transition-all shadow-2xs",
+                          selectedStore ? "pr-12 text-[#0F172A]" : "pr-8 text-slate-400 font-medium",
+                          isReturnMode
+                            ? "border-amber-200 focus:ring-amber-500"
+                            : "border-slate-200 focus:ring-blue-500"
+                        )}
+                      >
+                        <Store size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none shrink-0" />
+                        <span className="truncate block w-full">
+                          {selectedStore ? formatCafeName(selectedStore.name) : "Search & select a store / café…"}
+                        </span>
+                        {selectedStore && (
+                          <span
+                            role="button"
+                            tabIndex={0}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedStoreId("");
+                              setIsStorePickerOpen(false);
+                            }}
+                            title="Deselect store"
+                            className="absolute right-7 top-1/2 -translate-y-1/2 p-0.5 hover:bg-slate-100 rounded-md text-slate-400 hover:text-slate-600 transition-colors cursor-pointer shrink-0 z-10"
+                          >
+                            <X size={12} />
+                          </span>
+                        )}
+                        <ChevronDown
+                          size={15}
+                          className={cn(
+                            "absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none transition-transform shrink-0",
+                            isStorePickerOpen && "rotate-180"
+                          )}
+                        />
+                      </button>
+
+                      {isStorePickerOpen && (
+                        <div className="absolute left-0 right-0 w-full mt-1.5 z-40 rounded-2xl border border-slate-200 bg-white shadow-xl overflow-hidden animate-in fade-in zoom-in-95 duration-100">
+                          <div className="relative p-2 border-b border-slate-100">
+                            <Search size={13} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                            <input
+                              type="text"
+                              autoFocus
+                              placeholder="Search store by name or phone…"
+                              value={storeSearch}
+                              onChange={(e) => setStoreSearch(e.target.value)}
+                              className={cn(
+                                "w-full pl-7 pr-7 py-1.5 rounded-lg border border-slate-200 bg-slate-50/70 text-xs font-semibold focus:outline-none focus:ring-2",
+                                isReturnMode ? "focus:ring-amber-500" : "focus:ring-blue-500"
+                              )}
+                            />
+                            {storeSearch && (
+                              <button
+                                type="button"
+                                onClick={() => setStoreSearch("")}
+                                className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 cursor-pointer"
+                                title="Clear search"
+                              >
+                                <X size={12} />
+                              </button>
+                            )}
+                          </div>
+                          <div role="listbox" className="max-h-[45vh] sm:max-h-60 overflow-y-auto overscroll-contain scrollbar-thin scrollbar-thumb-slate-200">
+                            {filteredStores.map((st) => {
+                              const dueAmt = storeBalances[st.name.toLowerCase().trim()] || 0;
+                              const isSelected = selectedStoreId === st.id;
+                              return (
+                                <button
+                                  key={st.id}
+                                  type="button"
+                                  role="option"
+                                  aria-selected={isSelected}
+                                  onClick={() => {
+                                    setSelectedStoreId(st.id);
+                                    setIsStorePickerOpen(false);
+                                  }}
+                                  className={cn(
+                                    "w-full px-3 sm:px-3.5 py-2.5 flex items-center justify-between gap-2 text-left transition-colors border-b border-slate-50 last:border-0 cursor-pointer",
+                                    isSelected
+                                      ? isReturnMode
+                                        ? "bg-amber-50/70"
+                                        : "bg-blue-50/70"
+                                      : "hover:bg-slate-50"
+                                  )}
+                                >
+                                  <span className="min-w-0">
+                                    <span className="block text-xs font-extrabold text-[#0F172A] truncate">
+                                      {formatCafeName(st.name)}
+                                    </span>
+                                    <span className="block text-[10px] text-[#64748B] font-semibold truncate">
+                                      {st.phone ? st.phone : "No phone"}
+                                    </span>
+                                  </span>
+                                  {dueAmt > 0 ? (
+                                    <span className="shrink-0 px-1.5 py-0.5 rounded-md text-[10px] font-black bg-rose-50 text-rose-700 border border-rose-200 whitespace-nowrap">
+                                      ₹{dueAmt.toLocaleString("en-IN")} Due
+                                    </span>
+                                  ) : (
+                                    <span className="shrink-0 px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 whitespace-nowrap">
+                                      ✓ All Clear
+                                    </span>
+                                  )}
+                                </button>
+                              );
+                            })}
+                            {filteredStores.length === 0 && (
+                              <p className="px-3.5 py-6 text-center text-[11px] font-semibold text-slate-400">
+                                No store matches &ldquo;{storeSearch}&rdquo;
+                              </p>
+                            )}
+                          </div>
+                          <div className="px-3.5 py-2 border-t border-slate-100 text-[10px] font-bold text-[#64748B] bg-slate-50/60">
+                            {filteredStores.length} of {stores.length} partner stores
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  <div className="flex items-center gap-2 sm:gap-3 justify-between md:justify-end flex-wrap w-full md:w-auto md:ml-auto">
+                    <div className="flex items-center gap-2 text-[10px] sm:text-[11px] font-bold text-[#64748B] whitespace-nowrap">
+                      <span>Showing <strong className="text-[#0F172A]">{filteredStores.length}</strong> of {stores.length} partner stores</span>
+                    </div>
+
+                    {/* View switcher: card grid or dropdown picker - always pinned right */}
+                    <div className="inline-flex items-center gap-0.5 p-0.5 rounded-xl bg-slate-100 border border-slate-200 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setStoreViewMode("grid");
+                          setIsStorePickerOpen(false);
+                        }}
+                        aria-pressed={storeViewMode === "grid"}
+                        title="Card view"
+                        className={cn(
+                          "px-2 sm:px-2.5 py-1.5 sm:py-1 rounded-lg text-[11px] font-extrabold transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap",
+                          storeViewMode === "grid"
+                            ? isReturnMode
+                              ? "bg-amber-600 text-white shadow-xs"
+                              : "bg-blue-600 text-white shadow-xs"
+                            : "text-slate-600 hover:text-slate-900"
+                        )}
+                      >
+                        <LayoutGrid size={13} className="shrink-0" />
+                        <span>Cards</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setStoreViewMode("list")}
+                        aria-pressed={storeViewMode === "list"}
+                        title="Dropdown view"
+                        className={cn(
+                          "px-2 sm:px-2.5 py-1.5 sm:py-1 rounded-lg text-[11px] font-extrabold transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap",
+                          storeViewMode === "list"
+                            ? isReturnMode
+                              ? "bg-amber-600 text-white shadow-xs"
+                              : "bg-blue-600 text-white shadow-xs"
+                            : "text-slate-600 hover:text-slate-900"
+                        )}
+                      >
+                        <List size={13} className="shrink-0" />
+                        <span>Dropdown</span>
+                      </button>
+                    </div>
                   </div>
                 </div>
 
                 {/* Store Grid Container */}
                 <div className={cn(
                   "pr-1.5 scrollbar-thin scrollbar-thumb-slate-200 hover:scrollbar-thumb-slate-300",
-                  filteredStores.length > 6 && "max-h-[420px] sm:max-h-[460px] overflow-y-auto"
+                  filteredStores.length > 6 && "max-h-[420px] sm:max-h-[460px] overflow-y-auto",
+                  storeViewMode === "list" && "hidden"
                 )}>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 260px), 1fr))" }}>
                     {filteredStores.map((st) => {
                       const isSelected = selectedStoreId === st.id;
                       const dueAmt = storeBalances[st.name.toLowerCase().trim()] || 0;
@@ -992,7 +1203,10 @@ export default function BakerDispatchPage() {
                 </p>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
+              <div
+                className="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-3 sm:gap-3.5"
+                style={{ gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 280px), 1fr))" }}
+              >
                 {products.map((p) => {
                   const qty = quantities[p.id] || 0;
                   const capName = capitalizeWords(p.name);
@@ -1009,7 +1223,7 @@ export default function BakerDispatchPage() {
                     <div
                       key={p.id}
                       className={cn(
-                        "p-3.5 sm:p-4 rounded-2xl border transition-all flex flex-col justify-between gap-3 group shadow-2xs select-none",
+                        "p-3.5 sm:p-4 rounded-2xl border transition-all flex flex-col justify-between gap-3 group shadow-2xs select-none min-w-0",
                         qty > 0
                           ? isReturnMode
                             ? "bg-amber-50/50 border-amber-400 ring-2 ring-amber-300/40 shadow-xs"
@@ -1017,11 +1231,12 @@ export default function BakerDispatchPage() {
                           : "bg-white border-slate-200 hover:border-slate-300 hover:shadow-xs"
                       )}
                     >
-                      {/* Unified Single Row: Product Details (Left) & Stepper with +5 (Right) */}
-                      <div className="flex items-center justify-between gap-2.5">
+                      {/* Responsive Card Layout: Product Details + Stepper (Never Collides) */}
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 min-w-0">
+                        {/* Product Details (Always full width and unclipped) */}
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-1.5 flex-wrap">
-                            <h3 className="text-xs sm:text-sm font-extrabold text-[#0F172A] tracking-tight truncate font-sans" title={capName}>
+                            <h3 className="text-xs sm:text-sm font-extrabold text-[#0F172A] tracking-tight truncate font-sans block w-full" title={capName}>
                               {capName}
                             </h3>
                           </div>
@@ -1031,22 +1246,22 @@ export default function BakerDispatchPage() {
                             <span>/ {p.unit || "pc"}</span>
                             {!isReturnMode ? (
                               safeProfit >= 0 ? (
-                                <span className="text-emerald-600 text-[10px] font-bold bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200">
+                                <span className="text-emerald-600 text-[10px] font-bold bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200 shrink-0">
                                   +₹{safeProfit} profit
                                 </span>
                               ) : (
-                                <span className="text-rose-600 text-[10px] font-bold bg-rose-50 px-1.5 py-0.2 rounded border border-rose-200">
+                                <span className="text-rose-600 text-[10px] font-bold bg-rose-50 px-1.5 py-0.5 rounded border border-rose-200 shrink-0">
                                   -₹{Math.abs(safeProfit)} margin
                                 </span>
                               )
                             ) : (
-                              <span className="text-amber-700 text-[10px] font-bold bg-amber-50 px-1.5 py-0.2 rounded border border-amber-200">
+                              <span className="text-amber-700 text-[10px] font-bold bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200 shrink-0">
                                 Return rate
                               </span>
                             )}
                             {qty > 0 && (
                               <span className={cn(
-                                "text-[10.5px] font-black px-1.5 py-0.2 rounded border shadow-2xs",
+                                "text-[10.5px] font-black px-1.5 py-0.5 rounded border shadow-2xs shrink-0",
                                 isReturnMode
                                   ? "bg-amber-100 text-amber-900 border-amber-300"
                                   : "bg-blue-100 text-blue-950 border-blue-300"
@@ -1057,16 +1272,16 @@ export default function BakerDispatchPage() {
                           </div>
                         </div>
 
-                        {/* Stepper Controls: Minus, Input, Plus, +5 Inline */}
-                        <div className="flex items-center gap-1.5 shrink-0">
+                        {/* Stepper Controls with comfortable touch targets */}
+                        <div className="flex items-center justify-end gap-1.5 shrink-0 self-end sm:self-center pt-1 sm:pt-0">
                           <button
                             type="button"
                             onClick={() => handleQtyChange(p.id, -1)}
                             disabled={!selectedStore || qty === 0}
                             aria-label="Decrease quantity by 1"
-                            className="w-8 h-8 rounded-xl bg-slate-100 hover:bg-slate-200 disabled:opacity-30 disabled:cursor-not-allowed text-slate-700 flex items-center justify-center font-black cursor-pointer transition-all active:scale-95 shadow-2xs"
+                            className="w-9 h-9 sm:w-8 sm:h-8 rounded-xl bg-slate-100 hover:bg-slate-200 disabled:opacity-30 disabled:cursor-not-allowed text-slate-700 flex items-center justify-center font-black cursor-pointer transition-all active:scale-95 shadow-2xs"
                           >
-                            <Minus size={13} />
+                            <Minus size={14} />
                           </button>
                           <input
                             type="number"
@@ -1076,7 +1291,7 @@ export default function BakerDispatchPage() {
                             disabled={!selectedStore}
                             onChange={(e) => handleSetExactQty(p.id, e.target.value)}
                             className={cn(
-                              "w-10 sm:w-11 h-8 text-center rounded-xl border border-slate-200 text-xs font-black text-[#0F172A] focus:outline-none disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed bg-white shadow-inner",
+                              "w-11 sm:w-11 h-9 sm:h-8 text-center rounded-xl border border-slate-200 text-xs font-black text-[#0F172A] focus:outline-none disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed bg-white shadow-inner",
                               isReturnMode ? "focus:ring-2 focus:ring-amber-500" : "focus:ring-2 focus:ring-blue-500"
                             )}
                           />
@@ -1086,20 +1301,20 @@ export default function BakerDispatchPage() {
                             disabled={!selectedStore}
                             aria-label="Increase quantity by 1"
                             className={cn(
-                              "w-8 h-8 rounded-xl text-white flex items-center justify-center font-black cursor-pointer transition-all active:scale-95 shadow-2xs disabled:opacity-40 disabled:cursor-not-allowed",
+                              "w-9 h-9 sm:w-8 sm:h-8 rounded-xl text-white flex items-center justify-center font-black cursor-pointer transition-all active:scale-95 shadow-2xs disabled:opacity-40 disabled:cursor-not-allowed",
                               isReturnMode
                                 ? "bg-amber-600 hover:bg-amber-700"
                                 : "bg-blue-600 hover:bg-blue-700"
                             )}
                           >
-                            <Plus size={13} />
+                            <Plus size={14} />
                           </button>
                           <button
                             type="button"
                             disabled={!selectedStore}
                             onClick={() => handleQtyChange(p.id, 5)}
                             className={cn(
-                              "h-8 px-2.5 rounded-xl text-xs font-black transition-all cursor-pointer active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed border shadow-2xs flex items-center justify-center",
+                              "h-9 sm:h-8 px-2.5 rounded-xl text-xs font-black transition-all cursor-pointer active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed border shadow-2xs flex items-center justify-center",
                               isReturnMode
                                 ? "bg-amber-50 hover:bg-amber-100 text-amber-900 border-amber-200/90"
                                 : "bg-blue-50 hover:bg-blue-100 text-blue-900 border-blue-200/90"

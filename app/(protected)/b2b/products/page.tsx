@@ -278,24 +278,24 @@ export default function BakerProductsPage() {
   const previewMargin = previewSelling > 0 ? ((previewProfit / previewSelling) * 100).toFixed(1) : "0";
 
   return (
-    <div className="max-w-6xl mx-auto space-y-5">
-      {/* Top Header Card */}
-      <div className="bg-white border border-[#E2E8F0] rounded-2xl p-4 sm:p-5 shadow-2xs">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+    <div className="w-full max-w-6xl group-data-[sidebar-collapsed=true]:max-w-none mx-auto space-y-6">
+      {/* Top Header Card - docks cleanly below AppShell mobile header on mobile */}
+      <div className="sticky top-14 md:top-0 z-20 w-full px-1 sm:px-2 md:px-0 bg-[#F8FAFC] pt-1.5 sm:pt-2 md:pt-3 pb-2.5 sm:pb-3 transition-all">
+        <div className="w-full px-3.5 sm:px-5 py-3 sm:py-3.5 flex flex-col md:flex-row md:items-center md:justify-between gap-3 sm:gap-4 bg-white rounded-3xl border border-[#E2E8F0] shadow-xs">
           <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
             <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-blue-50 text-blue-600 border border-blue-200 flex items-center justify-center font-bold text-lg sm:text-xl shadow-2xs shrink-0">
               <Package size={18} />
             </div>
             <div className="min-w-0">
-              <div className="flex items-center gap-2 whitespace-nowrap">
-                <h1 className="text-base sm:text-xl font-extrabold text-[#0F172A] tracking-tight whitespace-nowrap">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h1 className="text-sm sm:text-xl font-extrabold text-[#0F172A] tracking-tight">
                   Product Catalog &amp; Costing
                 </h1>
                 <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-blue-50 text-blue-700 border border-blue-200 shrink-0 whitespace-nowrap">
                   {products.length} Items
                 </span>
               </div>
-              <p className="text-[11px] sm:text-xs text-[#64748B] hidden sm:block">
+              <p className="text-[11px] sm:text-xs text-[#64748B] hidden sm:block mt-0.5">
                 Manage unit selling prices, production costs, and per-item profit margins
               </p>
             </div>
@@ -319,9 +319,11 @@ export default function BakerProductsPage() {
           </div>
         </div>
       </div>
+
+      <div className="w-full px-1 sm:px-2 md:px-0 pt-1 pb-6 space-y-5 sm:space-y-6">
         {/* Metric Highlights */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div className="p-4 rounded-2xl bg-white border border-[#E2E8F0] shadow-2xs flex items-center justify-between">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+          <div className="p-4 rounded-3xl bg-white border border-[#E2E8F0] shadow-xs flex items-center justify-between">
             <div>
               <p className="text-[11px] font-bold text-[#64748B] uppercase tracking-wider">Active Catalog</p>
               <h3 className="text-2xl font-black text-[#0F172A] mt-0.5">{products.filter((p) => p.is_active).length} Products</h3>
@@ -332,7 +334,7 @@ export default function BakerProductsPage() {
             </div>
           </div>
 
-          <div className="p-4 rounded-2xl bg-white border border-[#E2E8F0] shadow-2xs flex items-center justify-between">
+          <div className="p-4 rounded-3xl bg-white border border-[#E2E8F0] shadow-xs flex items-center justify-between">
             <div>
               <p className="text-[11px] font-bold text-[#64748B] uppercase tracking-wider">Average Profit Margin</p>
               <h3 className="text-2xl font-black text-emerald-600 mt-0.5">{avgMargin}%</h3>
@@ -343,7 +345,7 @@ export default function BakerProductsPage() {
             </div>
           </div>
 
-          <div className="p-4 rounded-2xl bg-white border border-[#E2E8F0] shadow-2xs flex items-center justify-between">
+          <div className="p-4 rounded-3xl bg-white border border-[#E2E8F0] shadow-xs flex items-center justify-between">
             <div>
               <p className="text-[11px] font-bold text-[#64748B] uppercase tracking-wider">Top Earner Per Unit</p>
               <h3 className="text-base font-black text-[#0F172A] mt-0.5 truncate max-w-[170px]" title={highestProfitItem?.name}>
@@ -360,7 +362,7 @@ export default function BakerProductsPage() {
         </div>
 
         {/* Search & Action Bar */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-3.5 rounded-2xl border border-[#E2E8F0] shadow-2xs">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-3.5 rounded-3xl border border-[#E2E8F0] shadow-xs">
           <div className="relative flex-1 max-w-md">
             <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
@@ -468,8 +470,8 @@ export default function BakerProductsPage() {
         </div>
 
         {/* DESKTOP VIEW: Full Table (Visible on md and larger) */}
-        <div className="hidden md:block bg-white rounded-2xl border border-[#E2E8F0] shadow-xs overflow-hidden">
-          <div className="overflow-x-auto">
+        <div className="hidden md:block bg-white rounded-3xl border border-[#E2E8F0] shadow-xs overflow-hidden">
+          <div className="table-scroll-container">
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="bg-[#F8FAFC] border-b border-[#E2E8F0] text-[10px] sm:text-[11px] font-extrabold text-[#64748B] uppercase tracking-wider">
@@ -555,11 +557,12 @@ export default function BakerProductsPage() {
             </table>
           </div>
         </div>
+      </div>
 
       {/* Add / Edit Product Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-md w-full border border-slate-200 shadow-2xl p-6 space-y-5 animate-in fade-in zoom-in-95 duration-150">
+        <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full max-h-[90vh] overflow-y-auto border border-slate-200 shadow-2xl p-5 sm:p-6 space-y-5 animate-in fade-in zoom-in-95 duration-150">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div className="flex items-center gap-2.5">
                 <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-700 flex items-center justify-center font-bold">

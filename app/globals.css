@@ -250,3 +250,58 @@ select option:checked {
   color: #1d4ed8 !important;
   font-weight: 700;
 }
+
+/* ======================================================== */
+/* SEYALPRO RESPONSIVE DESIGN SYSTEM TOKENS & UTILITIES     */
+/* ======================================================== */
+
+/* Fluid, container-aware adaptive grid layouts */
+.grid-adaptive-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
+  gap: 0.875rem;
+}
+
+.grid-adaptive-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+  gap: 0.875rem;
+}
+
+.grid-adaptive-compact {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 150px), 1fr));
+  gap: 0.75rem;
+}
+
+/* Controlled table container with subtle horizontal scroll and momentum touch */
+.table-scroll-container {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 transparent;
+}
+
+.table-scroll-container::-webkit-scrollbar {
+  height: 6px;
+}
+
+.table-scroll-container::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.table-scroll-container::-webkit-scrollbar-thumb {
+  background-color: #cbd5e1;
+  border-radius: 9999px;
+}
+
+.table-scroll-container::-webkit-scrollbar-thumb:hover {
+  background-color: #94a3b8;
+}
+
+/* Touch target minimum (44x44pt standard for touch interfaces) */
+.touch-target-min {
+  min-height: 44px;
+  min-width: 44px;
+}

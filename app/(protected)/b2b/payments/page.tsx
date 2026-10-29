@@ -643,39 +643,39 @@ export default function BakerPaymentsPage() {
   };
 
   return (
-    <div className="space-y-6">
-      {/* Top Header */}
-      <div className="bg-white border-b border-[#E2E8F0] sticky top-14 md:top-0 z-20 shadow-2xs">
-        <div className="max-w-6xl mx-auto px-4 py-3 sm:py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
-          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+    <div className="w-full max-w-6xl group-data-[sidebar-collapsed=true]:max-w-none mx-auto space-y-6">
+      {/* Top Header Card - docks cleanly below AppShell mobile header on mobile */}
+      <div className="sticky top-14 md:top-0 z-20 w-full px-1 sm:px-2 md:px-0 bg-[#F8FAFC] pt-1.5 sm:pt-2 md:pt-3 pb-2.5 sm:pb-3 transition-all">
+        <div className="w-full px-3.5 sm:px-5 py-3 sm:py-3.5 flex flex-col md:flex-row md:items-center md:justify-between gap-3 sm:gap-4 bg-white rounded-3xl border border-[#E2E8F0] shadow-xs">
+          <div className="flex items-center gap-2.5 sm:gap-3.5 min-w-0">
             <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-700 flex items-center justify-center font-bold text-lg sm:text-xl shadow-2xs shrink-0">
               <CreditCard size={20} />
             </div>
             <div className="min-w-0">
-              <div className="flex items-center gap-2 whitespace-nowrap">
-                <h1 className="text-sm sm:text-xl font-extrabold text-[#0F172A] tracking-tight whitespace-nowrap">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h1 className="text-sm sm:text-xl font-extrabold text-[#0F172A] tracking-tight">
                   Payment Tracking &amp; Settlements
                 </h1>
                 {isSpecificStore ? (
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-blue-100 text-blue-800 border border-blue-200 shrink-0 whitespace-nowrap">
+                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-blue-100 text-blue-800 border border-blue-200 shrink-0">
                     Store: {formatCafeName(selectedStoreFilter)}
                   </span>
                 ) : (
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-200 shrink-0 whitespace-nowrap">
+                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-200 shrink-0">
                     {availableStores.length} Stores Tracked
                   </span>
                 )}
               </div>
-              <p className="text-[11px] sm:text-xs text-[#64748B] hidden sm:block">
+              <p className="text-[11px] sm:text-xs text-[#64748B] hidden sm:block mt-0.5">
                 Track pending dues, clear invoices, and record payments filtered by store name
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center gap-2 shrink-0 self-start sm:self-auto">
             <button
               onClick={handleOpenNewPaymentModal}
-              className="px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl text-[10px] sm:text-xs font-extrabold bg-[#2563EB] hover:bg-blue-700 text-white transition-all shadow-xs flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0"
+              className="px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl text-xs font-extrabold bg-[#2563EB] hover:bg-blue-700 active:scale-95 text-white transition-all shadow-xs flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
             >
               <Plus size={14} className="shrink-0" />
               <span>Record Payment</span>
@@ -684,7 +684,7 @@ export default function BakerPaymentsPage() {
         </div>
       </div>
 
-      <div className="max-w-6xl mx-auto px-4 py-6 space-y-6">
+      <div className="w-full px-1 sm:px-2 md:px-0 pt-1 pb-6 space-y-5 sm:space-y-6">
         {/* ==================================================== */}
         {/* STORE SELECTION CHIPS (HORIZONTAL SCROLL BAR)        */}
         {/* ==================================================== */}
@@ -830,8 +830,8 @@ export default function BakerPaymentsPage() {
         {/* ==================================================== */}
         {/* METRIC CARDS (DYNAMICALLY SCOPED)                   */}
         {/* ==================================================== */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div className="p-4 rounded-2xl bg-white border border-[#E2E8F0] shadow-2xs flex items-center justify-between">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+          <div className="p-4 rounded-3xl bg-white border border-[#E2E8F0] shadow-xs flex items-center justify-between">
             <div>
               <p className="text-[11px] font-bold text-[#64748B] uppercase tracking-wider">
                 {isSpecificStore ? "Store Pending Dues" : "Total Pending Dues"}
@@ -846,7 +846,7 @@ export default function BakerPaymentsPage() {
             </div>
           </div>
 
-          <div className="p-4 rounded-2xl bg-white border border-[#E2E8F0] shadow-2xs flex items-center justify-between">
+          <div className="p-4 rounded-3xl bg-white border border-[#E2E8F0] shadow-xs flex items-center justify-between">
             <div>
               <p className="text-[11px] font-bold text-[#64748B] uppercase tracking-wider">
                 {isSpecificStore ? "Store Settled Amount" : "Total Settled Collections"}
@@ -861,7 +861,7 @@ export default function BakerPaymentsPage() {
             </div>
           </div>
 
-          <div className="p-4 rounded-2xl bg-white border border-[#E2E8F0] shadow-2xs flex items-center justify-between">
+          <div className="p-4 rounded-3xl bg-white border border-[#E2E8F0] shadow-xs flex items-center justify-between">
             <div>
               <p className="text-[11px] font-bold text-[#64748B] uppercase tracking-wider">
                 {isSpecificStore ? "Store Settlement Rate" : "Global Settlement Rate"}
@@ -878,7 +878,7 @@ export default function BakerPaymentsPage() {
         {/* ==================================================== */}
         {/* FILTER BAR & VIEW TABS                               */}
         {/* ==================================================== */}
-        <div className="bg-white p-3.5 sm:p-4 rounded-2xl border border-[#E2E8F0] shadow-2xs space-y-3">
+        <div className="bg-white p-3.5 sm:p-5 rounded-3xl border border-[#E2E8F0] shadow-xs space-y-3">
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
             {/* View Switcher: Delivery Slips vs Payment History */}
             <div className="flex items-center gap-1.5 p-1 bg-slate-100 rounded-xl shrink-0 max-w-full overflow-x-auto scrollbar-none">
@@ -1123,8 +1123,8 @@ export default function BakerPaymentsPage() {
             </div>
 
             {/* DESKTOP VIEW: Slips & Payments Table */}
-            <div className="hidden md:block bg-white rounded-2xl border border-[#E2E8F0] shadow-xs overflow-hidden">
-              <div className="overflow-x-auto">
+            <div className="hidden md:block bg-white rounded-3xl border border-[#E2E8F0] shadow-xs overflow-hidden">
+              <div className="table-scroll-container">
                 <table className="w-full min-w-[740px] text-left border-collapse">
                   <thead>
                     <tr className="bg-[#F8FAFC] border-b border-[#E2E8F0] text-[11px] font-extrabold text-[#64748B] uppercase tracking-wider">
@@ -1251,7 +1251,7 @@ export default function BakerPaymentsPage() {
         {/* VIEW 2: PAYMENT RECEIPTS HISTORY LOG                 */}
         {/* ==================================================== */}
         {activeTab === "history" && (
-          <div className="bg-white rounded-2xl border border-[#E2E8F0] shadow-xs overflow-hidden">
+          <div className="bg-white rounded-3xl border border-[#E2E8F0] shadow-xs overflow-hidden">
             <div className="p-4 border-b border-slate-100 flex items-center justify-between">
               <div>
                 <h3 className="font-extrabold text-sm text-[#0F172A]">Payment Receipts &amp; Collections Log</h3>
@@ -1264,7 +1264,7 @@ export default function BakerPaymentsPage() {
               </span>
             </div>
 
-            <div className="overflow-x-auto">
+            <div className="table-scroll-container">
               <table className="w-full min-w-[680px] text-left border-collapse">
                 <thead>
                   <tr className="bg-[#F8FAFC] border-b border-[#E2E8F0] text-[11px] font-extrabold text-[#64748B] uppercase tracking-wider">

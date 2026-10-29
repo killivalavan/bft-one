@@ -1038,7 +1038,7 @@ export default function InvoicesPage() {
   return (
     <div>
       {/* Desktop Max Width Container with subtle left/right padding */}
-      <div className="max-w-[1240px] mx-auto space-y-6">
+      <div className="w-full max-w-7xl mx-auto space-y-6">
 
         {/* ======================================================== */}
         {/* 1. LIST VIEW: INVOICE HISTORY & TRACKER                  */}
@@ -1134,7 +1134,7 @@ export default function InvoicesPage() {
             {listTab === "invoices" && (
               <>
                 {/* Stat Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
               <div className="bg-white p-5 rounded-xl border border-[#E2E8F0] shadow-xs">
                 <span className="text-xs font-semibold text-[#64748B] uppercase tracking-wider">Total Invoiced</span>
                 <div className="text-2xl font-bold text-[#0F172A] mt-1">₹{totalInvoicedSum.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</div>
@@ -1191,8 +1191,8 @@ export default function InvoicesPage() {
 
             {/* Invoices Table */}
             <div className="bg-white rounded-xl border border-[#E2E8F0] shadow-xs overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse">
+              <div className="table-scroll-container">
+                <table className="w-full min-w-[700px] text-left border-collapse">
                   <thead>
                     <tr className="bg-[#EFF6FF] border-b border-[#DBEAFE] text-[11px] font-bold text-[#1E3A8A] uppercase tracking-wider">
                       <th className="py-3.5 px-4">Invoice #</th>
@@ -1361,7 +1361,7 @@ export default function InvoicesPage() {
             {listTab === "analytics" && (
               <div className="space-y-6 animate-in fade-in">
                 {/* 4 Summary Metric Cards */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4">
                   <div className="bg-white p-5 rounded-xl border border-[#E2E8F0] shadow-xs">
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-semibold text-[#64748B] uppercase tracking-wider">Stores Supplied</span>
@@ -1430,8 +1430,8 @@ export default function InvoicesPage() {
                       No store sales found yet. Create invoices for your client stores to see analytics.
                     </div>
                   ) : (
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-left border-collapse">
+                    <div className="table-scroll-container">
+                      <table className="w-full min-w-[650px] text-left border-collapse">
                         <thead>
                           <tr className="bg-[#F8FAFC] border-b border-[#E2E8F0] text-[11px] font-bold text-[#64748B] uppercase tracking-wider">
                             <th className="py-3 px-4">Store Name</th>
@@ -1596,7 +1596,7 @@ export default function InvoicesPage() {
 
                   return (
                     <>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4">
                         {/* 1. Gross Invoiced Revenue */}
                         <div className="bg-white p-5 rounded-xl border border-[#E2E8F0] shadow-xs">
                           <span className="text-xs font-semibold text-[#64748B] uppercase tracking-wider">Gross Invoiced Revenue</span>

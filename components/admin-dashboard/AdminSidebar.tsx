@@ -91,6 +91,7 @@ export function AdminSidebar({
   const { isModuleEnabled } = useTenant();
   const isBakerModuleEnabled = isModuleEnabled ? isModuleEnabled("baker_mode") : false;
   const isBillingEnabled = isModuleEnabled ? isModuleEnabled("billing") : true;
+  const isTimesheetEnabled = isModuleEnabled ? isModuleEnabled("timesheet") : false;
   const { unreadCount } = useUnreadNotificationsCount();
 
   const [hoveredItem, setHoveredItem] = useState<string | null>(null);
@@ -339,7 +340,7 @@ export function AdminSidebar({
       badge: "Board",
       colorScheme: "blue",
     },
-    ...(!isAdmin
+    ...(isTimesheetEnabled
       ? [
           {
             id: "timesheet",
@@ -349,6 +350,10 @@ export function AdminSidebar({
             category: "STAFF" as const,
             colorScheme: "cyan" as const,
           },
+        ]
+      : []),
+    ...(!isAdmin
+      ? [
           {
             id: "salary",
             label: "My Salary",
@@ -416,14 +421,18 @@ export function AdminSidebar({
       category: "ADMIN",
       colorScheme: "blue",
     },
-    {
-      id: "fill-timesheet",
-      label: "Manual Timesheet Entry",
-      href: "/admin/fill-timesheet",
-      icon: CalendarPlus,
-      category: "ADMIN",
-      colorScheme: "purple",
-    },
+    ...(isTimesheetEnabled
+      ? [
+          {
+            id: "fill-timesheet",
+            label: "Manual Timesheet Entry",
+            href: "/admin/fill-timesheet",
+            icon: CalendarPlus,
+            category: "ADMIN" as const,
+            colorScheme: "purple" as const,
+          },
+        ]
+      : []),
     {
       id: "admin-store",
       label: "Business Profile",
@@ -521,6 +530,30 @@ export function AdminSidebar({
       category: "MANAGEMENT",
       colorScheme: "blue",
     },
+    ...(isTimesheetEnabled
+      ? [
+          ...(isAdmin
+            ? [
+                {
+                  id: "baker-fill-timesheet",
+                  label: "Manual Timesheet Entry",
+                  href: "/admin/fill-timesheet",
+                  icon: CalendarPlus,
+                  category: "MANAGEMENT" as const,
+                  colorScheme: "purple" as const,
+                },
+              ]
+            : []),
+          {
+            id: "baker-timesheet",
+            label: "Timesheets",
+            href: "/timesheet",
+            icon: CalendarCheck2,
+            category: "MANAGEMENT" as const,
+            colorScheme: "cyan" as const,
+          },
+        ]
+      : []),
     {
       id: "baker-broadcasts",
       label: "Client Broadcasts",
@@ -558,6 +591,8 @@ export function AdminSidebar({
     if (item.id === "baker-dashboard" && (pathname === "/b2b" || pathname === "/baker")) return true;
     if ((item.id === "admin-users" || item.id === "baker-users") && (pathname === "/admin/users" || pathname === "/b2b/users" || pathname === "/admin")) return true;
     if ((item.id === "admin-store" || item.id === "baker-profile") && (pathname === "/admin/store" || pathname === "/b2b/store")) return true;
+    if ((item.id === "fill-timesheet" || item.id === "baker-fill-timesheet") && pathname === "/admin/fill-timesheet") return true;
+    if ((item.id === "timesheet" || item.id === "baker-timesheet") && pathname === "/timesheet") return true;
     if (item.id === "baker-support" && (pathname === "/b2b/support" || pathname === "/baker/support" || pathname === "/admin/support")) return true;
     return pathname === item.href;
   };

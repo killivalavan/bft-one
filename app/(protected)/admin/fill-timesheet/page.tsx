@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState, useMemo } from "react";
 import Link from "next/link";
-import { ChevronLeft, ChevronRight, CalendarDays, ArrowLeftRight, GripHorizontal, ZoomIn, ZoomOut } from "lucide-react";
+import { ChevronLeft, ChevronRight, CalendarDays, ArrowLeftRight, GripHorizontal, ZoomIn, ZoomOut, ShieldAlert } from "lucide-react";
 import { format, addDays, addMonths, startOfDay, startOfMonth, endOfMonth, eachDayOfInterval, isWeekend, isSameDay } from "date-fns";
 import { supabaseClient } from "@/lib/supabaseClient";
 import { UserAttendanceCard, SalaryAdjustmentItem } from "@/components/admin/UserAttendanceCard";
@@ -18,7 +18,8 @@ type MonthlyAdjustments = Record<string, Record<string, SalaryAdjustmentItem[]>>
 
 export default function FillTimesheetPage() {
     const { toast } = useToast();
-    const { business } = useTenant();
+    const { business, isModuleEnabled, loading: tenantLoading } = useTenant();
+    const isTimesheetEnabled = isModuleEnabled ? isModuleEnabled("timesheet") : true;
     const [date, setDate] = useState(new Date());
     const [users, setUsers] = useState<UserProfile[]>([]);
     const [monthlyLogs, setMonthlyLogs] = useState<MonthlyLogs>({});
@@ -343,6 +344,28 @@ export default function FillTimesheetPage() {
         setDraggedId(null);
     }
 
+    if (!tenantLoading && !isTimesheetEnabled) {
+        return (
+            <div className="min-h-[80vh] flex items-center justify-center px-4 bg-[#F8FAFC]">
+                <div className="max-w-md w-full p-8 rounded-3xl bg-white border border-slate-200 shadow-sm text-center space-y-4">
+                    <div className="w-12 h-12 rounded-2xl bg-amber-50 border border-amber-100 text-amber-600 mx-auto flex items-center justify-center">
+                        <ShieldAlert size={24} />
+                    </div>
+                    <h2 className="text-base font-bold text-[#0F172A]">Timesheet Module Disabled</h2>
+                    <p className="text-xs text-slate-500">
+                        The Manual Timesheet Entry module is currently disabled for this store. You can enable it from the Business Profile or Super Admin dashboard.
+                    </p>
+                    <Link
+                        href="/"
+                        className="inline-flex items-center justify-center px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition shadow-xs cursor-pointer"
+                    >
+                        Return to Dashboard
+                    </Link>
+                </div>
+            </div>
+        );
+    }
+
     return (
         <div>
             <div className="max-w-[100vw] overflow-hidden">
@@ -375,8 +398,8 @@ export default function FillTimesheetPage() {
                 </div>
 
                 {/* Day Fill Cards */}
-                <div className="p-6 overflow-x-auto bg-zinc-50/50 border-b border-zinc-200">
-                    <div className="flex gap-6 pb-2 min-w-max mx-auto">
+                <div className="p-3 sm:p-6 table-scroll-container bg-zinc-50/50 border-b border-zinc-200">
+                    <div className="flex gap-4 sm:gap-6 pb-2 min-w-max mx-auto">
                         {users.map(user => (
                             <div
                                 key={user.id}
@@ -407,7 +430,7 @@ export default function FillTimesheetPage() {
                 </div>
 
                 {/* Monthly Table */}
-                <div className="max-w-7xl mx-auto px-6 py-8">
+                <div className="max-w-7xl mx-auto px-3 sm:px-6 py-6 sm:py-8">
                     <div className="flex items-center justify-between mb-4">
                         <div className="flex items-center gap-4">
                             <h2 className="text-lg font-bold text-zinc-900">{format(date, 'MMMM yyyy')} Summary</h2>
@@ -446,7 +469,7 @@ export default function FillTimesheetPage() {
 
                     </div>
 
-                    <div className="bg-white rounded-2xl border border-zinc-200 shadow-sm overflow-auto max-h-[75vh]">
+                    <div className="table-scroll-container bg-white rounded-2xl border border-zinc-200 shadow-sm max-h-[75vh]">
                         <table className="w-full text-left text-xs sm:text-sm whitespace-nowrap relative border-collapse" style={{ zoom: zoom }}>
                             <thead className="bg-zinc-50 border-b border-zinc-100">
                                 <tr>

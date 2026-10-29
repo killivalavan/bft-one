@@ -165,22 +165,22 @@ export default function BakerExpensesPage() {
   );
 
   return (
-    <div className="space-y-6">
-      {/* Top Header */}
-      <div className="bg-white border-b border-[#E2E8F0] sticky top-14 md:top-0 z-20 shadow-2xs">
-        <div className="max-w-6xl mx-auto px-4 py-3 sm:py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
+    <div className="w-full max-w-6xl group-data-[sidebar-collapsed=true]:max-w-none mx-auto space-y-6">
+      {/* Top Header Card - docks cleanly below AppShell mobile header on mobile */}
+      <div className="sticky top-14 md:top-0 z-20 w-full px-1 sm:px-2 md:px-0 bg-[#F8FAFC] pt-1.5 sm:pt-2 md:pt-3 pb-2.5 sm:pb-3 transition-all">
+        <div className="w-full px-3.5 sm:px-5 py-3 sm:py-3.5 flex flex-col md:flex-row md:items-center md:justify-between gap-3 sm:gap-4 bg-white rounded-3xl border border-[#E2E8F0] shadow-xs">
           <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
             <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-rose-50 border border-rose-200 text-rose-600 flex items-center justify-center font-bold text-lg sm:text-xl shadow-2xs shrink-0">
               💸
             </div>
             <div className="min-w-0">
-              <div className="flex items-center gap-2 whitespace-nowrap">
-                <h1 className="text-sm sm:text-xl font-extrabold text-[#0F172A] tracking-tight whitespace-nowrap">Operating Expenses</h1>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h1 className="text-sm sm:text-xl font-extrabold text-[#0F172A] tracking-tight">Operating Expenses</h1>
                 <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-rose-50 text-rose-700 border border-rose-200 shrink-0 whitespace-nowrap">
                   {expenses.length} Entries
                 </span>
               </div>
-              <p className="text-[11px] sm:text-xs text-[#64748B] hidden sm:block">Log raw materials, supplies, packaging, utilities &amp; operational costs</p>
+              <p className="text-[11px] sm:text-xs text-[#64748B] hidden sm:block mt-0.5">Log raw materials, supplies, packaging, utilities &amp; operational costs</p>
             </div>
           </div>
 
@@ -203,10 +203,10 @@ export default function BakerExpensesPage() {
         </div>
       </div>
 
-      <div className="max-w-6xl mx-auto px-4 py-6 space-y-6">
+      <div className="w-full px-1 sm:px-2 md:px-0 pt-1 pb-6 space-y-5 sm:space-y-6">
         {/* Metric Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div className="p-4 rounded-2xl bg-white border border-[#E2E8F0] shadow-2xs flex items-center justify-between">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+          <div className="p-4 rounded-3xl bg-white border border-[#E2E8F0] shadow-xs flex items-center justify-between">
             <div>
               <p className="text-[11px] font-bold text-[#64748B] uppercase tracking-wider">Total Operating Costs</p>
               <h3 className="text-2xl font-black text-[#0F172A] mt-0.5">₹{totalExpenses.toLocaleString("en-IN")}</h3>
@@ -217,7 +217,7 @@ export default function BakerExpensesPage() {
             </div>
           </div>
 
-          <div className="p-4 rounded-2xl bg-white border border-[#E2E8F0] shadow-2xs flex items-center justify-between">
+          <div className="p-4 rounded-3xl bg-white border border-[#E2E8F0] shadow-xs flex items-center justify-between">
             <div>
               <p className="text-[11px] font-bold text-[#64748B] uppercase tracking-wider">Top Category</p>
               <h3 className="text-base font-black text-[#0F172A] mt-0.5 truncate max-w-[170px]" title={topCategory}>{topCategory}</h3>
@@ -228,7 +228,7 @@ export default function BakerExpensesPage() {
             </div>
           </div>
 
-          <div className="p-4 rounded-2xl bg-white border border-[#E2E8F0] shadow-2xs flex items-center justify-between">
+          <div className="p-4 rounded-3xl bg-white border border-[#E2E8F0] shadow-xs flex items-center justify-between">
             <div>
               <p className="text-[11px] font-bold text-[#64748B] uppercase tracking-wider">Recent Expense</p>
               <h3 className="text-base font-black text-[#0F172A] mt-0.5 truncate max-w-[170px]" title={expenses[0]?.name}>
@@ -243,7 +243,7 @@ export default function BakerExpensesPage() {
         </div>
 
         {/* Search */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-3.5 rounded-2xl border border-[#E2E8F0] shadow-2xs">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-3.5 rounded-3xl border border-[#E2E8F0] shadow-xs">
           <div className="relative flex-1 max-w-md">
             <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
@@ -325,9 +325,9 @@ export default function BakerExpensesPage() {
         </div>
 
         {/* DESKTOP VIEW: Full Table (Visible on md and larger) */}
-        <div className="hidden md:block bg-white rounded-2xl border border-[#E2E8F0] shadow-xs overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
+        <div className="hidden md:block bg-white rounded-3xl border border-[#E2E8F0] shadow-xs overflow-hidden">
+          <div className="table-scroll-container">
+            <table className="w-full min-w-[580px] text-left border-collapse">
               <thead>
                 <tr className="bg-[#F8FAFC] border-b border-[#E2E8F0] text-[11px] font-extrabold text-[#64748B] uppercase tracking-wider">
                   <th className="py-3 px-4">Item / Description</th>
@@ -388,8 +388,8 @@ export default function BakerExpensesPage() {
 
       {/* Add Expense Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-sm w-full border border-slate-200 shadow-2xl p-6 space-y-4">
+        <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
+          <div className="bg-white rounded-3xl max-w-sm w-full max-h-[90vh] overflow-y-auto border border-slate-200 shadow-2xl p-5 sm:p-6 space-y-4">
             <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
               <h3 className="font-extrabold text-base text-[#0F172A]">Log Operating Expense</h3>
               <button

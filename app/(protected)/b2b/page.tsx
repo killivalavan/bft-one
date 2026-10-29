@@ -19,22 +19,11 @@ import {
   ROYAL_BAKER_BIZ_ID,
 } from "@/lib/data/royalBakerDemoData";
 import { useB2BWorkspace } from "@/lib/hooks/useB2BData";
-import {
-  ResponsiveContainer,
-  BarChart,
-  Bar,
-  AreaChart,
-  Area,
-  XAxis,
-  YAxis,
-  Tooltip,
-  CartesianGrid,
-  Cell,
-} from "recharts";
 import { formatCafeName } from "@/lib/utils/bakerUtils";
 import { capitalizeWords } from "./products/page";
 import { fetchB2BClients, B2B_CUSTOMERS_UPDATED_EVENT } from "@/lib/services/b2bClients";
 import StoreActivityMonitor, { MonitorStoreRecord } from "@/components/baker/StoreActivityMonitor";
+import DispatchClientIntelligence from "@/components/baker/DispatchClientIntelligence";
 
 export interface InvoiceItem {
   id?: string;
@@ -118,8 +107,6 @@ export default function HomeBakerDashboardPage() {
 
   // Visual Intelligence Hub State
   const [activeChartTab, setActiveChartTab] = useState<"products" | "clients" | "matrix" | "trend">("products");
-  const [productMetric, setProductMetric] = useState<"units" | "revenue">("units");
-  const [chartViewMode, setChartViewMode] = useState<"chart" | "table">("chart");
   const [selectedMatrixClient, setSelectedMatrixClient] = useState<string>("all");
 
   // Operational Section Filters & Expansion
@@ -546,12 +533,12 @@ export default function HomeBakerDashboardPage() {
   }
 
   return (
-    <div className="space-y-4 sm:space-y-6">
+    <div className="w-full max-w-6xl group-data-[sidebar-collapsed=true]:max-w-none mx-auto space-y-6">
       {/* ========================================================= */}
       {/* 1. TOP HEADER & REPORTING PERIOD CONTROLS                 */}
       {/* ========================================================= */}
-      <div className="bg-white border-b border-[#E2E8F0] sticky top-14 md:top-0 z-20 shadow-2xs">
-        <div className="max-w-6xl mx-auto px-3.5 sm:px-4 py-3 sm:py-4 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 sm:gap-3.5">
+      <div className="sticky top-14 md:top-0 z-20 w-full px-1 sm:px-2 md:px-0 bg-[#F8FAFC] pt-1.5 sm:pt-2 md:pt-3 pb-2.5 sm:pb-3 transition-all">
+        <div className="w-full px-3.5 sm:px-5 py-3 sm:py-3.5 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 sm:gap-3.5 bg-white rounded-3xl border border-[#E2E8F0] shadow-xs">
           {/* Store Identity & Welcome Message */}
           <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
             <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-xl sm:rounded-2xl bg-blue-600 text-white flex items-center justify-center font-black text-lg sm:text-xl shadow-xs shrink-0 ring-4 ring-blue-50">
@@ -649,7 +636,7 @@ export default function HomeBakerDashboardPage() {
         </div>
       </div>
 
-      <div className="max-w-6xl mx-auto px-3.5 sm:px-4 space-y-4 sm:space-y-6">
+      <div className="w-full px-1 sm:px-2 md:px-0 pt-1 pb-6 space-y-5 sm:space-y-6">
         {/* Active Reporting Period Sub-Bar */}
         <div className="flex flex-col xs:flex-row items-start xs:items-center justify-between gap-1.5 text-xs text-slate-500 bg-white px-3.5 sm:px-4 py-2.5 rounded-xl sm:rounded-2xl border border-slate-200 shadow-2xs">
           <div className="flex items-center gap-2 flex-wrap">
@@ -668,7 +655,7 @@ export default function HomeBakerDashboardPage() {
         {/* ========================================================= */}
         {/* 2. OPERATIONAL QUICK ACTION CARDS (NO TEXT WRAPPING)      */}
         {/* ========================================================= */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-3">
           <Link
             href="/b2b/dispatch"
             className="p-2.5 sm:p-3.5 rounded-xl sm:rounded-2xl bg-white border border-[#E2E8F0] hover:border-blue-400 hover:shadow-xs transition-all flex items-center gap-2 sm:gap-3 group"
@@ -750,7 +737,7 @@ export default function HomeBakerDashboardPage() {
         {/* ========================================================= */}
         {/* 3. BUSINESS KPI CARDS (NO TEXT OVERLAP OR CLIPPING)       */}
         {/* ========================================================= */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-2.5 sm:gap-4">
           {/* Card 1: Gross Billed Sales */}
           <Link
             href="/b2b/dispatch?tab=history"
@@ -925,531 +912,21 @@ export default function HomeBakerDashboardPage() {
         {/* ========================================================= */}
         {/* 5. INTERACTIVE PRODUCT & DISPATCH ANALYTICS               */}
         {/* ========================================================= */}
-        <div className="bg-white p-3.5 sm:p-5 rounded-2xl sm:rounded-3xl border border-[#E2E8F0] shadow-xs space-y-4">
-          {/* Section Header & Tab Switcher */}
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-slate-100 pb-3">
-            <div>
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 border border-blue-100 flex items-center justify-center font-bold">
-                  <BarChart3 size={17} aria-hidden="true" />
-                </div>
-                <h2 className="text-sm sm:text-base font-extrabold text-[#0F172A] tracking-tight">
-                  Dispatch &amp; Client Intelligence
-                </h2>
-              </div>
-              <p className="text-[11px] sm:text-xs text-[#64748B] mt-0.5">
-                Visual analysis of product velocity, client store share, and item demand mix
-              </p>
-            </div>
-
-            {/* Interactive Tab Switcher */}
-            <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-xl overflow-x-auto scrollbar-none w-full md:w-auto" role="tablist">
-              <button
-                type="button"
-                role="tab"
-                aria-selected={activeChartTab === "products"}
-                onClick={() => setActiveChartTab("products")}
-                className={cn(
-                  "flex-1 md:flex-initial text-center px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 whitespace-nowrap",
-                  activeChartTab === "products"
-                    ? "bg-white text-blue-700 shadow-2xs font-extrabold"
-                    : "text-slate-600 hover:text-slate-900"
-                )}
-              >
-                <Package size={13} className="text-blue-600 shrink-0" aria-hidden="true" />
-                <span>Top Products</span>
-              </button>
-
-              <button
-                type="button"
-                role="tab"
-                aria-selected={activeChartTab === "clients"}
-                onClick={() => setActiveChartTab("clients")}
-                className={cn(
-                  "flex-1 md:flex-initial text-center px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 whitespace-nowrap",
-                  activeChartTab === "clients"
-                    ? "bg-white text-blue-700 shadow-2xs font-extrabold"
-                    : "text-slate-600 hover:text-slate-900"
-                )}
-              >
-                <Store size={13} className="text-purple-600 shrink-0" aria-hidden="true" />
-                <span>Client Share</span>
-              </button>
-
-              <button
-                type="button"
-                role="tab"
-                aria-selected={activeChartTab === "matrix"}
-                onClick={() => setActiveChartTab("matrix")}
-                className={cn(
-                  "flex-1 md:flex-initial text-center px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 whitespace-nowrap",
-                  activeChartTab === "matrix"
-                    ? "bg-white text-blue-700 shadow-2xs font-extrabold"
-                    : "text-slate-600 hover:text-slate-900"
-                )}
-              >
-                <Layers size={13} className="text-emerald-600 shrink-0" aria-hidden="true" />
-                <span>Store Mix</span>
-              </button>
-
-              <button
-                type="button"
-                role="tab"
-                aria-selected={activeChartTab === "trend"}
-                onClick={() => setActiveChartTab("trend")}
-                className={cn(
-                  "flex-1 md:flex-initial text-center px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 whitespace-nowrap",
-                  activeChartTab === "trend"
-                    ? "bg-white text-blue-700 shadow-2xs font-extrabold"
-                    : "text-slate-600 hover:text-slate-900"
-                )}
-              >
-                <TrendingUp size={13} className="text-blue-600 shrink-0" aria-hidden="true" />
-                <span>Velocity</span>
-              </button>
-            </div>
-          </div>
-
-          {/* TAB 1: TOP PRODUCTS (UNITS vs REVENUE) */}
-          {activeChartTab === "products" && (
-            <div className="space-y-3 animate-in fade-in duration-200">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-                <span className="text-xs font-bold text-[#64748B]">
-                  Ranked breakdown of catalog items across delivery slips ({periodDateRanges.label})
-                </span>
-
-                <div className="flex items-center gap-2 justify-between sm:justify-start w-full sm:w-auto">
-                  {/* Metric Toggle: Dispatched Pieces vs Gross Revenue */}
-                  <div className="inline-flex items-center gap-1 p-0.5 bg-slate-100 rounded-lg flex-1 sm:flex-initial justify-between sm:justify-start">
-                    <button
-                      type="button"
-                      onClick={() => setProductMetric("units")}
-                      className={cn(
-                        "flex-1 sm:flex-initial px-2 sm:px-2.5 py-1 rounded-md text-[10.5px] sm:text-[11px] font-bold transition-all cursor-pointer text-center",
-                        productMetric === "units"
-                          ? "bg-white text-blue-700 shadow-2xs font-extrabold"
-                          : "text-slate-600 hover:text-slate-900"
-                      )}
-                    >
-                      Pieces (pcs)
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setProductMetric("revenue")}
-                      className={cn(
-                        "flex-1 sm:flex-initial px-2 sm:px-2.5 py-1 rounded-md text-[10.5px] sm:text-[11px] font-bold transition-all cursor-pointer text-center",
-                        productMetric === "revenue"
-                          ? "bg-white text-emerald-700 shadow-2xs font-extrabold"
-                          : "text-slate-600 hover:text-slate-900"
-                      )}
-                    >
-                      Revenue (₹)
-                    </button>
-                  </div>
-
-                  {/* Accessible View Toggle: Chart vs Table */}
-                  <button
-                    type="button"
-                    onClick={() => setChartViewMode(chartViewMode === "chart" ? "table" : "chart")}
-                    className="p-1 px-2 rounded-md border border-slate-200 text-slate-600 hover:text-blue-600 hover:bg-slate-50 transition-all text-[11px] font-bold flex items-center gap-1 cursor-pointer shrink-0"
-                    title={chartViewMode === "chart" ? "Switch to accessible data table view" : "Switch to graphical chart view"}
-                  >
-                    <Table size={13} aria-hidden="true" />
-                    <span>{chartViewMode === "chart" ? "Table" : "Chart"}</span>
-                  </button>
-                </div>
-              </div>
-
-              {productAnalytics.length > 0 ? (
-                chartViewMode === "chart" ? (
-                  <div className="h-64 sm:h-72 w-full pt-2">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart
-                        data={productAnalytics.slice(0, 7)}
-                        margin={{ top: 10, right: 10, left: -20, bottom: 35 }}
-                      >
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F1F5F9" />
-                        <XAxis
-                          dataKey="name"
-                          tick={{ fontSize: 10, fill: "#64748B", fontWeight: 600 }}
-                          interval={0}
-                          angle={-25}
-                          textAnchor="end"
-                          height={50}
-                        />
-                        <YAxis
-                          tick={{ fontSize: 10, fill: "#94A3B8" }}
-                          tickFormatter={(v) => (productMetric === "revenue" ? `₹${v}` : `${v}`)}
-                        />
-                        <Tooltip
-                          cursor={{ fill: "rgba(37, 99, 235, 0.04)" }}
-                          content={({ active, payload }) => {
-                            if (active && payload && payload.length) {
-                              const data = payload[0].payload as { name: string; units: number; revenue: number; slipsCount: number };
-                              return (
-                                <div className="bg-[#0F172A] text-white p-3 rounded-xl shadow-xl border border-slate-700 text-xs space-y-1">
-                                  <p className="font-extrabold text-blue-300">{data.name}</p>
-                                  <div className="flex justify-between gap-4 text-slate-300">
-                                    <span>Total Dispatched:</span>
-                                    <strong className="text-white">{data.units} pcs</strong>
-                                  </div>
-                                  <div className="flex justify-between gap-4 text-slate-300">
-                                    <span>Gross Revenue:</span>
-                                    <strong className="text-emerald-400">₹{data.revenue.toLocaleString("en-IN")}</strong>
-                                  </div>
-                                  <div className="flex justify-between gap-4 text-slate-400 pt-0.5 text-[10px]">
-                                    <span>Delivery Slips:</span>
-                                    <span className="text-slate-200 font-semibold">{data.slipsCount} slips</span>
-                                  </div>
-                                </div>
-                              );
-                            }
-                            return null;
-                          }}
-                        />
-                        <Bar
-                          dataKey={productMetric === "units" ? "units" : "revenue"}
-                          radius={[6, 6, 0, 0]}
-                          fill={productMetric === "units" ? "#2563EB" : "#10B981"}
-                        >
-                          {productAnalytics.slice(0, 7).map((entry, idx) => (
-                            <Cell
-                              key={`cell-${idx}`}
-                              fill={
-                                productMetric === "units"
-                                  ? idx === 0 ? "#1D4ED8" : "#3B82F6"
-                                  : idx === 0 ? "#059669" : "#10B981"
-                              }
-                            />
-                          ))}
-                        </Bar>
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                ) : (
-                  /* Accessible Table Representation */
-                  <div className="overflow-x-auto border border-slate-200 rounded-xl">
-                    <table className="w-full text-left text-xs">
-                      <thead className="bg-slate-50 text-slate-600 font-extrabold border-b border-slate-200">
-                        <tr>
-                          <th className="py-2.5 px-3">Rank</th>
-                          <th className="py-2.5 px-3">Product Name</th>
-                          <th className="py-2.5 px-3 text-right">Pieces</th>
-                          <th className="py-2.5 px-3 text-right">Revenue (₹)</th>
-                          <th className="py-2.5 px-3 text-right">Share</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100">
-                        {productAnalytics.map((p, idx) => {
-                          const sharePct = totalDeliveredPieces > 0 ? Math.round((p.units / totalDeliveredPieces) * 100) : 0;
-                          return (
-                            <tr key={p.name} className="hover:bg-slate-50">
-                              <td className="py-2 px-3 font-mono font-bold text-slate-500">#{idx + 1}</td>
-                              <td className="py-2 px-3 font-bold text-slate-800">{p.name}</td>
-                              <td className="py-2 px-3 text-right font-black tabular-nums">{p.units} pcs</td>
-                              <td className="py-2 px-3 text-right font-black text-emerald-700 tabular-nums">₹{p.revenue.toLocaleString("en-IN")}</td>
-                              <td className="py-2 px-3 text-right font-semibold text-slate-500">{sharePct}%</td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                )
-              ) : (
-                <div className="py-12 text-center text-xs text-slate-400 font-semibold bg-slate-50/60 rounded-2xl border border-dashed border-slate-200">
-                  <Package className="w-8 h-8 text-slate-300 mx-auto mb-2" aria-hidden="true" />
-                  No product dispatch volume recorded in the selected period.
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* TAB 2: CLIENT DISTRIBUTION & CREDIT DUES */}
-          {activeChartTab === "clients" && (
-            <div className="space-y-3 animate-in fade-in duration-200">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-                <span className="text-xs font-bold text-[#64748B]">
-                  Client volume, lifetime billed vs unsettled pending balances
-                </span>
-                <div className="flex items-center gap-3 text-xs font-semibold justify-between sm:justify-start">
-                  <div className="flex items-center gap-3">
-                    <span className="flex items-center gap-1.5">
-                      <span className="w-2.5 h-2.5 rounded-sm bg-blue-600 inline-block" />
-                      <span className="text-slate-600">Billed</span>
-                    </span>
-                    <span className="flex items-center gap-1.5">
-                      <span className="w-2.5 h-2.5 rounded-sm bg-rose-500 inline-block" />
-                      <span className="text-rose-700 font-bold">Dues</span>
-                    </span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setChartViewMode(chartViewMode === "chart" ? "table" : "chart")}
-                    className="p-1 px-2 rounded-md border border-slate-200 text-slate-600 hover:text-blue-600 hover:bg-slate-50 transition-all text-[11px] font-bold flex items-center gap-1 cursor-pointer ml-1"
-                  >
-                    <Table size={13} aria-hidden="true" />
-                    <span>{chartViewMode === "chart" ? "Table" : "Chart"}</span>
-                  </button>
-                </div>
-              </div>
-
-              {clientAnalytics.length > 0 ? (
-                chartViewMode === "chart" ? (
-                  <div className="h-64 sm:h-72 w-full pt-2">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart
-                        data={clientAnalytics.slice(0, 6)}
-                        margin={{ top: 10, right: 10, left: -20, bottom: 35 }}
-                      >
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F1F5F9" />
-                        <XAxis
-                          dataKey="name"
-                          tick={{ fontSize: 10, fill: "#64748B", fontWeight: 600 }}
-                          interval={0}
-                          angle={-25}
-                          textAnchor="end"
-                          height={50}
-                        />
-                        <YAxis
-                          tick={{ fontSize: 10, fill: "#94A3B8" }}
-                          tickFormatter={(v) => `₹${v}`}
-                        />
-                        <Tooltip
-                          cursor={{ fill: "rgba(37, 99, 235, 0.04)" }}
-                          content={({ active, payload }) => {
-                            if (active && payload && payload.length) {
-                              const data = payload[0].payload as { name: string; billed: number; unpaid: number; units: number };
-                              return (
-                                <div className="bg-[#0F172A] text-white p-3 rounded-xl shadow-xl border border-slate-700 text-xs space-y-1">
-                                  <p className="font-extrabold text-blue-300">{data.name}</p>
-                                  <div className="flex justify-between gap-4 text-slate-300">
-                                    <span>Total Billed:</span>
-                                    <strong className="text-white">₹{data.billed.toLocaleString("en-IN")}</strong>
-                                  </div>
-                                  <div className="flex justify-between gap-4 text-slate-300">
-                                    <span>Pending Dues:</span>
-                                    <strong className="text-rose-400">₹{data.unpaid.toLocaleString("en-IN")}</strong>
-                                  </div>
-                                  <div className="flex justify-between gap-4 text-slate-300 pt-1 border-t border-slate-800">
-                                    <span>Dispatched Units:</span>
-                                    <strong className="text-slate-200">{data.units} pcs</strong>
-                                  </div>
-                                </div>
-                              );
-                            }
-                            return null;
-                          }}
-                        />
-                        <Bar dataKey="billed" name="Lifetime Billed" radius={[4, 4, 0, 0]} fill="#2563EB" />
-                        <Bar dataKey="unpaid" name="Pending Dues" radius={[4, 4, 0, 0]} fill="#F43F5E" />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                ) : (
-                  <div className="overflow-x-auto border border-slate-200 rounded-xl">
-                    <table className="w-full text-left text-xs">
-                      <thead className="bg-slate-50 text-slate-600 font-extrabold border-b border-slate-200">
-                        <tr>
-                          <th className="py-2.5 px-3">Partner Client</th>
-                          <th className="py-2.5 px-3 text-right">Billed (₹)</th>
-                          <th className="py-2.5 px-3 text-right">Settled (₹)</th>
-                          <th className="py-2.5 px-3 text-right">Dues (₹)</th>
-                          <th className="py-2.5 px-3 text-right">Pieces</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100">
-                        {clientAnalytics.map((c) => (
-                          <tr key={c.name} className="hover:bg-slate-50">
-                            <td className="py-2 px-3 font-bold text-slate-800">{c.name}</td>
-                            <td className="py-2 px-3 text-right font-black tabular-nums">₹{c.billed.toLocaleString("en-IN")}</td>
-                            <td className="py-2 px-3 text-right font-black text-emerald-700 tabular-nums">₹{c.paid.toLocaleString("en-IN")}</td>
-                            <td className="py-2 px-3 text-right font-black text-rose-600 tabular-nums">
-                              {c.unpaid > 0 ? `₹${c.unpaid.toLocaleString("en-IN")}` : "Settled"}
-                            </td>
-                            <td className="py-2 px-3 text-right font-semibold text-slate-500">{c.units} pcs</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )
-              ) : (
-                <div className="py-12 text-center text-xs text-slate-400 font-semibold bg-slate-50/60 rounded-2xl border border-dashed border-slate-200">
-                  <Store className="w-8 h-8 text-slate-300 mx-auto mb-2" aria-hidden="true" />
-                  No partner client sales recorded yet.
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* TAB 3: PRODUCT x CLIENT MATRIX */}
-          {activeChartTab === "matrix" && (
-            <div className="space-y-3 animate-in fade-in duration-200">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-                <span className="text-xs font-bold text-[#64748B]">
-                  Select a store to see their specific product demand &amp; order mix
-                </span>
-
-                {/* Client Selection Chips */}
-                <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none pb-1 w-full sm:w-auto">
-                  <button
-                    type="button"
-                    onClick={() => setSelectedMatrixClient("all")}
-                    className={cn(
-                      "px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap",
-                      selectedMatrixClient === "all"
-                        ? "bg-[#0F172A] text-white shadow-xs font-extrabold"
-                        : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                    )}
-                  >
-                    All Stores
-                  </button>
-                  {clientNames.map((name) => (
-                    <button
-                      key={name}
-                      type="button"
-                      onClick={() => setSelectedMatrixClient(name)}
-                      className={cn(
-                        "px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap",
-                        selectedMatrixClient === name
-                          ? "bg-blue-600 text-white shadow-xs font-extrabold"
-                          : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                      )}
-                    >
-                      {name}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {matrixData.length > 0 ? (
-                <div className="h-64 sm:h-72 w-full pt-2">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart
-                      data={matrixData}
-                      margin={{ top: 10, right: 10, left: -20, bottom: 35 }}
-                    >
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F1F5F9" />
-                      <XAxis
-                        dataKey="name"
-                        tick={{ fontSize: 10, fill: "#64748B", fontWeight: 600 }}
-                        interval={0}
-                        angle={-25}
-                        textAnchor="end"
-                        height={50}
-                      />
-                      <YAxis
-                        tick={{ fontSize: 10, fill: "#94A3B8" }}
-                        tickFormatter={(v) => `${v} pcs`}
-                      />
-                      <Tooltip
-                        cursor={{ fill: "rgba(37, 99, 235, 0.04)" }}
-                        content={({ active, payload }) => {
-                          if (active && payload && payload.length) {
-                            const data = payload[0].payload as { name: string; units: number; revenue: number };
-                            return (
-                              <div className="bg-[#0F172A] text-white p-3 rounded-xl shadow-xl border border-slate-700 text-xs space-y-1">
-                                <p className="font-extrabold text-blue-300">{data.name}</p>
-                                <p className="text-[10px] text-slate-400">
-                                  Store: {selectedMatrixClient === "all" ? "All Partner Stores" : selectedMatrixClient}
-                                </p>
-                                <div className="flex justify-between gap-4 text-slate-300 pt-0.5">
-                                  <span>Quantity Packed:</span>
-                                  <strong className="text-white">{data.units} pcs</strong>
-                                </div>
-                                <div className="flex justify-between gap-4 text-slate-300">
-                                  <span>Billed Value:</span>
-                                  <strong className="text-emerald-400">₹{data.revenue.toLocaleString("en-IN")}</strong>
-                                </div>
-                              </div>
-                            );
-                          }
-                          return null;
-                        }}
-                      />
-                      <Bar dataKey="units" name="Packed Pieces" radius={[6, 6, 0, 0]} fill="#0D9488" />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              ) : (
-                <div className="py-12 text-center text-xs text-slate-400 font-semibold bg-slate-50/60 rounded-2xl border border-dashed border-slate-200">
-                  <Layers className="w-8 h-8 text-slate-300 mx-auto mb-2" aria-hidden="true" />
-                  No dispatches recorded for {selectedMatrixClient}.
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* TAB 4: VELOCITY TREND */}
-          {activeChartTab === "trend" && (
-            <div className="space-y-3 animate-in fade-in duration-200">
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-xs font-bold text-[#64748B]">
-                  Supply velocity and gross revenue billed across dispatch dates
-                </span>
-                <span className="text-[10.5px] sm:text-[11px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-200">
-                  Dual: Revenue &amp; Pieces
-                </span>
-              </div>
-
-              {timelineAnalytics.length > 0 ? (
-                <div className="h-64 sm:h-72 w-full pt-2">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart
-                      data={timelineAnalytics}
-                      margin={{ top: 10, right: 10, left: -20, bottom: 10 }}
-                    >
-                      <defs>
-                        <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#2563EB" stopOpacity={0.35} />
-                          <stop offset="95%" stopColor="#2563EB" stopOpacity={0.0} />
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F1F5F9" />
-                      <XAxis dataKey="date" tick={{ fontSize: 10, fill: "#64748B", fontWeight: 600 }} />
-                      <YAxis tick={{ fontSize: 10, fill: "#94A3B8" }} tickFormatter={(v) => `₹${v}`} />
-                      <Tooltip
-                        content={({ active, payload }) => {
-                          if (active && payload && payload.length) {
-                            const data = payload[0].payload as { date: string; revenue: number; units: number };
-                            return (
-                              <div className="bg-[#0F172A] text-white p-3 rounded-xl shadow-xl border border-slate-700 text-xs space-y-1">
-                                <p className="font-extrabold text-blue-300">{data.date}</p>
-                                <div className="flex justify-between gap-4 text-slate-300">
-                                  <span>Billed Revenue:</span>
-                                  <strong className="text-emerald-400">₹{data.revenue.toLocaleString("en-IN")}</strong>
-                                </div>
-                                <div className="flex justify-between gap-4 text-slate-300">
-                                  <span>Dispatched Units:</span>
-                                  <strong className="text-white">{data.units} pcs</strong>
-                                </div>
-                              </div>
-                            );
-                          }
-                          return null;
-                        }}
-                      />
-                      <Area
-                        type="monotone"
-                        dataKey="revenue"
-                        stroke="#2563EB"
-                        strokeWidth={2.5}
-                        fillOpacity={1}
-                        fill="url(#colorRevenue)"
-                      />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                </div>
-              ) : (
-                <div className="py-12 text-center text-xs text-slate-400 font-semibold bg-slate-50/60 rounded-2xl border border-dashed border-slate-200">
-                  <TrendingUp className="w-8 h-8 text-slate-300 mx-auto mb-2" aria-hidden="true" />
-                  No timeline data recorded for the active period.
-                </div>
-              )}
-            </div>
-          )}
-        </div>
+        <DispatchClientIntelligence
+          activeChartTab={activeChartTab}
+          setActiveChartTab={setActiveChartTab}
+          productAnalytics={productAnalytics}
+          clientAnalytics={clientAnalytics}
+          timelineAnalytics={timelineAnalytics}
+          clientNames={clientNames}
+          matrixData={matrixData}
+          selectedMatrixClient={selectedMatrixClient}
+          setSelectedMatrixClient={setSelectedMatrixClient}
+          periodDateRanges={periodDateRanges}
+          totalDeliveredPieces={totalDeliveredPieces}
+          grossSales={grossSales}
+          pendingDues={pendingDues}
+        />
 
         {/* ========================================================= */}
         {/* 6. OPERATIONAL SECTION: PENDING BALANCES & RECENT SLIPS   */}

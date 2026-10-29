@@ -414,24 +414,24 @@ export default function BakerReportsPage() {
   };
 
   return (
-    <div className="space-y-6">
-      {/* Top Header - docks cleanly below AppShell mobile header on mobile */}
-      <div className="bg-white border-b border-[#E2E8F0] sticky top-14 md:top-0 z-20 shadow-2xs">
-        <div className="max-w-6xl mx-auto px-4 py-3 sm:py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
+    <div className="w-full max-w-6xl group-data-[sidebar-collapsed=true]:max-w-none mx-auto space-y-6">
+      {/* Top Header Card - docks cleanly below AppShell mobile header on mobile */}
+      <div className="sticky top-14 md:top-0 z-20 w-full px-1 sm:px-2 md:px-0 bg-[#F8FAFC] pt-1.5 sm:pt-2 md:pt-3 pb-2.5 sm:pb-3 transition-all">
+        <div className="w-full px-3.5 sm:px-5 py-3 sm:py-3.5 flex flex-col md:flex-row md:items-center md:justify-between gap-3 sm:gap-4 bg-white rounded-3xl border border-[#E2E8F0] shadow-xs">
           <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
             <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-blue-50 border border-blue-200 text-blue-700 flex items-center justify-center font-bold text-lg sm:text-xl shadow-2xs shrink-0">
               📊
             </div>
             <div className="min-w-0">
-              <div className="flex items-center gap-2 whitespace-nowrap">
-                <h1 className="text-sm sm:text-xl font-extrabold text-[#0F172A] tracking-tight whitespace-nowrap">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h1 className="text-sm sm:text-xl font-extrabold text-[#0F172A] tracking-tight">
                   Profit &amp; Analytics
                 </h1>
                 <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-blue-100 text-blue-800 border border-blue-200 shrink-0 whitespace-nowrap">
                   {periodLabel}
                 </span>
               </div>
-              <p className="text-[11px] sm:text-xs text-[#64748B] hidden sm:block">
+              <p className="text-[11px] sm:text-xs text-[#64748B] hidden sm:block mt-0.5">
                 Revenue, operational expenses, net margins &amp; store performance analytics
               </p>
             </div>
@@ -450,7 +450,7 @@ export default function BakerReportsPage() {
         </div>
       </div>
 
-      <div className="max-w-6xl mx-auto px-4 py-6 space-y-6">
+      <div className="w-full px-1 sm:px-2 md:px-0 pt-1 pb-6 space-y-5 sm:space-y-6">
         {/* ==================================================== */}
         {/* PERIOD SELECTOR BAR (Month-wise / Year-wise / All)   */}
         {/* ==================================================== */}
@@ -635,11 +635,11 @@ export default function BakerReportsPage() {
         </div>
 
         {/* ==================================================== */}
-        {/* SUMMARY KPI CARDS (2x2 Mobile, 4-Col Desktop)        */}
+        {/* SUMMARY KPI CARDS (Adaptive Grid)                    */}
         {/* ==================================================== */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4">
           {/* Card 1: Gross Sales */}
-          <div className="p-3.5 sm:p-4 rounded-2xl bg-white border border-[#E2E8F0] shadow-2xs flex flex-col justify-between">
+          <div className="p-3.5 sm:p-4 rounded-3xl bg-white border border-[#E2E8F0] shadow-xs flex flex-col justify-between">
             <div className="flex items-center justify-between gap-2">
               <p className="text-[10px] sm:text-[11px] font-bold text-[#64748B] uppercase tracking-wider truncate">Gross Sales</p>
               <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-blue-50 text-blue-600 border border-blue-100 flex items-center justify-center font-bold shrink-0">
@@ -655,7 +655,7 @@ export default function BakerReportsPage() {
           </div>
 
           {/* Card 2: Production Cost */}
-          <div className="p-3.5 sm:p-4 rounded-2xl bg-white border border-[#E2E8F0] shadow-2xs flex flex-col justify-between">
+          <div className="p-3.5 sm:p-4 rounded-3xl bg-white border border-[#E2E8F0] shadow-xs flex flex-col justify-between">
             <div className="flex items-center justify-between gap-2">
               <p className="text-[10px] sm:text-[11px] font-bold text-[#64748B] uppercase tracking-wider truncate">Production Cost</p>
               <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-slate-100 text-slate-700 border border-slate-200 flex items-center justify-center font-bold shrink-0">
@@ -672,7 +672,7 @@ export default function BakerReportsPage() {
 
           {/* Card 3: Net Take-Home Profit (Dynamic Sentiment) */}
           <div className={cn(
-            "p-3.5 sm:p-4 rounded-2xl border shadow-2xs flex flex-col justify-between transition-all",
+            "p-3.5 sm:p-4 rounded-3xl border shadow-xs flex flex-col justify-between transition-all",
             isProfitPositive
               ? "bg-emerald-50/70 border-emerald-200/80"
               : "bg-rose-50/80 border-rose-200/90"
@@ -708,7 +708,7 @@ export default function BakerReportsPage() {
           </div>
 
           {/* Card 4: Profit Margin */}
-          <div className="p-3.5 sm:p-4 rounded-2xl bg-white border border-[#E2E8F0] shadow-2xs flex flex-col justify-between">
+          <div className="p-3.5 sm:p-4 rounded-3xl bg-white border border-[#E2E8F0] shadow-xs flex flex-col justify-between">
             <div className="flex items-center justify-between gap-2">
               <p className="text-[10px] sm:text-[11px] font-bold text-[#64748B] uppercase tracking-wider truncate">Avg Margin</p>
               <div className={cn(
@@ -738,7 +738,7 @@ export default function BakerReportsPage() {
         {/* ==================================================== */}
         {/* VIEW SELECTOR: CAFÉ-WISE vs PRODUCT-WISE BREAKDOWN   */}
         {/* ==================================================== */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-3 sm:p-3.5 rounded-2xl border border-[#E2E8F0] shadow-2xs">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-3 sm:p-3.5 rounded-3xl border border-[#E2E8F0] shadow-xs">
           <div className="grid grid-cols-2 sm:flex sm:items-center gap-1 p-1 bg-slate-100 rounded-xl w-full sm:w-auto shrink-0 shadow-2xs">
             <button
               type="button"
@@ -889,7 +889,7 @@ export default function BakerReportsPage() {
 
             {/* Desktop Table View (Hidden on mobile, visible on >= md) */}
             <div className="hidden md:block bg-white rounded-3xl border border-[#E2E8F0] shadow-xs overflow-hidden">
-              <div className="overflow-x-auto">
+              <div className="table-scroll-container">
                 <table className="w-full text-left border-collapse">
                   <thead>
                     <tr className="bg-[#F8FAFC] border-b border-[#E2E8F0] text-[11px] font-extrabold text-[#64748B] uppercase tracking-wider whitespace-nowrap">
@@ -1105,7 +1105,7 @@ export default function BakerReportsPage() {
 
             {/* Desktop Table View (Hidden on mobile, visible on >= md) */}
             <div className="hidden md:block bg-white rounded-3xl border border-[#E2E8F0] shadow-xs overflow-hidden">
-              <div className="overflow-x-auto">
+              <div className="table-scroll-container">
                 <table className="w-full text-left border-collapse">
                   <thead>
                     <tr className="bg-[#F8FAFC] border-b border-[#E2E8F0] text-[11px] font-extrabold text-[#64748B] uppercase tracking-wider whitespace-nowrap">

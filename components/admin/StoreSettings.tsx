@@ -14,7 +14,7 @@ import {
   Phone, MapPin, Receipt, Upload, RefreshCw,
   FileSignature, Building2, CheckCircle2, Crop,
   Navigation, Crosshair, ExternalLink, ShieldCheck, LocateFixed,
-  ClipboardPaste, Check, Loader2, CreditCard
+  ClipboardPaste, Check, Loader2, CreditCard, CalendarCheck2
 } from "lucide-react";
 import { saveShopGeofence, parseCoordinatesInput, metersBetween } from "@/lib/geofence";
 import { useProfile } from "@/lib/hooks/useProfile";
@@ -26,7 +26,8 @@ export function StoreSettings() {
   const { toast } = useToast();
   const { flags } = useProfile();
   const isSuperAdmin = !!flags?.isSuperAdmin;
-  const isTimesheetEnabled = isModuleEnabled("timesheet");
+  const isTimesheetInitial = isModuleEnabled("timesheet");
+  const [timesheetEnabled, setTimesheetEnabled] = useState<boolean>(isTimesheetInitial);
 
   const [name, setName] = useState(formatCafeName(business?.name || ""));
   const [logoUrl, setLogoUrl] = useState(() => {
@@ -162,8 +163,9 @@ export function StoreSettings() {
       setGeofenceLng(bLng);
       setGeofenceRadius(Number(bRadius) || 150);
       setGeofenceEnabled(bEnabled !== false);
+      setTimesheetEnabled(isModuleEnabled("timesheet"));
     }
-  }, [business?.id, business?.logo_url, (business as any)?.signature_url, (business as any)?.upi_id, (business as any)?.enabled_modules?.upi_id]);
+  }, [business?.id, business?.logo_url, (business as any)?.signature_url, (business as any)?.upi_id, (business as any)?.enabled_modules]);
 
   // Cropper Modal States
   const [cropperState, setCropperState] = useState<{
@@ -365,6 +367,7 @@ export function StoreSettings() {
           },
           body: JSON.stringify({
             businessId: business.id,
+            timesheet_enabled: timesheetEnabled,
             geofence_lat: latNum,
             geofence_lng: lngNum,
             geofence_radius_meters: radiusNum,
@@ -400,6 +403,34 @@ export function StoreSettings() {
       console.warn("Error saving shop location directly:", e);
     } finally {
       setSavingLocation(false);
+    }
+  }
+
+  async function handleToggleTimesheet(enabled: boolean) {
+    setTimesheetEnabled(enabled);
+    if (!business?.id) return;
+    try {
+      const headers = await getAuthHeaders();
+      const res = await fetch("/api/business/profile", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          businessId: business.id,
+          timesheet_enabled: enabled,
+        }),
+      });
+      if (res.ok) {
+        await refreshBusiness();
+        toast({
+          title: enabled ? "Timesheet Enabled! ⏰" : "Timesheet Disabled",
+          description: enabled
+            ? "Timesheet entries are now visible in the sidebar, and GPS attendance tracking is active."
+            : "Timesheet entries have been hidden from the sidebar.",
+          variant: "success",
+        });
+      }
+    } catch (e) {
+      console.warn("Toggle timesheet error:", e);
     }
   }
 
@@ -571,6 +602,7 @@ export function StoreSettings() {
         phone: phone.trim(),
         gstin: gstin.trim(),
         upi_id: upiId.trim(),
+        timesheet_enabled: Boolean(timesheetEnabled),
         geofence_lat: numLat,
         geofence_lng: numLng,
         geofence_radius_meters: numRadius,
@@ -631,7 +663,7 @@ export function StoreSettings() {
       await refreshBusiness();
       toast({
         title: "Store Profile Updated! 🎉",
-        description: isTimesheetEnabled
+        description: timesheetEnabled
           ? "Logo, signature, address, and timesheet location saved successfully"
           : "Logo, signature, and address saved successfully",
         variant: "success",
@@ -946,9 +978,8 @@ export function StoreSettings() {
               </div>
             </div>
 
-            {/* 4. Store Physical Location & Attendance Geofence (Only enabled when Timesheet module is enabled by Super Admin) */}
-            {isTimesheetEnabled && (
-              <div className="p-5 rounded-2xl bg-sky-50/50 border border-sky-100/90 space-y-5">
+            {/* 4. Store Physical Location & Attendance Geofence */}
+            <div className="p-5 rounded-2xl bg-sky-50/50 border border-sky-100/90 space-y-5">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-xl bg-sky-100 text-sky-700 flex items-center justify-center font-bold shrink-0">
@@ -957,8 +988,11 @@ export function StoreSettings() {
                   <div>
                     <div className="flex items-center gap-2">
                       <h4 className="text-sm font-bold text-slate-900">Store Physical Location &amp; Geofence</h4>
-                      <span className="text-[10px] font-bold bg-sky-100 text-sky-800 px-2 py-0.5 rounded-md flex items-center gap-1">
-                        <LocateFixed className="w-3 h-3 text-sky-600" /> Used for Timesheet
+                      <span className={cn(
+                        "text-[10px] font-bold px-2 py-0.5 rounded-md flex items-center gap-1",
+                        timesheetEnabled ? "bg-sky-100 text-sky-800" : "bg-slate-200 text-slate-600"
+                      )}>
+                        <LocateFixed className="w-3 h-3 text-sky-600" /> {timesheetEnabled ? "Timesheet Active" : "Timesheet Inactive"}
                       </span>
                     </div>
                     <p className="text-xs text-slate-500 mt-0.5">
@@ -967,59 +1001,102 @@ export function StoreSettings() {
                   </div>
                 </div>
 
-                {/* Action Buttons: Detect GPS & Save Location */}
-                <div className="flex flex-wrap items-center gap-2 shrink-0">
-                  <Button
-                    type="button"
-                    onClick={handleDetectShopLocation}
-                    disabled={detectingLocation || savingLocation}
-                    className="h-9 px-3.5 bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold rounded-xl shadow-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-60"
-                  >
-                    {detectingLocation ? (
-                      <>
-                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                        <span>Detecting GPS...</span>
-                      </>
-                    ) : (
-                      <>
-                        <Crosshair className="w-3.5 h-3.5" />
-                        <span>Get Current Location</span>
-                      </>
-                    )}
-                  </Button>
-
-                  <Button
-                    type="button"
-                    onClick={() => {
-                      const numLat = Number(geofenceLat);
-                      const numLng = Number(geofenceLng);
-                      if (isNaN(numLat) || isNaN(numLng)) {
-                        toast({
-                          title: "Invalid coordinates",
-                          description: "Please enter valid numeric latitude and longitude",
-                          variant: "error"
-                        });
-                        return;
-                      }
-                      saveLocationDirectly(numLat, numLng, Number(geofenceRadius) || 150, geofenceEnabled);
-                    }}
-                    disabled={savingLocation || detectingLocation}
-                    className="h-9 px-3.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-60"
-                  >
-                    {savingLocation ? (
-                      <>
-                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                        <span>Saving...</span>
-                      </>
-                    ) : (
-                      <>
-                        <Save className="w-3.5 h-3.5" />
-                        <span>Save Location</span>
-                      </>
-                    )}
-                  </Button>
+                {/* Master Timesheet Module Toggle */}
+                <div className="flex items-center gap-3 shrink-0">
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={timesheetEnabled}
+                      onChange={(e) => handleToggleTimesheet(e.target.checked)}
+                      className="sr-only peer"
+                    />
+                    <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-sky-600"></div>
+                    <span className="ml-2.5 text-xs font-bold text-slate-700 select-none">
+                      {timesheetEnabled ? "Timesheet Enabled" : "Turn On Timesheet"}
+                    </span>
+                  </label>
                 </div>
               </div>
+
+              {!timesheetEnabled ? (
+                <div className="p-4 bg-white/90 rounded-xl border border-dashed border-sky-200 text-center space-y-2">
+                  <div className="w-8 h-8 rounded-full bg-sky-50 text-sky-600 mx-auto flex items-center justify-center">
+                    <CalendarCheck2 className="w-4 h-4" />
+                  </div>
+                  <p className="text-xs text-slate-700 font-bold">
+                    Timesheet Attendance is currently turned off for this store
+                  </p>
+                  <p className="text-[11px] text-slate-500 max-w-md mx-auto">
+                    Turn on the switch above to display the Timesheet entries in the B2B sidebar, enable the timesheet attendance page, and configure your shop&apos;s GPS geofence.
+                  </p>
+                  <Button
+                    type="button"
+                    onClick={() => handleToggleTimesheet(true)}
+                    className="h-8 px-4 bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold rounded-lg shadow-xs cursor-pointer inline-flex items-center gap-1.5"
+                  >
+                    <CalendarCheck2 className="w-3.5 h-3.5" />
+                    <span>Turn On Timesheet Now</span>
+                  </Button>
+                </div>
+              ) : (
+                <>
+                  {/* Action Buttons: Detect GPS & Save Location */}
+                  <div className="flex flex-wrap items-center justify-between gap-2 p-3 bg-white/70 rounded-xl border border-sky-100">
+                    <div className="text-xs text-slate-600 font-medium">
+                      GPS Coordinates: <strong className="text-slate-800">{geofenceLat && geofenceLng ? `${Number(geofenceLat).toFixed(4)}, ${Number(geofenceLng).toFixed(4)}` : "Not detected"}</strong> (Radius: <strong className="text-slate-800">{geofenceRadius}m</strong>)
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Button
+                        type="button"
+                        onClick={handleDetectShopLocation}
+                        disabled={detectingLocation || savingLocation}
+                        className="h-8 px-3 bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold rounded-lg shadow-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-60"
+                      >
+                        {detectingLocation ? (
+                          <>
+                            <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                            <span>Detecting GPS...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Crosshair className="w-3.5 h-3.5" />
+                            <span>Get Current Location</span>
+                          </>
+                        )}
+                      </Button>
+
+                      <Button
+                        type="button"
+                        onClick={() => {
+                          const numLat = Number(geofenceLat);
+                          const numLng = Number(geofenceLng);
+                          if (isNaN(numLat) || isNaN(numLng)) {
+                            toast({
+                              title: "Invalid coordinates",
+                              description: "Please enter valid numeric latitude and longitude",
+                              variant: "error"
+                            });
+                            return;
+                          }
+                          saveLocationDirectly(numLat, numLng, Number(geofenceRadius) || 150, geofenceEnabled);
+                        }}
+                        disabled={savingLocation || detectingLocation}
+                        className="h-8 px-3 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg shadow-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-60"
+                      >
+                        {savingLocation ? (
+                          <>
+                            <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                            <span>Saving...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Save className="w-3.5 h-3.5" />
+                            <span>Save Location</span>
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  </div>
 
               {/* Quick Paste Bar for Google Maps URLs or Lat, Lng */}
               <div className="p-3 bg-white/90 rounded-xl border border-sky-200/70 space-y-2">
@@ -1248,8 +1325,9 @@ export function StoreSettings() {
                   </a>
                 )}
               </div>
-            </div>
+            </>
           )}
+        </div>
 
             {/* Action Bar */}
             <div className="pt-4 border-t border-zinc-100 flex items-center justify-end gap-3">

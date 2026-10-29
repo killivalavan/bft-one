@@ -119,9 +119,9 @@ export default function Navbar({
       ...(isAdmin
         ? [
           ...(isModuleEnabled("invoices") ? [{ href: "/invoices", label: "Invoices", icon: FileText }] : []),
-          { href: "/admin/fill-timesheet", label: "Manual Timesheet Entry", icon: CalendarCheck2 }
+          ...(isModuleEnabled("timesheet") ? [{ href: "/admin/fill-timesheet", label: "Manual Timesheet Entry", icon: CalendarCheck2 }] : [])
         ]
-        : []),
+        : (isModuleEnabled("timesheet") ? [{ href: "/timesheet", label: "Timesheets", icon: CalendarCheck2 }] : [])),
       ...(isAdmin || isModuleEnabled("sales")
         ? [{ href: "/daily-sales", label: "Daily Sales", icon: TrendingUp }]
         : []),

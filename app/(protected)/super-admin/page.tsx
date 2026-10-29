@@ -1307,8 +1307,8 @@ export default function SuperAdminPage() {
 
         {/* VIEW 1: TABLE VIEW */}
         {viewMode === "table" ? (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
+          <div className="table-scroll-container">
+            <table className="w-full text-left border-collapse min-w-[920px]">
               <thead>
                 <tr className="bg-[#EFF6FF] text-[#1E3A8A] text-[11px] uppercase tracking-wider font-bold border-b border-[#DBEAFE]">
                   <th className="py-3.5 px-6">Store &amp; Subdomain</th>

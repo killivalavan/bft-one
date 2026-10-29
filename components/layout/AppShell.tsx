@@ -18,17 +18,19 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const { business, status, refreshBusiness } = useTenant();
   const { unreadCount } = useUnreadNotificationsCount();
 
-  // Always OPEN by default, user can toggle if required
+  // Responsive initial state: on tablet/laptop (< 1280px), default to collapsed (64px icon rail)
+  // On desktop (>= 1280px), default to open. Respects user manual preference.
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(() => {
     if (typeof window !== "undefined") {
-      // Clear legacy localStorage so stale state from previous runs does not keep sidebar closed
       try {
         localStorage.removeItem("bftone_admin_sidebar_collapsed");
       } catch {}
       const saved = sessionStorage.getItem("bftone_admin_sidebar_collapsed");
       if (saved !== null) return saved === "true";
+      // Auto-collapse on tablet / compact laptop (< 1280px)
+      return window.innerWidth < 1280;
     }
-    return false; // Always open by default!
+    return false;
   });
 
   const handleToggleSidebar = () => {
@@ -40,6 +42,19 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       return next;
     });
   };
+
+  // Synchronize sidebar state on window resize if no manual override is set
+  useEffect(() => {
+    const handleResize = () => {
+      if (typeof window === "undefined") return;
+      const saved = sessionStorage.getItem("bftone_admin_sidebar_collapsed");
+      if (saved === null) {
+        setIsSidebarCollapsed(window.innerWidth < 1280);
+      }
+    };
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
 
   // Keyboard shortcut Ctrl+B / Cmd+B to toggle sidebar
   useEffect(() => {
@@ -135,7 +150,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   if (showSidebar) {
     return (
-      <div className={cn("min-h-screen flex bg-[#0B132B]", isBillingPage && "h-screen max-h-screen overflow-hidden")}>
+      <div
+        className={cn("group min-h-screen flex bg-[#0B132B]", isBillingPage && "h-screen max-h-screen overflow-hidden")}
+        data-sidebar-collapsed={isSidebarCollapsed}
+      >
         {/* Full-Height Left Sidebar on Desktop & Off-Canvas Drawer on Mobile */}
         <AdminSidebar
           isCollapsed={isSidebarCollapsed}
@@ -197,10 +215,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </header>
           )}
           <main className={cn(
-            "flex-1 min-w-0",
+            "flex-1 min-w-0 overflow-x-clip",
             isBillingPage
               ? "p-0 h-full overflow-hidden flex flex-col"
-              : "px-3 sm:px-6 lg:px-8 py-4 sm:py-6"
+              : "px-2.5 sm:px-4 md:px-6 lg:px-8 py-3 sm:py-5"
           )}>
             {children}
           </main>

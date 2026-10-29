@@ -1419,8 +1419,8 @@ function UserAccordionRow({
                       </p>
                     </div>
                   ) : (
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-left text-xs">
+                    <div className="table-scroll-container">
+                      <table className="w-full text-left text-xs min-w-[540px]">
                         <thead>
                           <tr className="bg-zinc-50/50 border-b border-zinc-100 text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
                             <th className="px-3.5 py-2">Effective Date</th>

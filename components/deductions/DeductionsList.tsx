@@ -255,7 +255,7 @@ export function DeductionsList() {
                         {isExpanded && (
                             <div className="border-t border-zinc-100 bg-white px-5 py-4 space-y-4">
                                 {/* Summary Chips */}
-                                <div className="grid grid-cols-3 gap-2">
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                                     {(() => {
                                         const allEmployeeRecords = deductions.filter(r => r.user_email === email);
                                         const refDate = currentMonth || new Date();

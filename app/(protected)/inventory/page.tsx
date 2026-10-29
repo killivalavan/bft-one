@@ -874,7 +874,7 @@ export default function InventoryHubPage() {
       {activeTab === "overview" && (
         <div className="space-y-6 animate-in fade-in duration-300">
           {/* KPI Stat Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4">
             <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Inventory Value</span>
@@ -1084,8 +1084,8 @@ export default function InventoryHubPage() {
 
           {/* Items Table */}
           <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
+            <div className="table-scroll-container">
+              <table className="w-full min-w-[700px] text-left text-xs">
                 <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold uppercase tracking-wider text-[10px]">
                   <tr>
                     <th className="py-3.5 px-4">Item & SKU</th>
@@ -1450,7 +1450,8 @@ export default function InventoryHubPage() {
           </div>
 
           <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
-            <table className="w-full text-left text-xs">
+            <div className="table-scroll-container">
+              <table className="w-full min-w-[650px] text-left text-xs">
               <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold uppercase tracking-wider text-[10px]">
                 <tr>
                   <th className="py-3.5 px-4">Date & Time</th>
@@ -1488,6 +1489,7 @@ export default function InventoryHubPage() {
                 ))}
               </tbody>
             </table>
+            </div>
           </div>
         </div>
       )}
@@ -1512,8 +1514,8 @@ export default function InventoryHubPage() {
             </button>
           </div>
 
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
+          <div className="table-scroll-container">
+            <table className="w-full min-w-[550px] text-left text-xs">
               <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold uppercase tracking-wider text-[10px]">
                 <tr>
                   <th className="py-3 px-4">Ingredient</th>
@@ -1577,7 +1579,8 @@ export default function InventoryHubPage() {
             <p className="text-xs text-slate-500">Every single transaction, sale, waste, and audit adjustment event.</p>
           </div>
 
-          <table className="w-full text-left text-xs">
+          <div className="table-scroll-container">
+            <table className="w-full min-w-[650px] text-left text-xs">
             <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold uppercase tracking-wider text-[10px]">
               <tr>
                 <th className="py-3.5 px-4">Timestamp</th>
@@ -1622,6 +1625,7 @@ export default function InventoryHubPage() {
               ))}
             </tbody>
           </table>
+          </div>
         </div>
       )}
 

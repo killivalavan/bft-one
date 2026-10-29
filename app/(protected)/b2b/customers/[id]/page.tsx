@@ -422,10 +422,10 @@ export default function ClientLedgerDedicatedPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC]">
-      {/* Top Navigation Bar */}
-      <div className="bg-white border-b border-[#E2E8F0] sticky top-0 z-20 shadow-2xs">
-        <div className="max-w-6xl mx-auto px-3.5 sm:px-4 py-2.5 sm:py-3.5 space-y-2.5 sm:space-y-0 sm:flex sm:items-center sm:justify-between sm:gap-3">
+    <div className="w-full max-w-6xl group-data-[sidebar-collapsed=true]:max-w-none mx-auto space-y-6">
+      {/* Top Header Card - docks cleanly below AppShell mobile header on mobile */}
+      <div className="sticky top-14 md:top-0 z-20 w-full px-1 sm:px-2 md:px-0 bg-[#F8FAFC] pt-1.5 sm:pt-2 md:pt-3 pb-2.5 sm:pb-3 transition-all">
+        <div className="w-full px-3.5 sm:px-5 py-3 sm:py-3.5 flex flex-col md:flex-row md:items-center md:justify-between gap-3 sm:gap-4 bg-white rounded-3xl border border-[#E2E8F0] shadow-xs">
           <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
             <button
               type="button"
@@ -456,7 +456,7 @@ export default function ClientLedgerDedicatedPage() {
           </div>
 
           {/* Action CTAs */}
-          <div className="grid grid-cols-3 gap-1.5 w-full sm:w-auto sm:flex sm:items-center sm:gap-2">
+          <div className="grid grid-cols-3 gap-1.5 w-full md:w-auto md:flex md:items-center md:gap-2 shrink-0">
             <button
               type="button"
               onClick={handleExportStatementPdf}
@@ -494,10 +494,10 @@ export default function ClientLedgerDedicatedPage() {
         </div>
       </div>
 
-      <div className="max-w-6xl mx-auto px-3.5 sm:px-4 py-4 sm:py-6 space-y-4 sm:space-y-5">
+      <div className="w-full px-1 sm:px-2 md:px-0 pt-1 pb-6 space-y-5 sm:space-y-6">
         {/* Client Identity & Contact Card */}
         {client && (client.phone || client.address) && (
-          <div className="bg-white rounded-2xl sm:rounded-3xl p-3.5 sm:p-5 border border-slate-200 shadow-2xs space-y-2.5 sm:space-y-0 sm:flex sm:items-center sm:justify-between sm:gap-3">
+          <div className="bg-white rounded-3xl p-3.5 sm:p-5 border border-slate-200 shadow-xs space-y-2.5 sm:space-y-0 sm:flex sm:items-center sm:justify-between sm:gap-3">
             <div className="flex items-start sm:items-center gap-3 min-w-0">
               <div className="w-10 h-10 rounded-2xl bg-blue-50 border border-blue-100 text-blue-600 flex items-center justify-center font-bold shrink-0">
                 <Building2 size={20} />
@@ -714,8 +714,8 @@ export default function ClientLedgerDedicatedPage() {
         </div>
 
         {/* 4 Financial Stat Cards */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4">
-          <div className="p-3 sm:p-4 rounded-2xl sm:rounded-3xl bg-white border border-[#E2E8F0] shadow-2xs flex flex-col justify-between">
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-2.5 sm:gap-4">
+          <div className="p-3.5 sm:p-4 rounded-3xl bg-white border border-[#E2E8F0] shadow-xs flex flex-col justify-between">
             <div>
               <span className="text-[10px] sm:text-[11px] font-bold text-slate-400 uppercase tracking-wider block truncate">
                 <span className="sm:hidden">Billed</span>
@@ -734,7 +734,7 @@ export default function ClientLedgerDedicatedPage() {
             </p>
           </div>
 
-          <div className="p-3 sm:p-4 rounded-2xl sm:rounded-3xl bg-emerald-50/70 border border-emerald-200/80 shadow-2xs flex flex-col justify-between">
+          <div className="p-3.5 sm:p-4 rounded-3xl bg-emerald-50/70 border border-emerald-200/80 shadow-xs flex flex-col justify-between">
             <div>
               <span className="text-[10px] sm:text-[11px] font-bold text-emerald-800 uppercase tracking-wider block truncate">
                 <span className="sm:hidden">Settled</span>
@@ -749,7 +749,7 @@ export default function ClientLedgerDedicatedPage() {
             </p>
           </div>
 
-          <div className="p-3 sm:p-4 rounded-2xl sm:rounded-3xl bg-rose-50/70 border border-rose-200/80 shadow-2xs flex flex-col justify-between">
+          <div className="p-3.5 sm:p-4 rounded-3xl bg-rose-50/70 border border-rose-200/80 shadow-xs flex flex-col justify-between">
             <div>
               <span className="text-[10px] sm:text-[11px] font-bold text-rose-800 uppercase tracking-wider block truncate">
                 <span className="sm:hidden">Outstanding</span>
@@ -769,7 +769,7 @@ export default function ClientLedgerDedicatedPage() {
             </p>
           </div>
 
-          <div className="p-3 sm:p-4 rounded-2xl sm:rounded-3xl bg-blue-50/70 border border-blue-200/80 shadow-2xs flex flex-col justify-between">
+          <div className="p-3.5 sm:p-4 rounded-3xl bg-blue-50/70 border border-blue-200/80 shadow-xs flex flex-col justify-between">
             <div>
               <span className="text-[10px] sm:text-[11px] font-bold text-blue-800 uppercase tracking-wider block truncate">
                 <span className="sm:hidden">Activity</span>
@@ -786,7 +786,7 @@ export default function ClientLedgerDedicatedPage() {
         </div>
 
         {/* Chronological Statement Slips List */}
-        <div className="bg-white rounded-2xl sm:rounded-3xl border border-[#E2E8F0] shadow-xs overflow-hidden">
+        <div className="bg-white rounded-3xl border border-[#E2E8F0] shadow-xs overflow-hidden">
           <div className="p-3.5 sm:p-5 border-b border-slate-100 flex items-center justify-between gap-2">
             <div>
               <h3 className="text-sm sm:text-base font-extrabold text-[#0F172A]">
@@ -810,8 +810,8 @@ export default function ClientLedgerDedicatedPage() {
           ) : (
             <>
               {/* Desktop Table View (>= md) */}
-              <div className="hidden md:block overflow-x-auto">
-                <table className="w-full text-left text-xs">
+              <div className="hidden md:block table-scroll-container">
+                <table className="w-full min-w-[640px] text-left text-xs">
                   <thead>
                     <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase tracking-wider text-[10px] font-extrabold">
                       <th className="py-3 px-4">Date &amp; Slip Ref</th>

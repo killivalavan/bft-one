@@ -144,7 +144,7 @@ export default function Home() {
         colorTheme: "navy" as const,
         description: "Manage users, permissions & store settings."
       },
-      {
+      ...(isModuleEnabled("timesheet") ? [{
         label: "Manual Timesheet Entry",
         href: "/admin/fill-timesheet",
         icon: CalendarPlus,
@@ -152,7 +152,7 @@ export default function Home() {
         badge: "Admin Only",
         colorTheme: "purple" as const,
         description: "Bulk update staff attendance & logs."
-      }
+      }] : [])
     ] : []),
     ...(userEmail && !isAdmin ? [{
       label: "My Salary",
@@ -212,7 +212,7 @@ export default function Home() {
       colorTheme: "blue" as const,
       description: "View team leave schedules & holidays."
     },
-    ...(!isAdmin ? [{
+    ...(!isAdmin && isModuleEnabled("timesheet") ? [{
       label: "Timesheet",
       href: "/timesheet",
       icon: CalendarCheck2,

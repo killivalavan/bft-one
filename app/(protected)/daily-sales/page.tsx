@@ -718,7 +718,7 @@ export default function DailySalesPage() {
         {/* ========================================================================= */}
         {/* 2. EXECUTIVE KPI SUMMARY CARDS */}
         {/* ========================================================================= */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4">
           
           {/* Total Revenue */}
           <div className="rounded-2xl bg-white p-5 border border-slate-200/80 shadow-xs hover:border-slate-300 transition">
@@ -1171,8 +1171,8 @@ export default function DailySalesPage() {
               </Link>
             </div>
           ) : (
-            <div className="overflow-x-auto rounded-xl border border-slate-200 shadow-xs">
-              <table className="w-full text-left border-collapse text-xs sm:text-sm">
+            <div className="table-scroll-container rounded-xl border border-slate-200 shadow-xs">
+              <table className="w-full text-left border-collapse text-xs sm:text-sm min-w-[640px]">
                 <thead>
                   <tr className="bg-slate-50 text-slate-600 font-semibold text-[11px] border-b border-slate-200 uppercase tracking-wider">
                     <th className="py-3 px-4 text-center w-12"># Rank</th>

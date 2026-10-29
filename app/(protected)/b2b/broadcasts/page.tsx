@@ -353,28 +353,28 @@ export default function BakerBroadcastsPage() {
   }, [broadcasts, historyFilter]);
 
   return (
-    <div className="space-y-6">
-      {/* Top Header */}
-      <div className="bg-white border-b border-[#E2E8F0] sticky top-14 md:top-0 z-20 shadow-2xs">
-        <div className="max-w-6xl mx-auto px-4 py-3 sm:py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
+    <div className="w-full max-w-6xl group-data-[sidebar-collapsed=true]:max-w-none mx-auto space-y-6">
+      {/* Top Header Card - docks cleanly below AppShell mobile header on mobile */}
+      <div className="sticky top-14 md:top-0 z-20 w-full px-1 sm:px-2 md:px-0 bg-[#F8FAFC] pt-1.5 sm:pt-2 md:pt-3 pb-2.5 sm:pb-3 transition-all">
+        <div className="w-full px-3.5 sm:px-5 py-3 sm:py-3.5 flex flex-col md:flex-row md:items-center md:justify-between gap-3 sm:gap-4 bg-white rounded-3xl border border-[#E2E8F0] shadow-xs">
           <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
             <Link
               href="/b2b"
-              className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center font-bold transition-colors shrink-0"
+              className="w-8.5 h-8.5 sm:w-9 sm:h-9 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 flex items-center justify-center font-bold transition-colors shrink-0"
               title="Back to Dispatch Hub"
             >
-              <ArrowLeft size={18} />
+              <ArrowLeft size={16} />
             </Link>
             <div className="min-w-0">
-              <div className="flex items-center gap-2">
-                <h1 className="text-base sm:text-xl font-extrabold text-[#0F172A] tracking-tight truncate">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h1 className="text-sm sm:text-xl font-extrabold text-[#0F172A] tracking-tight">
                   Client Broadcasts &amp; Alerts
                 </h1>
                 <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-blue-100 text-blue-800 border border-blue-200 shrink-0">
                   SeyalPro B2B
                 </span>
               </div>
-              <p className="text-[11px] sm:text-xs text-[#64748B] truncate">
+              <p className="text-[11px] sm:text-xs text-[#64748B] hidden sm:block mt-0.5">
                 Notify connected SeyalPro client stores about surplus stock, delays, and fresh batches
               </p>
             </div>
@@ -397,10 +397,10 @@ export default function BakerBroadcastsPage() {
         </div>
       </div>
 
-      <div className="max-w-6xl mx-auto px-4 py-6 space-y-6">
+      <div className="w-full px-1 sm:px-2 md:px-0 pt-1 pb-6 space-y-5 sm:space-y-6">
         {/* Quick Operational Metrics */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
-          <div className="p-4 rounded-2xl bg-white border border-[#E2E8F0] shadow-2xs flex items-center justify-between">
+          <div className="p-4 rounded-3xl bg-white border border-[#E2E8F0] shadow-xs flex items-center justify-between">
             <div>
               <p className="text-[11px] font-bold text-[#64748B] uppercase tracking-wider">Client Shops</p>
               <h4 className="text-2xl font-black text-[#0F172A] mt-0.5">{stores.length}</h4>
@@ -410,7 +410,7 @@ export default function BakerBroadcastsPage() {
             </div>
           </div>
 
-          <div className="p-4 rounded-2xl bg-white border border-[#E2E8F0] shadow-2xs flex items-center justify-between">
+          <div className="p-4 rounded-3xl bg-white border border-[#E2E8F0] shadow-xs flex items-center justify-between">
             <div>
               <p className="text-[11px] font-bold text-[#64748B] uppercase tracking-wider">Active Advisories</p>
               <h4 className="text-2xl font-black text-rose-600 mt-0.5">
@@ -422,7 +422,7 @@ export default function BakerBroadcastsPage() {
             </div>
           </div>
 
-          <div className="p-4 rounded-2xl bg-white border border-[#E2E8F0] shadow-2xs flex items-center justify-between">
+          <div className="p-4 rounded-3xl bg-white border border-[#E2E8F0] shadow-xs flex items-center justify-between">
             <div>
               <p className="text-[11px] font-bold text-[#64748B] uppercase tracking-wider">Total Dispatched</p>
               <h4 className="text-2xl font-black text-emerald-600 mt-0.5">{broadcasts.length}</h4>

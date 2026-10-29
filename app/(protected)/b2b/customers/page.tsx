@@ -717,26 +717,24 @@ export default function BakerCustomersPage() {
   ).length;
 
   return (
-    <div className="space-y-6">
-      {/* ==================================================== */}
-      {/* TOP HEADER WITH SEARCH & EXPORT ACTION               */}
-      {/* ==================================================== */}
-      <div className="bg-white border-b border-[#E2E8F0] sticky top-14 md:top-0 z-20 shadow-2xs">
-        <div className="max-w-6xl mx-auto px-4 py-3 sm:py-3.5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+    <div className="w-full max-w-6xl group-data-[sidebar-collapsed=true]:max-w-none mx-auto space-y-6">
+      {/* Top Header Card - docks cleanly below AppShell mobile header on mobile */}
+      <div className="sticky top-14 md:top-0 z-20 w-full px-1 sm:px-2 md:px-0 bg-[#F8FAFC] pt-1.5 sm:pt-2 md:pt-3 pb-2.5 sm:pb-3 transition-all">
+        <div className="w-full px-3.5 sm:px-5 py-3 sm:py-3.5 flex flex-col md:flex-row md:items-center md:justify-between gap-3 sm:gap-4 bg-white rounded-3xl border border-[#E2E8F0] shadow-xs">
           <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
             <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-blue-600/10 border border-blue-500/20 text-blue-700 flex items-center justify-center font-bold text-lg sm:text-xl shadow-2xs shrink-0">
               <Building2 size={20} />
             </div>
             <div className="min-w-0">
-              <div className="flex items-center gap-2 whitespace-nowrap">
-                <h1 className="text-sm sm:text-xl font-extrabold text-[#0F172A] tracking-tight whitespace-nowrap">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h1 className="text-sm sm:text-xl font-extrabold text-[#0F172A] tracking-tight">
                   Client Ledgers
                 </h1>
                 <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-blue-50 text-blue-700 border border-blue-200 shrink-0 whitespace-nowrap">
                   {totalClientsCount} Active {totalClientsCount === 1 ? "Client" : "Clients"}
                 </span>
               </div>
-              <p className="text-[11px] sm:text-xs text-[#64748B] hidden sm:block">
+              <p className="text-[11px] sm:text-xs text-[#64748B] hidden sm:block mt-0.5">
                 View chronological deliveries, return credits, and export combined statements
               </p>
             </div>
@@ -774,13 +772,13 @@ export default function BakerCustomersPage() {
         </div>
       </div>
 
-      <div className="max-w-6xl mx-auto px-4 py-6 space-y-6">
+      <div className="w-full px-1 sm:px-2 md:px-0 pt-1 pb-6 space-y-5 sm:space-y-6">
         {/* ==================================================== */}
         {/* 1. OVERVIEW SUMMARY CARDS (4 METRIC CARDS)           */}
         {/* ==================================================== */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4">
           {/* Card 1: Total Clients */}
-          <div className="p-4 rounded-2xl bg-white border border-[#E2E8F0] shadow-2xs flex items-center justify-between">
+          <div className="p-4 rounded-3xl bg-white border border-[#E2E8F0] shadow-xs flex items-center justify-between">
             <div>
               <p className="text-[10px] sm:text-[11px] font-bold text-[#64748B] uppercase tracking-wider">Total Clients</p>
               <h3 className="text-xl sm:text-2xl font-black text-[#0F172A] mt-0.5">{totalClientsCount}</h3>
@@ -792,7 +790,7 @@ export default function BakerCustomersPage() {
           </div>
 
           {/* Card 2: Lifetime Billed Sales */}
-          <div className="p-4 rounded-2xl bg-white border border-[#E2E8F0] shadow-2xs flex items-center justify-between">
+          <div className="p-4 rounded-3xl bg-white border border-[#E2E8F0] shadow-xs flex items-center justify-between">
             <div>
               <p className="text-[10px] sm:text-[11px] font-bold text-[#64748B] uppercase tracking-wider">Lifetime Billed</p>
               <h3 className="text-xl sm:text-2xl font-black text-[#0F172A] mt-0.5">₹{totalBilledAll.toLocaleString("en-IN")}</h3>
@@ -804,7 +802,7 @@ export default function BakerCustomersPage() {
           </div>
 
           {/* Card 3: Total Outstanding Balance */}
-          <div className="p-4 rounded-2xl bg-white border border-[#E2E8F0] shadow-2xs flex items-center justify-between">
+          <div className="p-4 rounded-3xl bg-white border border-[#E2E8F0] shadow-xs flex items-center justify-between">
             <div>
               <p className="text-[10px] sm:text-[11px] font-bold text-[#64748B] uppercase tracking-wider">Outstanding Balance</p>
               <h3 className={cn(
@@ -826,7 +824,7 @@ export default function BakerCustomersPage() {
           </div>
 
           {/* Card 4: Pending Settlements */}
-          <div className="p-4 rounded-2xl bg-white border border-[#E2E8F0] shadow-2xs flex items-center justify-between">
+          <div className="p-4 rounded-3xl bg-white border border-[#E2E8F0] shadow-xs flex items-center justify-between">
             <div>
               <p className="text-[10px] sm:text-[11px] font-bold text-[#64748B] uppercase tracking-wider">Pending Settlements</p>
               <h3 className="text-xl sm:text-2xl font-black text-amber-600 mt-0.5">{totalPendingSettlementsCount} Slips</h3>
@@ -841,7 +839,7 @@ export default function BakerCustomersPage() {
         {/* ==================================================== */}
         {/* SEARCH & STATUS FILTER BAR                           */}
         {/* ==================================================== */}
-        <div className="bg-white p-3.5 sm:p-4 rounded-2xl border border-[#E2E8F0] shadow-2xs space-y-3">
+        <div className="bg-white p-3.5 sm:p-4 rounded-3xl border border-[#E2E8F0] shadow-xs space-y-3">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             {/* Status Filter Pills */}
             <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-xl border border-slate-200 shrink-0">
@@ -1030,10 +1028,10 @@ export default function BakerCustomersPage() {
             )}
           </div>
 
-          {/* Desktop Table View - 100% viewport width without horizontal scrolling */}
+          {/* Desktop Table View - fluid horizontal scrolling with minimum width protection */}
           <div className="hidden md:block bg-white rounded-3xl border border-[#E2E8F0] shadow-xs overflow-hidden">
-            <div className="w-full">
-              <table className="w-full text-left border-collapse table-fixed">
+            <div className="table-scroll-container">
+              <table className="w-full min-w-[660px] text-left border-collapse table-fixed">
                 <colgroup>
                   <col className="w-[30%]" />
                   <col className="w-[14%]" />

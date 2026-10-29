@@ -21,6 +21,7 @@ export async function POST(request: Request) {
       phone,
       gstin,
       upi_id,
+      timesheet_enabled,
       geofence_lat,
       geofence_lng,
       geofence_radius_meters,
@@ -58,17 +59,25 @@ export async function POST(request: Request) {
       updatePayload.gstin = gstin?.trim() || "";
     }
 
-    if (upi_id !== undefined) {
+    if (upi_id !== undefined || timesheet_enabled !== undefined) {
       const { data: currentBiz } = await supa
         .from("businesses")
         .select("enabled_modules")
         .eq("id", targetBizId)
         .maybeSingle();
 
-      updatePayload.enabled_modules = {
+      const nextModules: Record<string, any> = {
         ...(currentBiz?.enabled_modules || {}),
-        upi_id: upi_id?.trim() || "",
       };
+
+      if (upi_id !== undefined) {
+        nextModules.upi_id = upi_id?.trim() || "";
+      }
+      if (timesheet_enabled !== undefined) {
+        nextModules.timesheet = Boolean(timesheet_enabled);
+      }
+
+      updatePayload.enabled_modules = nextModules;
     }
 
     // SECURITY RULE: Store / Business name CANNOT be changed by regular clients/tenants.
