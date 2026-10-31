@@ -183,7 +183,15 @@ export async function GET(req: Request) {
         payments: paymentsRes.data || [],
         expenses,
         broadcasts: broadcastsRes.data || [],
-        stores: clientsRes.data || [],
+        // Match /api/b2b/clients shape: business_id = linked partner account (not the owner tenant)
+        stores: (clientsRes.data || []).map((c: any) => ({
+          id: c.id,
+          name: c.name,
+          phone: c.phone,
+          address: c.address,
+          business_id: c.linked_business_id || undefined,
+          created_at: c.created_at,
+        })),
       });
     }
 

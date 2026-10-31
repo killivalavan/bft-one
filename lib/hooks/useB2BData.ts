@@ -1,7 +1,9 @@
 "use client";
 
+import { useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getAuthHeaders } from "@/lib/auth/clientAuth";
+import { B2B_CUSTOMERS_UPDATED_EVENT } from "@/lib/services/b2bClients";
 
 export interface B2BWorkspaceData {
   invoices: any[];
@@ -15,6 +17,22 @@ export interface B2BWorkspaceData {
 
 export function useB2BWorkspace(bizId: string | undefined) {
   const isValidBizId = Boolean(bizId && bizId !== "default" && bizId.trim() !== "");
+  const queryClient = useQueryClient();
+
+  // Keep cached workspace stores in sync when clients are added/edited/removed,
+  // otherwise other pages render the stale cached list until a full refresh.
+  useEffect(() => {
+    if (!isValidBizId) return;
+    const handler = (e: any) => {
+      const clients = e?.detail?.clients;
+      if (!Array.isArray(clients)) return;
+      queryClient.setQueryData<B2BWorkspaceData>(["b2b", bizId, "workspace"], (old) =>
+        old ? { ...old, stores: clients } : old
+      );
+    };
+    window.addEventListener(B2B_CUSTOMERS_UPDATED_EVENT, handler);
+    return () => window.removeEventListener(B2B_CUSTOMERS_UPDATED_EVENT, handler);
+  }, [bizId, isValidBizId, queryClient]);
 
   return useQuery<B2BWorkspaceData>({
     queryKey: ["b2b", bizId, "workspace"],
