@@ -108,7 +108,10 @@ export async function generatePayslipPdf(data: PayslipData) {
     // Rows
     doc.setFont("helvetica", "normal");
     entries.forEach((e) => {
-        if (y > 280) { doc.addPage(); y = 20; }
+        // Wrap description so it never overlaps the Type column (starts at x=130)
+        const descLines: string[] = doc.splitTextToSize(e.reason, 75);
+        const lineH = 4;
+        if (y + (descLines.length - 1) * lineH > 280) { doc.addPage(); y = 20; }
 
         // Default flags
         let isNegative = false;
@@ -128,7 +131,7 @@ export async function generatePayslipPdf(data: PayslipData) {
 
         doc.setTextColor(0, 0, 0);
         doc.text(e.entry_date, 15, y);
-        doc.text(e.reason, 50, y);
+        doc.text(descLines, 50, y, { lineHeightFactor: 1.25 });
 
         if (isInfo) {
             doc.setTextColor(100, 116, 139); // Slate-500
@@ -144,7 +147,7 @@ export async function generatePayslipPdf(data: PayslipData) {
             doc.text(`+ Rs ${(e.amount_cents / 100).toFixed(2)}`, 180, y, { align: 'right' });
         }
 
-        y += 7;
+        y += 7 + (descLines.length - 1) * lineH;
         // Light separator
         doc.setDrawColor(240);
         doc.line(10, y - 4, 200, y - 4);

@@ -238,7 +238,8 @@ export default function FillTimesheetPage() {
 
             setMonthlyAdjustments(prev => {
                 const next = { ...prev };
-                if (!next[dateKey]) next[dateKey] = {};
+                // Copy the day object (don't mutate prev) — React StrictMode re-runs updaters, which duplicated entries
+                next[dateKey] = { ...(next[dateKey] || {}) };
                 if (!next[dateKey][userId]) next[dateKey][userId] = [];
                 next[dateKey][userId] = [...next[dateKey][userId], {
                     id: data?.id || crypto.randomUUID(),
@@ -271,6 +272,7 @@ export default function FillTimesheetPage() {
             setMonthlyAdjustments(prev => {
                 const next = { ...prev };
                 if (next[dateKey]?.[userId]) {
+                    next[dateKey] = { ...next[dateKey] };
                     next[dateKey][userId] = next[dateKey][userId].filter(item => item.id !== entryId);
                 }
                 return next;
