@@ -75,7 +75,7 @@ export default function HomeBakerDashboardPage() {
   const [invoices, setInvoices] = useState<InvoiceRecord[]>(() => {
     if (typeof window !== "undefined" && bizId && bizId !== "default") {
       try {
-        const stored = localStorage.getItem(`bftone_invoices_${bizId}`);
+        const stored = localStorage.getItem(`bftone_b2b_dispatches_${bizId}`) || localStorage.getItem(`bftone_invoices_${bizId}`);
         if (stored) return JSON.parse(stored);
       } catch {}
     }
@@ -123,7 +123,7 @@ export default function HomeBakerDashboardPage() {
   useEffect(() => {
     if (typeof window !== "undefined" && bizId && bizId !== "default") {
       try {
-        const storedInv = localStorage.getItem(`bftone_invoices_${bizId}`);
+        const storedInv = localStorage.getItem(`bftone_b2b_dispatches_${bizId}`) || localStorage.getItem(`bftone_invoices_${bizId}`);
         setInvoices(storedInv ? JSON.parse(storedInv) : []);
         const storedStores = localStorage.getItem(`bftone_customers_${bizId}`);
         setStores(storedStores ? JSON.parse(storedStores) : []);
@@ -156,36 +156,20 @@ export default function HomeBakerDashboardPage() {
     }
   }, [cloudData]);
 
-  // Fallback seeder strictly isolated to Royal Baker demo workspace only
-  useEffect(() => {
-    if (typeof window !== "undefined" && bizId === ROYAL_BAKER_BIZ_ID) {
-      const stored = localStorage.getItem(`bftone_invoices_${bizId}`);
-      const parsed = stored ? JSON.parse(stored) : [];
-      if (!Array.isArray(parsed) || parsed.length === 0) {
-        const seeded = seedRoyalBakerLocalStorage(bizId);
-        if (seeded) {
-          setInvoices(seeded.invoices);
-          setStores(seeded.stores);
-          setExpenses(seeded.expenses);
-        }
-      }
-    }
-  }, [bizId]);
-
-  // Safe Date Parser Helper
+  // Safe Date Parser Helper (Prioritizes business slip date over database creation timestamp)
   const parseRecordDate = (rec: { date?: string; createdAt?: string }): Date => {
-    if (rec.createdAt) {
-      const d = new Date(rec.createdAt);
-      if (!isNaN(d.getTime())) return d;
-    }
     if (rec.date) {
       const d = new Date(rec.date);
+      if (!isNaN(d.getTime())) return d;
+    }
+    if (rec.createdAt) {
+      const d = new Date(rec.createdAt);
       if (!isNaN(d.getTime())) return d;
     }
     return new Date();
   };
 
-  // 1. Synchronize Invoices, Stores & Expenses from Supabase & Remote Services
+  // 1. Synchronize Stores from Server & Remote Services
   useEffect(() => {
     // Fetch latest B2B clients from server
     if (bizId && bizId !== "default") {
@@ -203,28 +187,6 @@ export default function HomeBakerDashboardPage() {
       }
     };
     window.addEventListener(B2B_CUSTOMERS_UPDATED_EVENT, handleStoresUpdated);
-
-    if (business?.id) {
-      // Fetch live Expenses from Supabase
-      supabaseClient
-        .from("daily_expenses")
-        .select("*")
-        .eq("business_id", business.id)
-        .order("expense_date", { ascending: false })
-        .then(({ data }) => {
-          if (data && data.length > 0) {
-            const mapped: ExpenseRecord[] = (data as Array<Record<string, unknown>>).map((d) => ({
-              id: String(d.id || ""),
-              name: String(d.item_name || "Operating Expense"),
-              amount: ((Number(d.price_cents) || 0) * (Number(d.quantity) || 1)) / 100,
-              category: "Supplies & Operations",
-              date: d.expense_date ? String(d.expense_date) : format(new Date(), "MMM dd, yyyy"),
-              createdAt: d.created_at ? String(d.created_at) : undefined,
-            }));
-            setExpenses(mapped);
-          }
-        });
-    }
 
     return () => {
       window.removeEventListener(B2B_CUSTOMERS_UPDATED_EVENT, handleStoresUpdated);
@@ -353,12 +315,15 @@ export default function HomeBakerDashboardPage() {
       return acc + (Number.isFinite(val) ? val : 0);
     }, 0);
 
-  const pendingDues = currentInvoices
-    .filter((inv) => inv.status === "unpaid")
-    .reduce((acc, inv) => {
-      const val = Number(inv.totalAmount || 0);
-      return acc + (Number.isFinite(val) ? val : 0);
-    }, 0);
+  const pendingDues = Math.max(
+    0,
+    currentInvoices
+      .filter((inv) => inv.status === "unpaid")
+      .reduce((acc, inv) => {
+        const val = Number(inv.totalAmount || 0);
+        return acc + (Number.isFinite(val) ? val : 0);
+      }, 0)
+  );
 
   const collectionRate = grossSales > 0 ? Math.round(((Number.isFinite(collectedPayments) ? collectedPayments : 0) / grossSales) * 100) : 0;
 
@@ -432,8 +397,10 @@ export default function HomeBakerDashboardPage() {
       });
     });
 
-    // Find top product for each client
+    // Find top product and reconcile dues for each client
     Object.values(clientMap).forEach((c) => {
+      c.unpaid = Math.max(0, c.unpaid);
+      c.paid = Math.max(0, c.billed - c.unpaid);
       let maxQty = -1;
       let topP = "-";
       Object.entries(prodMap).forEach(([pName, pData]) => {

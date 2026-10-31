@@ -30,6 +30,7 @@ export default function BakerLayout({ children }: { children: React.ReactNode })
     if (typeof window !== "undefined" && workspaceData && activeBizId && activeBizId !== "default") {
       try {
         if (Array.isArray(workspaceData.invoices)) {
+          localStorage.setItem(`bftone_b2b_dispatches_${activeBizId}`, JSON.stringify(workspaceData.invoices));
           localStorage.setItem(`bftone_invoices_${activeBizId}`, JSON.stringify(workspaceData.invoices));
         }
         if (Array.isArray(workspaceData.products)) {

@@ -325,9 +325,13 @@ export default function ExpensesPage() {
     }
 
     async function fetchExpenses() {
+        if (!business?.id || business.id === "default") {
+            setListLoading(false);
+            return;
+        }
         setListLoading(true);
         const dateStr = format(date, "yyyy-MM-dd");
-        const bizId = business?.id || "default";
+        const bizId = business.id;
 
         // 1. Instant Warm Start from IndexedDB
         try {
@@ -341,12 +345,12 @@ export default function ExpensesPage() {
 
         // 2. Cloud Refresh if online
         try {
-            let query = supabaseClient
+            const { data, error } = await supabaseClient
                 .from("daily_expenses")
                 .select("*")
-                .eq("expense_date", dateStr);
-            if (business?.id) query = query.eq("business_id", business.id);
-            const { data, error } = await query.order("created_at", { ascending: true });
+                .eq("expense_date", dateStr)
+                .eq("business_id", bizId)
+                .order("created_at", { ascending: true });
 
             if (error) {
                 if (typeof navigator !== "undefined" && !navigator.onLine) {
@@ -381,7 +385,8 @@ export default function ExpensesPage() {
 
     async function fetchAllExpenses() {
         if (!isAdmin) return; // overview/price-watch data is admin-only
-        const bizId = business?.id || "default";
+        if (!business?.id || business.id === "default") return;
+        const bizId = business.id;
 
         try {
             const localExpenses = await getItemsByTenant<LocalDailyExpense>(STORES.daily_expenses, bizId);
@@ -392,11 +397,11 @@ export default function ExpensesPage() {
         } catch {}
 
         try {
-            let query = supabaseClient
+            const { data, error } = await supabaseClient
                 .from("daily_expenses")
-                .select("*");
-            if (business?.id) query = query.eq("business_id", business.id);
-            const { data, error } = await query.order("expense_date", { ascending: true });
+                .select("*")
+                .eq("business_id", bizId)
+                .order("expense_date", { ascending: true });
 
             if (!error) {
                 const rows = (data || []) as ExpenseRow[];
@@ -420,12 +425,14 @@ export default function ExpensesPage() {
 
     // Fixed Monthly Expenses (recurring master list, applies across all months)
     async function fetchMonthlyExpenses() {
+        if (!business?.id || business.id === "default") return;
+        const bizId = business.id;
+
         // 1. Fetch current staff salary structure from Users & Roles
-        let profQuery = supabaseClient
+        const { data: profs } = await supabaseClient
             .from("profiles")
-            .select("id, email, is_admin, base_salary_cents, fixed_allowance_cents");
-        if (business?.id) profQuery = profQuery.eq("business_id", business.id);
-        const { data: profs } = await profQuery;
+            .select("id, email, is_admin, base_salary_cents, fixed_allowance_cents")
+            .eq("business_id", bizId);
 
         let totalSalaryStruct = 0;
         let staffCount = 0;
@@ -439,11 +446,11 @@ export default function ExpensesPage() {
         setTotalSalaryStructureCents(totalSalaryStruct);
 
         // 2. Fetch fixed monthly expenses
-        let query = supabaseClient
+        const { data, error } = await supabaseClient
             .from("monthly_expenses")
-            .select("*");
-        if (business?.id) query = query.eq("business_id", business.id);
-        const { data, error } = await query.order("created_at", { ascending: true });
+            .select("*")
+            .eq("business_id", bizId)
+            .order("created_at", { ascending: true });
         if (!error) {
             let rows = (data || []) as MonthlyExpenseRow[];
 
@@ -695,11 +702,13 @@ export default function ExpensesPage() {
     }
 
     async function fetchPriceList() {
-        let query = supabaseClient
+        if (!business?.id || business.id === "default") return;
+        const bizId = business.id;
+        const { data, error } = await supabaseClient
             .from("expense_price_list")
-            .select("*");
-        if (business?.id) query = query.eq("business_id", business.id);
-        const { data, error } = await query.order("item_name", { ascending: true });
+            .select("*")
+            .eq("business_id", bizId)
+            .order("item_name", { ascending: true });
 
         if (!error) setPriceList((data || []) as FixedPriceItem[]);
     }

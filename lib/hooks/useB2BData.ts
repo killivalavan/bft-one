@@ -46,6 +46,9 @@ export function useB2BWorkspace(bizId: string | undefined) {
       };
     },
     enabled: isValidBizId,
+    staleTime: 5 * 60 * 1000,
+    gcTime: 30 * 60 * 1000,
+    refetchOnWindowFocus: false,
   });
 }
 
@@ -65,6 +68,9 @@ export function useB2BDispatches(bizId: string | undefined) {
       return data.dispatches || [];
     },
     enabled: isValidBizId,
+    staleTime: 5 * 60 * 1000,
+    gcTime: 30 * 60 * 1000,
+    refetchOnWindowFocus: false,
   });
 }
 
@@ -118,6 +124,9 @@ export function useB2BProducts(bizId: string | undefined) {
       return data.products || [];
     },
     enabled: isValidBizId,
+    staleTime: 5 * 60 * 1000,
+    gcTime: 30 * 60 * 1000,
+    refetchOnWindowFocus: false,
   });
 }
 

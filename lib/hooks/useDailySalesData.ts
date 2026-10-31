@@ -4,11 +4,12 @@ import { useQuery } from "@tanstack/react-query";
 import { supabaseClient } from "@/lib/supabaseClient";
 
 export function useDailySalesQuery(bizId: string | undefined, dateStr: string) {
-  const activeBizId = bizId || "default";
+  const isValidBizId = Boolean(bizId && bizId !== "default" && bizId.trim() !== "");
 
   return useQuery({
-    queryKey: ["daily_sales", activeBizId, dateStr],
+    queryKey: ["daily_sales", bizId, dateStr],
     queryFn: async () => {
+      if (!isValidBizId) return [];
       const dayStart = `${dateStr}T00:00:00.000Z`;
       const dayEnd = `${dateStr}T23:59:59.999Z`;
 
@@ -49,11 +50,8 @@ export function useDailySalesQuery(bizId: string | undefined, dateStr: string) {
         `)
         .gte("created_at", dayStart)
         .lte("created_at", dayEnd)
+        .eq("business_id", bizId!)
         .order("created_at", { ascending: false });
-
-      if (activeBizId && activeBizId !== "default") {
-        query = query.eq("business_id", activeBizId);
-      }
 
       const { data, error } = await query;
       if (error) {
@@ -61,6 +59,6 @@ export function useDailySalesQuery(bizId: string | undefined, dateStr: string) {
       }
       return data || [];
     },
-    enabled: Boolean(activeBizId && dateStr),
+    enabled: Boolean(isValidBizId && dateStr),
   });
 }

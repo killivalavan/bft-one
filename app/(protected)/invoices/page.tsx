@@ -217,7 +217,11 @@ export default function InvoicesPage() {
 
   // 1. Initial Load: Invoices from Supabase & Cloud API + Catalog + Customers
   useEffect(() => {
-    const bizId = business?.id || "default";
+    if (!business?.id || business.id === "default") {
+      setLoading(false);
+      return;
+    }
+    const bizId = business.id;
 
     // Load saved customers
     try {
@@ -229,7 +233,7 @@ export default function InvoicesPage() {
 
     // Load from local storage cache immediately (instant render)
     try {
-      const stored = localStorage.getItem(`bftone_invoices_${bizId}`);
+      const stored = localStorage.getItem(`bftone_pos_invoices_${bizId}`) || localStorage.getItem(`bftone_invoices_${bizId}`);
       if (stored) {
         setInvoices(JSON.parse(stored));
       }
@@ -267,7 +271,7 @@ export default function InvoicesPage() {
               createdAt: inv.created_at || inv.createdAt,
             }));
             setInvoices(mapped);
-            localStorage.setItem(`bftone_invoices_${bizId}`, JSON.stringify(mapped));
+            localStorage.setItem(`bftone_pos_invoices_${bizId}`, JSON.stringify(mapped));
           }
         }
       } catch (e) {
@@ -288,8 +292,7 @@ export default function InvoicesPage() {
     // Fetch product catalog for auto-complete dropdown
     (async () => {
       try {
-        let query = supabaseClient.from("products").select("id, name, price_cents").eq("active", true).order("name");
-        if (business?.id) query = query.eq("business_id", business.id);
+        let query = supabaseClient.from("products").select("id, name, price_cents").eq("active", true).eq("business_id", bizId).order("name");
         const { data: prods } = await query;
         if (prods && prods.length > 0) {
           setCatalog(prods.map(p => ({ id: p.id, name: p.name, price: p.price_cents / 100 })));
@@ -319,7 +322,7 @@ export default function InvoicesPage() {
     setInvoices(updated);
     const bizId = business?.id || "default";
     try {
-      localStorage.setItem(`bftone_invoices_${bizId}`, JSON.stringify(updated));
+      localStorage.setItem(`bftone_pos_invoices_${bizId}`, JSON.stringify(updated));
     } catch {}
 
     // Asynchronously push to authoritative Supabase cloud API

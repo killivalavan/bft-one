@@ -355,6 +355,7 @@ function RetailBillingView() {
       }
 
       // Step B: Cloud Refresh (if online)
+      if (!business?.id || business.id === "default") return;
       try {
         let catsQuery = supabaseClient.from("categories").select("*").order("name");
         if (business?.id) catsQuery = catsQuery.eq("business_id", business.id);

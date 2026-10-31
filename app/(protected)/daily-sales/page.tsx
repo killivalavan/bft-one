@@ -124,6 +124,11 @@ export default function DailySalesPage() {
   }, [dateStr, business?.id]);
 
   async function fetchDaySalesData(isManualRefresh = false) {
+    const bizId = business?.id;
+    if (!bizId || bizId === "default") {
+      setLoading(false);
+      return;
+    }
     if (isManualRefresh) setIsRefreshing(true);
     else setLoading(true);
 

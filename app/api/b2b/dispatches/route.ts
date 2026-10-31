@@ -80,9 +80,20 @@ export async function POST(req: Request) {
     const slipNumber = body.invoiceNumber || body.slip_number || `SLIP-${Date.now().toString().slice(-5)}`;
 
     const items = Array.isArray(body.items) ? body.items : [];
-    const totalAmount = Number(body.totalAmount || body.total_amount || 0);
+    const rawTotal = Number(body.totalAmount || body.total_amount || 0);
     const paidAmount = Number(body.paidAmount || body.paid_amount || 0);
-    const balanceDue = Math.max(0, totalAmount - paidAmount);
+
+    const isReturn = Boolean(
+      body.isReturn ||
+      body.is_return ||
+      slipNumber.startsWith("RET-") ||
+      (body.title || "").includes("RETURN") ||
+      rawTotal < 0
+    );
+
+    const totalAmount = isReturn ? -Math.abs(rawTotal) : Math.abs(rawTotal);
+    const balanceDue = isReturn ? -Math.abs(totalAmount) : Math.max(0, totalAmount - paidAmount);
+    const status = isReturn ? "unpaid" : (balanceDue <= 0 ? "paid" : "pending");
 
     const dispatchPayload = {
       id,
@@ -100,8 +111,8 @@ export async function POST(req: Request) {
       total_amount: totalAmount,
       paid_amount: paidAmount,
       balance_due: balanceDue,
-      status: balanceDue <= 0 ? "paid" : "pending",
-      delivery_status: body.deliveryStatus || "dispatched",
+      status,
+      delivery_status: body.deliveryStatus || (isReturn ? "returned" : "dispatched"),
       notes: body.notes || "",
       vehicle_no: body.vehicleNo || "",
       driver_name: body.driverName || "",
@@ -135,6 +146,7 @@ export async function POST(req: Request) {
       invoiceNumber: slipNumber,
       customerName: dispatchPayload.client_name,
       customerPhone: dispatchPayload.client_phone,
+      isReturn,
       totalAmount,
       paidAmount,
       balanceDue,

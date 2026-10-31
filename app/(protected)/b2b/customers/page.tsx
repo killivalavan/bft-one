@@ -202,7 +202,7 @@ export default function BakerCustomersPage() {
         if (cleaned.length > 0) setStores(cleaned);
       }
 
-      const storedInvs = localStorage.getItem(`bftone_invoices_${bizId}`);
+      const storedInvs = localStorage.getItem(`bftone_b2b_dispatches_${bizId}`) || localStorage.getItem(`bftone_invoices_${bizId}`);
       if (storedInvs) {
         setInvoices(JSON.parse(storedInvs));
       }
@@ -255,7 +255,7 @@ export default function BakerCustomersPage() {
   // Synchronize cross-tab or local storage updates
   useEffect(() => {
     const handleStorage = (e: StorageEvent) => {
-      if (e.key === `bftone_invoices_${bizId}` && e.newValue) {
+      if ((e.key === `bftone_b2b_dispatches_${bizId}` || e.key === `bftone_invoices_${bizId}`) && e.newValue) {
         try {
           const parsed = JSON.parse(e.newValue);
           if (Array.isArray(parsed)) setInvoices(parsed);
@@ -293,17 +293,30 @@ export default function BakerCustomersPage() {
       }, 0);
       const totalBilled = Number.isFinite(rawBilled) ? rawBilled : 0;
 
-      const rawUnpaid = clientInvoices
-        .filter((inv) => {
-          const s = String(inv.status || "").toLowerCase();
-          const due = Number(inv.balanceDue ?? inv.balance_due ?? (Number(inv.totalAmount || inv.total_amount || 0) - Number(inv.paidAmount || inv.paid_amount || 0)));
-          return (s === "unpaid" || s === "pending") || due > 0;
-        })
-        .reduce((acc, inv) => {
-          const val = Number(inv.balanceDue !== undefined ? inv.balanceDue : (inv.balance_due !== undefined ? inv.balance_due : (inv.totalAmount || inv.total_amount || 0)));
-          return acc + (Number.isFinite(val) ? val : 0);
-        }, 0);
-      const unpaidDues = Number.isFinite(rawUnpaid) ? rawUnpaid : 0;
+      let deliveryDues = 0;
+      let returnCredits = 0;
+      clientInvoices.forEach((inv) => {
+        const isRet = Boolean(
+          inv.isReturn ||
+          inv.is_return ||
+          (inv.invoiceNumber || inv.slip_number || "").startsWith("RET-") ||
+          (inv.title || "").includes("RETURN") ||
+          (inv.totalAmount ?? inv.total_amount ?? 0) < 0
+        );
+        const total = Math.abs(Number(inv.totalAmount ?? inv.total_amount ?? 0));
+        const paid = Math.abs(Number(inv.paidAmount ?? inv.paid_amount ?? 0));
+        const s = String(inv.status || "").toLowerCase();
+
+        if (isRet) {
+          returnCredits += Math.max(0, total - paid);
+        } else {
+          const due = Number(inv.balanceDue ?? inv.balance_due ?? Math.max(0, total - paid));
+          if (s === "unpaid" || s === "pending" || due > 0) {
+            deliveryDues += Math.max(0, due);
+          }
+        }
+      });
+      const unpaidDues = Math.max(0, deliveryDues - returnCredits);
       const totalPaid = Math.max(0, totalBilled - unpaidDues);
 
       const deliverySlips = clientInvoices.filter(
@@ -336,6 +349,11 @@ export default function BakerCustomersPage() {
   // Summary Metrics
   const totalClientsCount = cafesWithLedger.length;
   const totalBilledAll = cafesWithLedger.reduce((acc, c) => acc + c.totalBilled, 0);
+  const totalReturnsAll = useMemo(() => {
+    return invoices
+      .filter((inv) => inv.isReturn || (inv.invoiceNumber || inv.slip_number || "").startsWith("RET-") || Number(inv.totalAmount ?? inv.total_amount ?? 0) < 0)
+      .reduce((acc, inv) => acc + Math.abs(Number(inv.totalAmount ?? inv.total_amount ?? 0)), 0);
+  }, [invoices]);
   const totalOutstandingAll = cafesWithLedger.reduce((acc, c) => acc + c.unpaidDues, 0);
   const totalPendingSettlementsCount = invoices.filter((inv) => {
     const s = String(inv.status || "").toLowerCase();
@@ -360,7 +378,7 @@ export default function BakerCustomersPage() {
     } else if (statusFilter === "settled") {
       list = list.filter((c) => c.unpaidDues === 0);
     }
-    return list;
+    return [...list].sort((a, b) => (a.name || "").localeCompare(b.name || ""));
   }, [cafesWithLedger, searchQuery, statusFilter]);
 
   // Phone Sanitizer
@@ -461,6 +479,7 @@ export default function BakerCustomersPage() {
       );
       setInvoices(updatedInvoices);
       try {
+        localStorage.setItem(`bftone_b2b_dispatches_${bizId}`, JSON.stringify(updatedInvoices));
         localStorage.setItem(`bftone_invoices_${bizId}`, JSON.stringify(updatedInvoices));
       } catch {}
     }
@@ -759,9 +778,9 @@ export default function BakerCustomersPage() {
 
       <div className="w-full px-1 sm:px-2 md:px-0 pt-1 pb-6 space-y-5 sm:space-y-6">
         {/* ==================================================== */}
-        {/* 1. OVERVIEW SUMMARY CARDS (4 METRIC CARDS)           */}
+        {/* 1. OVERVIEW SUMMARY CARDS (5 METRIC CARDS)           */}
         {/* ==================================================== */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3 sm:gap-4">
           {/* Card 1: Total Clients */}
           <div className="p-4 rounded-3xl bg-white border border-[#E2E8F0] shadow-xs flex items-center justify-between">
             <div>
@@ -786,7 +805,19 @@ export default function BakerCustomersPage() {
             </div>
           </div>
 
-          {/* Card 3: Total Outstanding Balance */}
+          {/* Card 3: Total Returns (BEFORE OUTSTANDING BALANCE) */}
+          <div className="p-4 rounded-3xl bg-amber-50/70 border border-amber-200/80 shadow-xs flex items-center justify-between">
+            <div>
+              <p className="text-[10px] sm:text-[11px] font-bold text-amber-800 uppercase tracking-wider">Total Returns</p>
+              <h3 className="text-xl sm:text-2xl font-black text-amber-700 mt-0.5">₹{totalReturnsAll.toLocaleString("en-IN")}</h3>
+              <p className="text-[11px] text-amber-700/80 font-medium mt-0.5">Credited return slips</p>
+            </div>
+            <div className="w-10 h-10 rounded-xl bg-amber-100 text-amber-800 border border-amber-200 flex items-center justify-center font-bold shrink-0">
+              <RotateCcw size={18} />
+            </div>
+          </div>
+
+          {/* Card 4: Total Outstanding Balance */}
           <div className="p-4 rounded-3xl bg-white border border-[#E2E8F0] shadow-xs flex items-center justify-between">
             <div>
               <p className="text-[10px] sm:text-[11px] font-bold text-[#64748B] uppercase tracking-wider">Outstanding Balance</p>
@@ -808,7 +839,7 @@ export default function BakerCustomersPage() {
             </div>
           </div>
 
-          {/* Card 4: Pending Settlements */}
+          {/* Card 5: Pending Settlements */}
           <div className="p-4 rounded-3xl bg-white border border-[#E2E8F0] shadow-xs flex items-center justify-between">
             <div>
               <p className="text-[10px] sm:text-[11px] font-bold text-[#64748B] uppercase tracking-wider">Pending Settlements</p>

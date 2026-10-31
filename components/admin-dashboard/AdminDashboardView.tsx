@@ -80,8 +80,11 @@ export function AdminDashboardView({ baseItems, onSwitchToBakerMode }: AdminDash
 
   // Fetch Dashboard Intelligence
   const fetchDashboardData = useCallback(async () => {
-    setIsLoading(true);
     const bizId = business?.id;
+    if (!bizId || bizId === "default") {
+      return;
+    }
+    setIsLoading(true);
 
     try {
       const dayStart = `${todayStr}T00:00:00.000Z`;

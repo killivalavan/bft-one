@@ -133,30 +133,35 @@ export function generateWhatsAppSlipMessage(params: WhatsAppSlipParams): { messa
  */
 export function normalizeDispatch(inv: any) {
   if (!inv) return inv;
+  const invoiceNumber = inv.invoiceNumber || inv.slip_number || inv.invoice_number || `SLIP-${inv.id || "0"}`;
   const rawTotal = Number(inv.totalAmount !== undefined && inv.totalAmount !== null ? inv.totalAmount : (inv.total_amount ?? 0));
-  const totalAmount = Number.isFinite(rawTotal) ? rawTotal : 0;
-
   const rawPaid = Number(inv.paidAmount !== undefined && inv.paidAmount !== null ? inv.paidAmount : (inv.paid_amount ?? 0));
   const paidAmount = Number.isFinite(rawPaid) ? rawPaid : 0;
 
+  const isReturn = Boolean(
+    inv.isReturn ||
+    inv.is_return ||
+    (invoiceNumber || "").startsWith("RET-") ||
+    (inv.title || "").includes("RETURN") ||
+    rawTotal < 0
+  );
+
+  const totalAmount = isReturn ? -Math.abs(Number.isFinite(rawTotal) ? rawTotal : 0) : (Number.isFinite(rawTotal) ? rawTotal : 0);
+
   const rawDue = Number(inv.balanceDue !== undefined && inv.balanceDue !== null ? inv.balanceDue : (inv.balance_due ?? (totalAmount - paidAmount)));
-  const balanceDue = Number.isFinite(rawDue) ? rawDue : Math.max(0, totalAmount - paidAmount);
+  const balanceDue = isReturn
+    ? -Math.abs(Number.isFinite(rawDue) && rawDue !== 0 ? rawDue : totalAmount)
+    : (Number.isFinite(rawDue) ? rawDue : Math.max(0, totalAmount - paidAmount));
 
   const customerName = inv.customerName || inv.client_name || inv.customer_name || "Partner Store";
-  const invoiceNumber = inv.invoiceNumber || inv.slip_number || inv.invoice_number || `SLIP-${inv.id || "0"}`;
   const customerPhone = inv.customerPhone || inv.client_phone || inv.customer_phone || "";
   const customerAddress = inv.customerAddress || inv.client_address || inv.customer_address || "";
   const clientId = inv.clientId || inv.client_id || "";
 
   const rawStatus = String(inv.status || "").toLowerCase();
-  const status = (rawStatus === "paid" || balanceDue <= 0) ? "paid" : "unpaid";
-
-  const isReturn = Boolean(
-    inv.isReturn ||
-    (invoiceNumber || "").startsWith("RET-") ||
-    (inv.title || "").includes("RETURN") ||
-    totalAmount < 0
-  );
+  const status = isReturn
+    ? (rawStatus === "paid" && paidAmount >= Math.abs(totalAmount) ? "paid" : "unpaid")
+    : (rawStatus === "paid" || balanceDue <= 0 ? "paid" : "unpaid");
 
   return {
     ...inv,
@@ -179,6 +184,7 @@ export function normalizeDispatch(inv: any) {
     balance_due: balanceDue,
     status,
     isReturn,
+    is_return: isReturn,
     title: inv.title || (isReturn ? "RETURN & CREDIT SLIP" : "DELIVERY SLIP"),
     date: inv.date || inv.invoice_date || (inv.created_at ? inv.created_at.split("T")[0] : new Date().toISOString().split("T")[0]),
   };

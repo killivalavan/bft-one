@@ -57,30 +57,35 @@ export async function GET(req: Request) {
     }
 
     function sanitizeInvoice(inv: any) {
+      const invoiceNumber = inv.invoiceNumber || inv.slip_number || inv.invoice_number || `SLIP-${inv.id || "0"}`;
       const rawTotal = Number(inv.totalAmount !== undefined && inv.totalAmount !== null ? inv.totalAmount : (inv.total_amount ?? 0));
-      const totalAmount = Number.isFinite(rawTotal) ? rawTotal : 0;
-
       const rawPaid = Number(inv.paidAmount !== undefined && inv.paidAmount !== null ? inv.paidAmount : (inv.paid_amount ?? 0));
       const paidAmount = Number.isFinite(rawPaid) ? rawPaid : 0;
 
+      const isReturn = Boolean(
+        inv.isReturn ||
+        inv.is_return ||
+        (invoiceNumber || "").startsWith("RET-") ||
+        (inv.title || "").includes("RETURN") ||
+        rawTotal < 0
+      );
+
+      const totalAmount = isReturn ? -Math.abs(Number.isFinite(rawTotal) ? rawTotal : 0) : (Number.isFinite(rawTotal) ? rawTotal : 0);
+
       const rawDue = Number(inv.balanceDue !== undefined && inv.balanceDue !== null ? inv.balanceDue : (inv.balance_due ?? (totalAmount - paidAmount)));
-      const balanceDue = Number.isFinite(rawDue) ? rawDue : Math.max(0, totalAmount - paidAmount);
+      const balanceDue = isReturn
+        ? -Math.abs(Number.isFinite(rawDue) && rawDue !== 0 ? rawDue : totalAmount)
+        : (Number.isFinite(rawDue) ? rawDue : Math.max(0, totalAmount - paidAmount));
 
       const customerName = inv.customerName || inv.client_name || inv.customer_name || "Partner Store";
-      const invoiceNumber = inv.invoiceNumber || inv.slip_number || inv.invoice_number || `SLIP-${inv.id || "0"}`;
       const customerPhone = inv.customerPhone || inv.client_phone || inv.customer_phone || "";
       const customerAddress = inv.customerAddress || inv.client_address || inv.customer_address || "";
       const clientId = inv.clientId || inv.client_id || "";
 
       const rawStatus = String(inv.status || "").toLowerCase();
-      const status = (rawStatus === "paid" || balanceDue <= 0) ? "paid" : "unpaid";
-
-      const isReturn = Boolean(
-        inv.isReturn ||
-        (invoiceNumber || "").startsWith("RET-") ||
-        (inv.title || "").includes("RETURN") ||
-        totalAmount < 0
-      );
+      const status = isReturn
+        ? (rawStatus === "paid" && paidAmount >= Math.abs(totalAmount) ? "paid" : "unpaid")
+        : (rawStatus === "paid" || balanceDue <= 0 ? "paid" : "unpaid");
 
       return {
         ...inv,
@@ -128,19 +133,55 @@ export async function GET(req: Request) {
       supa.from("b2b_payments").select("*").eq("business_id", businessId).order("date", { ascending: false }),
       supa.from("b2b_expenses").select("*").eq("business_id", businessId).order("date", { ascending: false }),
       supa.from("b2b_broadcasts").select("*").eq("business_id", businessId).order("created_at", { ascending: false }),
-      supa.from("b2b_clients").select("*").eq("business_id", businessId),
+      supa.from("b2b_clients").select("*").eq("business_id", businessId).order("name", { ascending: true }),
     ]);
 
     const hasTables = !dispatchesRes.error && !productsRes.error;
 
     if (hasTables) {
+      let expenses = expensesRes.data || [];
+
+      // Dual-engine resilience: if b2b_expenses is empty, check daily_expenses & modules fallback
+      if (expenses.length === 0) {
+        const { data: dailyExp } = await supa
+          .from("daily_expenses")
+          .select("*")
+          .eq("business_id", businessId)
+          .order("expense_date", { ascending: false });
+
+        if (dailyExp && dailyExp.length > 0) {
+          expenses = dailyExp.map((d: any) => ({
+            id: d.id,
+            business_id: businessId,
+            date: d.expense_date,
+            name: d.item_name || "Bakery Operating Expense",
+            category: d.item_name?.toLowerCase().includes("box") ? "Packaging & Boxes" : "Raw Materials & Supplies",
+            amount: ((Number(d.price_cents) || 0) * (Number(d.quantity) || 1)) / 100,
+            notes: "Auto-synced from daily_expenses",
+            created_at: d.created_at,
+          }));
+
+          // Asynchronously persist to b2b_expenses for subsequent instant relational reads
+          supa.from("b2b_expenses").upsert(expenses, { onConflict: "id" }).then(() => {});
+        } else {
+          const { data: biz } = await supa
+            .from("businesses")
+            .select("enabled_modules")
+            .eq("id", businessId)
+            .maybeSingle();
+          if (Array.isArray(biz?.enabled_modules?._b2b_data?.expenses) && biz.enabled_modules._b2b_data.expenses.length > 0) {
+            expenses = biz.enabled_modules._b2b_data.expenses;
+          }
+        }
+      }
+
       return NextResponse.json({
         ok: true,
         source: "relational_tables",
         invoices: (dispatchesRes.data || []).map(sanitizeInvoice),
         products: (productsRes.data || []).map(normalizeProduct),
         payments: paymentsRes.data || [],
-        expenses: expensesRes.data || [],
+        expenses,
         broadcasts: broadcastsRes.data || [],
         stores: clientsRes.data || [],
       });
@@ -158,7 +199,9 @@ export async function GET(req: Request) {
     }
 
     const b2bData = biz?.enabled_modules?._b2b_data || {};
-    const stores = biz?.enabled_modules?._b2b_clients || [];
+    const stores = [...(biz?.enabled_modules?._b2b_clients || [])].sort((a: any, b: any) =>
+      (a.name || "").localeCompare(b.name || "")
+    );
 
     return NextResponse.json({
       ok: true,

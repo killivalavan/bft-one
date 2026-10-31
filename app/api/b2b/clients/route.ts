@@ -31,7 +31,7 @@ export async function GET(req: Request) {
       .from("b2b_clients")
       .select("id, name, phone, address, linked_business_id, created_at")
       .eq("business_id", businessId)
-      .order("created_at", { ascending: false });
+      .order("name", { ascending: true });
 
     if (!tableError && tableData) {
       const mapped = tableData.map((c) => ({
@@ -55,9 +55,12 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: bizError.message }, { status: 500 });
     }
 
-    const clients = Array.isArray(biz?.enabled_modules?._b2b_clients)
+    const rawClients = Array.isArray(biz?.enabled_modules?._b2b_clients)
       ? biz.enabled_modules._b2b_clients
       : [];
+    const clients = [...rawClients].sort((a: any, b: any) =>
+      (a.name || "").localeCompare(b.name || "")
+    );
 
     return NextResponse.json({ ok: true, clients, source: "modules_fallback" });
   } catch (err: any) {

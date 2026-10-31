@@ -62,7 +62,7 @@ export default function BakerPaymentsPage() {
   // Load Invoices & Stores
   useEffect(() => {
     try {
-      const storedInvs = localStorage.getItem(`bftone_invoices_${bizId}`);
+      const storedInvs = localStorage.getItem(`bftone_b2b_dispatches_${bizId}`) || localStorage.getItem(`bftone_invoices_${bizId}`);
       if (storedInvs) {
         setInvoices(JSON.parse(storedInvs));
       }
@@ -111,6 +111,21 @@ export default function BakerPaymentsPage() {
       window.removeEventListener(B2B_CUSTOMERS_UPDATED_EVENT, handleStoresUpdated);
     };
   }, [bizId, business?.id]);
+
+  // Synchronize cloud data reactively from TanStack Query
+  useEffect(() => {
+    if (cloudWorkspace) {
+      if (Array.isArray(cloudWorkspace.payments) && cloudWorkspace.payments.length > 0) {
+        setPaymentsHistory(cloudWorkspace.payments);
+      }
+      if (Array.isArray(cloudWorkspace.invoices) && cloudWorkspace.invoices.length > 0) {
+        setInvoices(cloudWorkspace.invoices);
+      }
+      if (Array.isArray(cloudWorkspace.stores) && cloudWorkspace.stores.length > 0) {
+        setStores(cloudWorkspace.stores);
+      }
+    }
+  }, [cloudWorkspace]);
 
   // Synchronize cross-tab or local storage updates
   useEffect(() => {
@@ -186,17 +201,30 @@ export default function BakerPaymentsPage() {
       }, 0);
       const totalBilled = Number.isFinite(rawBilled) ? rawBilled : 0;
 
-      const rawUnpaid = storeInvs
-        .filter((inv) => {
-          const s = String(inv.status || "").toLowerCase();
-          const due = Number(inv.balanceDue ?? inv.balance_due ?? (Number(inv.totalAmount || inv.total_amount || 0) - Number(inv.paidAmount || inv.paid_amount || 0)));
-          return (s === "unpaid" || s === "pending") || due > 0;
-        })
-        .reduce((acc, inv) => {
-          const val = Number(inv.balanceDue !== undefined ? inv.balanceDue : (inv.balance_due !== undefined ? inv.balance_due : (inv.totalAmount || inv.total_amount || 0)));
-          return acc + (Number.isFinite(val) ? val : 0);
-        }, 0);
-      const unpaidDues = Number.isFinite(rawUnpaid) ? rawUnpaid : 0;
+      let deliveryDues = 0;
+      let returnCredits = 0;
+      storeInvs.forEach((inv) => {
+        const isRet = Boolean(
+          inv.isReturn ||
+          inv.is_return ||
+          (inv.invoiceNumber || inv.slip_number || "").startsWith("RET-") ||
+          (inv.title || "").includes("RETURN") ||
+          (inv.totalAmount ?? inv.total_amount ?? 0) < 0
+        );
+        const total = Math.abs(Number(inv.totalAmount ?? inv.total_amount ?? 0));
+        const paid = Math.abs(Number(inv.paidAmount ?? inv.paid_amount ?? 0));
+        const s = String(inv.status || "").toLowerCase();
+
+        if (isRet) {
+          returnCredits += Math.max(0, total - paid);
+        } else {
+          const due = Number(inv.balanceDue ?? inv.balance_due ?? Math.max(0, total - paid));
+          if (s === "unpaid" || s === "pending" || due > 0) {
+            deliveryDues += Math.max(0, due);
+          }
+        }
+      });
+      const unpaidDues = Math.max(0, deliveryDues - returnCredits);
       const paidAmount = Math.max(0, totalBilled - unpaidDues);
       const unpaidCount = storeInvs.filter((inv) => {
         const s = String(inv.status || "").toLowerCase();
@@ -268,7 +296,7 @@ export default function BakerPaymentsPage() {
       nextInvoices = invoices.map((inv) => {
         if (inv.id === selectedInvoiceId) {
           if (business?.id) {
-            supabaseClient.from("invoices").update({ status: "paid" }).eq("id", inv.id).then(() => {});
+            // Reconciled via recordPaymentMutation on b2b_dispatches
           }
           return { ...inv, status: "paid" };
         }
@@ -284,7 +312,7 @@ export default function BakerPaymentsPage() {
         ) {
           remaining -= inv.totalAmount;
           if (business?.id) {
-            supabaseClient.from("invoices").update({ status: "paid" }).eq("id", inv.id).then(() => {});
+            // Reconciled via recordPaymentMutation on b2b_dispatches
           }
           return { ...inv, status: "paid" };
         }
@@ -294,6 +322,7 @@ export default function BakerPaymentsPage() {
 
     setInvoices(nextInvoices);
     try {
+      localStorage.setItem(`bftone_b2b_dispatches_${bizId}`, JSON.stringify(nextInvoices));
       localStorage.setItem(`bftone_invoices_${bizId}`, JSON.stringify(nextInvoices));
     } catch {}
 
@@ -427,9 +456,29 @@ export default function BakerPaymentsPage() {
     );
   }, [invoices, isSpecificStore, selectedStoreFilter]);
 
-  const totalPendingAmount = scopedInvoices
-    .filter((i) => i.status === "unpaid")
-    .reduce((acc, i) => acc + (i.totalAmount || 0), 0);
+  const totalPendingAmount = Math.max(
+    0,
+    scopedInvoices.reduce((acc, i) => {
+      const isRet = Boolean(
+        i.isReturn ||
+        i.is_return ||
+        (i.invoiceNumber || i.slip_number || "").startsWith("RET-") ||
+        (i.title || "").includes("RETURN") ||
+        (i.totalAmount ?? i.total_amount ?? 0) < 0
+      );
+      const total = Math.abs(Number(i.totalAmount ?? i.total_amount ?? 0));
+      const paid = Math.abs(Number(i.paidAmount ?? i.paid_amount ?? 0));
+      const s = String(i.status || "").toLowerCase();
+      if (isRet) {
+        return acc - Math.max(0, total - paid);
+      }
+      const due = Number(i.balanceDue ?? i.balance_due ?? Math.max(0, total - paid));
+      if (s === "unpaid" || s === "pending" || due > 0) {
+        return acc + Math.max(0, due);
+      }
+      return acc;
+    }, 0)
+  );
 
   const totalCollectedAmount = scopedInvoices
     .filter((i) => i.status === "paid")

@@ -83,7 +83,16 @@ export default function BakerDispatchPage() {
 
   // Products
   const [products, setProducts] = useState<BakerProduct[]>([]);
-  const [quantities, setQuantities] = useState<Record<string, number>>({});
+  const [deliveryQuantities, setDeliveryQuantities] = useState<Record<string, number>>({});
+  const [returnQuantities, setReturnQuantities] = useState<Record<string, number>>({});
+  const quantities = isReturnMode ? returnQuantities : deliveryQuantities;
+  const setQuantities = (updater: Record<string, number> | ((prev: Record<string, number>) => Record<string, number>)) => {
+    if (isReturnMode) {
+      setReturnQuantities(updater);
+    } else {
+      setDeliveryQuantities(updater);
+    }
+  };
   const [isSaving, setIsSaving] = useState(false);
 
   // Invoices / Saved Delivery Slips
@@ -119,7 +128,7 @@ export default function BakerDispatchPage() {
       }
 
       // 3. Saved Invoices
-      const storedInvs = localStorage.getItem(`bftone_invoices_${bizId}`);
+      const storedInvs = localStorage.getItem(`bftone_b2b_dispatches_${bizId}`) || localStorage.getItem(`bftone_invoices_${bizId}`);
       if (storedInvs) {
         setSavedInvoices(JSON.parse(storedInvs));
       }
@@ -134,17 +143,12 @@ export default function BakerDispatchPage() {
         setProducts(cloudWorkspace.products.map(normalizeBakerProduct).filter((p: any) => p.is_active));
       }
       if (Array.isArray(cloudWorkspace.stores) && cloudWorkspace.stores.length > 0) {
-        setStores(cloudWorkspace.stores);
+        setStores((prev) => {
+          const prevKey = prev.map((s) => `${s.id}:${s.name}`).join("|");
+          const nextKey = cloudWorkspace.stores.map((s: any) => `${s.id}:${s.name}`).join("|");
+          return prevKey === nextKey ? prev : cloudWorkspace.stores;
+        });
       }
-    }
-
-    // Fetch live B2B clients from server
-    if (bizId && bizId !== "default") {
-      fetchB2BClients(bizId).then((serverClients) => {
-        if (serverClients && serverClients.length > 0) {
-          setStores(serverClients);
-        }
-      });
     }
 
     const handleStoresUpdated = (e: any) => {
@@ -158,6 +162,25 @@ export default function BakerDispatchPage() {
       window.removeEventListener(B2B_CUSTOMERS_UPDATED_EVENT, handleStoresUpdated);
     };
   }, [bizId, business?.id]);
+
+  // Synchronize cloud data reactively from TanStack Query
+  useEffect(() => {
+    if (cloudWorkspace) {
+      if (Array.isArray(cloudWorkspace.invoices) && cloudWorkspace.invoices.length > 0) {
+        setSavedInvoices(cloudWorkspace.invoices);
+      }
+      if (Array.isArray(cloudWorkspace.products) && cloudWorkspace.products.length > 0) {
+        setProducts(cloudWorkspace.products.map(normalizeBakerProduct).filter((p: any) => p.is_active));
+      }
+      if (Array.isArray(cloudWorkspace.stores) && cloudWorkspace.stores.length > 0) {
+        setStores((prev) => {
+          const prevKey = prev.map((s) => `${s.id}:${s.name}`).join("|");
+          const nextKey = cloudWorkspace.stores.map((s: any) => `${s.id}:${s.name}`).join("|");
+          return prevKey === nextKey ? prev : cloudWorkspace.stores;
+        });
+      }
+    }
+  }, [cloudWorkspace]);
 
   // Prevent background body scroll when any modal is active
   useEffect(() => {
@@ -200,24 +223,52 @@ export default function BakerDispatchPage() {
     return stores.find((s) => s.id === selectedStoreId) || null;
   }, [stores, selectedStoreId]);
 
-  // Compute pending balance per store
+  // Compute pending balance per store with return credit reconciliation
   const storeBalances = useMemo(() => {
-    const map: Record<string, number> = {};
+    const map: Record<string, { dues: number; credits: number }> = {};
     savedInvoices.forEach((inv) => {
-      const sName = (inv.customerName || "").toLowerCase().trim();
-      if (inv.status === "unpaid") {
-        map[sName] = (map[sName] || 0) + (inv.totalAmount || 0);
+      const sName = (inv.customerName || inv.client_name || "").toLowerCase().trim();
+      if (!sName) return;
+      if (!map[sName]) map[sName] = { dues: 0, credits: 0 };
+
+      const isRet = Boolean(
+        inv.isReturn ||
+        inv.is_return ||
+        (inv.invoiceNumber || inv.slip_number || "").startsWith("RET-") ||
+        (inv.title || "").includes("RETURN") ||
+        (inv.totalAmount ?? inv.total_amount ?? 0) < 0
+      );
+
+      const total = Math.abs(Number(inv.totalAmount ?? inv.total_amount ?? 0));
+      const paid = Math.abs(Number(inv.paidAmount ?? inv.paid_amount ?? 0));
+      const s = String(inv.status || "").toLowerCase();
+
+      if (isRet) {
+        map[sName].credits += Math.max(0, total - paid);
+      } else {
+        const due = Number(inv.balanceDue ?? inv.balance_due ?? Math.max(0, total - paid));
+        if (s === "unpaid" || s === "pending" || due > 0) {
+          map[sName].dues += Math.max(0, due);
+        }
       }
     });
-    return map;
+
+    const finalMap: Record<string, number> = {};
+    Object.entries(map).forEach(([sName, { dues, credits }]) => {
+      finalMap[sName] = Math.max(0, dues - credits);
+    });
+    return finalMap;
   }, [savedInvoices]);
 
   const filteredStores = useMemo(() => {
-    if (!storeSearch.trim()) return stores;
-    const q = storeSearch.toLowerCase();
-    return stores.filter(
-      (s) => s.name.toLowerCase().includes(q) || (s.phone && s.phone.includes(q))
-    );
+    let list = stores;
+    if (storeSearch.trim()) {
+      const q = storeSearch.toLowerCase();
+      list = list.filter(
+        (s) => s.name.toLowerCase().includes(q) || (s.phone && s.phone.includes(q))
+      );
+    }
+    return [...list].sort((a, b) => (a.name || "").localeCompare(b.name || ""));
   }, [stores, storeSearch]);
 
   // Stepper handlers
@@ -422,6 +473,7 @@ export default function BakerDispatchPage() {
     const updatedList = [newInvoice, ...savedInvoices];
     setSavedInvoices(updatedList);
     try {
+      localStorage.setItem(`bftone_b2b_dispatches_${bizId}`, JSON.stringify(updatedList));
       localStorage.setItem(`bftone_invoices_${bizId}`, JSON.stringify(updatedList));
     } catch {}
 
@@ -621,7 +673,6 @@ export default function BakerDispatchPage() {
             <button
               type="button"
               onClick={() => {
-                if (activeTab === "return") setQuantities({});
                 setActiveTab("entry");
               }}
               className={cn(
@@ -639,7 +690,6 @@ export default function BakerDispatchPage() {
             <button
               type="button"
               onClick={() => {
-                if (activeTab === "entry") setQuantities({});
                 setActiveTab("return");
               }}
               className={cn(

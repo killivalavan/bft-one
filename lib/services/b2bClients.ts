@@ -19,7 +19,7 @@ export async function fetchB2BClients(bizId: string): Promise<BakerCustomerStore
   try {
     const raw = typeof window !== "undefined" ? localStorage.getItem(`bftone_customers_${bizId}`) : null;
     if (raw) {
-      localList = sanitizeBakerStores(JSON.parse(raw));
+      localList = sanitizeBakerStores(JSON.parse(raw)).sort((a, b) => (a.name || "").localeCompare(b.name || ""));
     }
   } catch {}
 
@@ -28,7 +28,7 @@ export async function fetchB2BClients(bizId: string): Promise<BakerCustomerStore
     const res = await fetch(`/api/b2b/clients?business_id=${bizId}`, { headers });
     if (res.ok) {
       const data = await res.json();
-      const serverClients: BakerCustomerStore[] = sanitizeBakerStores(data.clients || []);
+      const serverClients: BakerCustomerStore[] = sanitizeBakerStores(data.clients || []).sort((a, b) => (a.name || "").localeCompare(b.name || ""));
 
       if (serverClients.length > 0) {
         // Server has clients: update local cache

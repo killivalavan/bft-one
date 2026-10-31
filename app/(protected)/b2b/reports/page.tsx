@@ -41,7 +41,7 @@ export default function BakerReportsPage() {
   useEffect(() => {
     try {
       // 1. Invoices
-      const storedInvs = localStorage.getItem(`bftone_invoices_${bizId}`);
+      const storedInvs = localStorage.getItem(`bftone_b2b_dispatches_${bizId}`) || localStorage.getItem(`bftone_invoices_${bizId}`);
       if (storedInvs) setInvoices(JSON.parse(storedInvs));
 
       // 2. Expenses
@@ -77,7 +77,7 @@ export default function BakerReportsPage() {
   // Cross-tab / storage synchronization
   useEffect(() => {
     const handleStorage = (e: StorageEvent) => {
-      if (e.key === `bftone_invoices_${bizId}` && e.newValue) {
+      if ((e.key === `bftone_b2b_dispatches_${bizId}` || e.key === `bftone_invoices_${bizId}`) && e.newValue) {
         try {
           const parsed = JSON.parse(e.newValue);
           if (Array.isArray(parsed)) setInvoices(parsed);
@@ -117,11 +117,11 @@ export default function BakerReportsPage() {
   // Parse invoice date reliably
   const getInvoiceDateInfo = (inv: any) => {
     let d = new Date();
-    if (inv.createdAt) {
-      const parsed = new Date(inv.createdAt);
-      if (!isNaN(parsed.getTime())) d = parsed;
-    } else if (inv.date) {
+    if (inv.date) {
       const parsed = new Date(inv.date);
+      if (!isNaN(parsed.getTime())) d = parsed;
+    } else if (inv.createdAt) {
+      const parsed = new Date(inv.createdAt);
       if (!isNaN(parsed.getTime())) d = parsed;
     }
     return {
@@ -220,6 +220,7 @@ export default function BakerReportsPage() {
 
     const list = Object.values(map).map((c) => ({
       ...c,
+      unpaidDues: Math.max(0, c.unpaidDues),
       marginPct: c.revenue > 0 ? Math.round((c.profit / c.revenue) * 100) : 0,
     }));
 

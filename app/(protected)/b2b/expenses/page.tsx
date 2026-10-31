@@ -52,7 +52,7 @@ export default function BakerExpensesPage() {
 
   // Synchronize cloud expenses from TanStack Query
   useEffect(() => {
-    if (cloudExpenses && Array.isArray(cloudExpenses) && cloudExpenses.length > 0) {
+    if (cloudExpenses && Array.isArray(cloudExpenses)) {
       setExpenses(cloudExpenses);
       try {
         localStorage.setItem(`bftone_baker_expenses_${bizId}`, JSON.stringify(cloudExpenses));
@@ -64,31 +64,8 @@ export default function BakerExpensesPage() {
       const stored = localStorage.getItem(`bftone_baker_expenses_${bizId}`);
       if (stored) {
         setExpenses(JSON.parse(stored));
-      } else {
-        const initialExp: BakerExpense[] = [
-          { id: "exp-1", name: "Raw Material Supplies (Batch #101)", amount: 2400, category: "Raw Materials & Supplies", date: format(new Date(), "MMM dd, yyyy") },
-          { id: "exp-2", name: "Packaging Supplies & Boxes", amount: 1800, category: "Packaging & Boxes", date: format(new Date(), "MMM dd, yyyy") },
-          { id: "exp-3", name: "Facility Electricity & Utilities", amount: 1200, category: "Utilities & Energy", date: format(new Date(), "MMM dd, yyyy") },
-        ];
-        setExpenses(initialExp);
-        localStorage.setItem(`bftone_baker_expenses_${bizId}`, JSON.stringify(initialExp));
       }
     } catch {}
-
-    if (business?.id) {
-      supabaseClient.from("daily_expenses").select("*").eq("business_id", business.id).then(({ data }) => {
-        if (data && data.length > 0) {
-          const mapped: BakerExpense[] = data.map((d: any) => ({
-            id: d.id,
-            name: d.item_name || "Ingredient",
-            amount: ((d.price_cents || 0) * (d.quantity || 1)) / 100,
-            category: "Flour & Sugar",
-            date: d.expense_date || format(new Date(), "MMM dd, yyyy"),
-          }));
-          setExpenses(mapped);
-        }
-      });
-    }
   }, [bizId, business?.id]);
 
   const saveExpenses = (updated: BakerExpense[]) => {
@@ -122,16 +99,6 @@ export default function BakerExpensesPage() {
     recordExpenseMutation.mutateAsync(newExp).catch((err) => {
       console.warn("Cloud expense note:", err);
     });
-    if (business?.id) {
-      supabaseClient.from("daily_expenses").insert({
-        business_id: business.id,
-        item_name: newExp.name,
-        category: newExp.category,
-        price_cents: Math.round(newExp.amount * 100),
-        quantity: 1,
-        expense_date: new Date().toISOString().split("T")[0],
-      }).then(() => {});
-    }
 
     setIsModalOpen(false);
     setName("");

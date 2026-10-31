@@ -32,8 +32,30 @@ export async function GET(req: Request) {
       .eq("business_id", businessId)
       .order("date", { ascending: false });
 
-    if (!tableError && tableData) {
+    if (!tableError && tableData && tableData.length > 0) {
       return NextResponse.json({ ok: true, expenses: tableData, source: "table" });
+    }
+
+    // 2. Fallback to daily_expenses if b2b_expenses has no records yet
+    const { data: dailyExp } = await supa
+      .from("daily_expenses")
+      .select("*")
+      .eq("business_id", businessId)
+      .order("expense_date", { ascending: false });
+
+    if (dailyExp && dailyExp.length > 0) {
+      const mapped = dailyExp.map((d: any) => ({
+        id: d.id,
+        business_id: businessId,
+        date: d.expense_date,
+        name: d.item_name || "Bakery Operating Expense",
+        category: d.item_name?.toLowerCase().includes("box") ? "Packaging & Boxes" : "Raw Materials & Supplies",
+        amount: ((Number(d.price_cents) || 0) * (Number(d.quantity) || 1)) / 100,
+        notes: "Auto-synced from daily_expenses",
+        created_at: d.created_at,
+      }));
+      supa.from("b2b_expenses").upsert(mapped, { onConflict: "id" }).then(() => {});
+      return NextResponse.json({ ok: true, expenses: mapped, source: "daily_expenses_fallback" });
     }
 
     // 2. Dual-engine fallback

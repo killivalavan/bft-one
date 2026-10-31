@@ -83,7 +83,7 @@ export default function ClientLedgerDedicatedPage() {
         if (cleaned.length > 0) setStores(cleaned);
       }
 
-      const storedInvs = localStorage.getItem(`bftone_invoices_${bizId}`);
+      const storedInvs = localStorage.getItem(`bftone_b2b_dispatches_${bizId}`) || localStorage.getItem(`bftone_invoices_${bizId}`);
       if (storedInvs) {
         setInvoices(JSON.parse(storedInvs));
       }
@@ -126,7 +126,7 @@ export default function ClientLedgerDedicatedPage() {
   // Cross-tab / storage synchronization
   useEffect(() => {
     const handleStorage = (e: StorageEvent) => {
-      if (e.key === `bftone_invoices_${bizId}` && e.newValue) {
+      if ((e.key === `bftone_b2b_dispatches_${bizId}` || e.key === `bftone_invoices_${bizId}`) && e.newValue) {
         try {
           const parsed = JSON.parse(e.newValue);
           if (Array.isArray(parsed)) setInvoices(parsed);
@@ -287,7 +287,7 @@ export default function ClientLedgerDedicatedPage() {
   const periodBilled = periodDeliveryValue - periodReturnValue;
 
   const periodUnpaid = useMemo(() => {
-    return periodDeliverySlips
+    const rawDeliveryDues = periodDeliverySlips
       .filter((s) => {
         const status = String(s.status || "").toLowerCase();
         const due = Number(s.balanceDue ?? s.balance_due ?? (Number(s.totalAmount || s.total_amount || 0) - Number(s.paidAmount || s.paid_amount || 0)));
@@ -297,7 +297,8 @@ export default function ClientLedgerDedicatedPage() {
         const val = Number(s.balanceDue !== undefined ? s.balanceDue : (s.balance_due !== undefined ? s.balance_due : (s.totalAmount || s.total_amount || 0)));
         return acc + (Number.isFinite(val) ? val : 0);
       }, 0);
-  }, [periodDeliverySlips]);
+    return Math.max(0, rawDeliveryDues - periodReturnValue);
+  }, [periodDeliverySlips, periodReturnValue]);
 
   const periodPaid = useMemo(() => {
     return Math.max(0, periodBilled - periodUnpaid);
@@ -306,6 +307,7 @@ export default function ClientLedgerDedicatedPage() {
   const isAllTime = detailDatePreset === "all";
   const billedLabel = isAllTime ? "Lifetime Billed" : "Period Billed";
   const paidLabel = isAllTime ? "Settled Collections" : "Period Settled";
+  const returnsLabel = isAllTime ? "Total Returns" : "Period Returns";
   const duesLabel = isAllTime ? "Outstanding Dues" : "Period Dues";
   const activityLabel = isAllTime ? "Total Activity" : "Period Activity";
 
@@ -713,8 +715,8 @@ export default function ClientLedgerDedicatedPage() {
           )}
         </div>
 
-        {/* 4 Financial Stat Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-2.5 sm:gap-4">
+        {/* 5 Financial Stat Cards */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-2.5 sm:gap-4">
           <div className="p-3.5 sm:p-4 rounded-3xl bg-white border border-[#E2E8F0] shadow-xs flex flex-col justify-between">
             <div>
               <span className="text-[10px] sm:text-[11px] font-bold text-slate-400 uppercase tracking-wider block truncate">
@@ -749,6 +751,25 @@ export default function ClientLedgerDedicatedPage() {
             </p>
           </div>
 
+          {/* Total Return Amount (Credited Returns Before Outstanding Amount) */}
+          <div className="p-3.5 sm:p-4 rounded-3xl bg-amber-50/70 border border-amber-200/80 shadow-xs flex flex-col justify-between">
+            <div>
+              <span className="text-[10px] sm:text-[11px] font-bold text-amber-800 uppercase tracking-wider block truncate">
+                <span className="sm:hidden">Returns</span>
+                <span className="hidden sm:inline">{returnsLabel}</span>
+              </span>
+              <span className="text-lg sm:text-2xl font-black text-amber-700 mt-1 block truncate">
+                ₹{periodReturnValue.toLocaleString("en-IN")}
+              </span>
+            </div>
+            <p className="text-[10px] sm:text-[11px] text-amber-700 font-medium mt-1.5 line-clamp-1">
+              {periodReturnSlips.length > 0
+                ? `${periodReturnSlips.length} return ${periodReturnSlips.length === 1 ? "slip" : "slips"} credited`
+                : "No returns in this period"}
+            </p>
+          </div>
+
+          {/* Outstanding Dues */}
           <div className="p-3.5 sm:p-4 rounded-3xl bg-rose-50/70 border border-rose-200/80 shadow-xs flex flex-col justify-between">
             <div>
               <span className="text-[10px] sm:text-[11px] font-bold text-rose-800 uppercase tracking-wider block truncate">
@@ -769,7 +790,7 @@ export default function ClientLedgerDedicatedPage() {
             </p>
           </div>
 
-          <div className="p-3.5 sm:p-4 rounded-3xl bg-blue-50/70 border border-blue-200/80 shadow-xs flex flex-col justify-between">
+          <div className="col-span-2 sm:col-span-1 p-3.5 sm:p-4 rounded-3xl bg-blue-50/70 border border-blue-200/80 shadow-xs flex flex-col justify-between">
             <div>
               <span className="text-[10px] sm:text-[11px] font-bold text-blue-800 uppercase tracking-wider block truncate">
                 <span className="sm:hidden">Activity</span>

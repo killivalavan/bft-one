@@ -179,6 +179,42 @@ export async function POST(req: Request) {
           { onConflict: "id" }
         );
       }
+
+      if (mergedExpenses.length > 0) {
+        await supa.from("b2b_expenses").upsert(
+          mergedExpenses.map((exp: any) => ({
+            id: exp.id || `exp-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+            business_id: businessId,
+            date: exp.date || (exp.createdAt ? exp.createdAt.split("T")[0] : new Date().toISOString().split("T")[0]),
+            name: exp.name || "Bakery Operating Expense",
+            category: exp.category || "Raw Materials & Supplies",
+            amount: Number(exp.amount || 0),
+            notes: exp.notes || "",
+            created_at: exp.createdAt || new Date().toISOString(),
+          })),
+          { onConflict: "id" }
+        );
+      }
+
+      if (mergedPayments.length > 0) {
+        await supa.from("b2b_payments").upsert(
+          mergedPayments.map((p: any) => ({
+            id: p.id || `pay-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+            business_id: businessId,
+            date: p.date || (p.createdAt ? p.createdAt.split("T")[0] : new Date().toISOString().split("T")[0]),
+            client_id: p.clientId || p.client_id || "",
+            client_name: p.clientName || p.client_name || p.storeName || "Partner Store",
+            amount: Number(p.amount || 0),
+            payment_method: p.paymentMethod || p.payment_method || p.paymentMode || "UPI",
+            reference_no: p.referenceNo || p.reference_no || p.invoiceNumber || "",
+            notes: p.notes || "",
+            allocated_slips: Array.isArray(p.allocatedSlips) ? p.allocatedSlips : [],
+            recorded_by: caller.email,
+            created_at: p.createdAt || new Date().toISOString(),
+          })),
+          { onConflict: "id" }
+        );
+      }
     } catch (syncErr) {
       console.warn("Relational table sync in /api/migrate fallback:", syncErr);
     }
