@@ -72,9 +72,9 @@ Tone & Rules:
                     },
                 };
 
-                // Try gemini-2.5-flash, fallback to gemini-1.5-flash
+                // Try gemini-2.0-flash, fallback to gemini-1.5-flash
                 let response = await fetch(
-                    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
+                    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
                     {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },

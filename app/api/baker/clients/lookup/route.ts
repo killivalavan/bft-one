@@ -5,7 +5,7 @@ export const dynamic = "force-dynamic";
 
 export async function GET(req: Request) {
   try {
-    const auth = await authenticateRequest(req);
+    const auth = await authenticateRequest(req, { requireAdmin: true });
     if ("errorResponse" in auth) {
       return auth.errorResponse;
     }

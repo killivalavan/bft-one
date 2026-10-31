@@ -43,22 +43,6 @@ export default function Navbar({
     } catch { }
   }, []);
 
-  function getSubdomainSlug(): string | null {
-    if (typeof window === "undefined") return null;
-    const hostname = window.location.hostname.toLowerCase();
-    const roots = ["seyalpro.in", "seyalpro.com", "bft-one.vercel.app", "bftone.com", "localhost"];
-
-    for (const root of roots) {
-      if (hostname.endsWith("." + root)) {
-        const sub = hostname.slice(0, -(root.length + 1));
-        if (sub && sub !== "www" && sub !== "app") {
-          return sub;
-        }
-      }
-    }
-    return null;
-  }
-
   function getTargetLoginUrl(): string {
     if (typeof window === "undefined") return "/login";
     if (pathname.startsWith("/super-admin")) return "/super-admin/login";
@@ -145,7 +129,7 @@ export default function Navbar({
     setMenuOpen(false);
     const targetUrl = getTargetLoginUrl();
     const { performClientLogout } = await import("@/lib/auth/clientLogout");
-    await performClientLogout(targetUrl);
+    await performClientLogout(targetUrl, { currentTenantId: business?.id });
   }
 
   return (

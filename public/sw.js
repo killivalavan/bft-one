@@ -3,7 +3,7 @@
  * App Shell Caching & Offline Fallback Handler
  */
 
-const CACHE_NAME = "seyalpro-app-shell-v2";
+const CACHE_NAME = "seyalpro-app-shell-v3";
 
 const STATIC_ASSETS = [
   "/",
@@ -55,6 +55,12 @@ self.addEventListener("fetch", (event) => {
 
   // 2a. Code bundles (JS/CSS): Network-First, cache only as offline fallback.
   // Cache-first here served stale app code after deploys/dev edits.
+  // In development (localhost / 127.0.0.1), let Next.js dev server handle all code chunks directly
+  const isDevHost = url.hostname === "localhost" || url.hostname === "127.0.0.1";
+  if (isDevHost && (url.pathname.startsWith("/_next/") || url.pathname.endsWith(".css") || url.pathname.endsWith(".js"))) {
+    return;
+  }
+
   if (
     url.pathname.startsWith("/_next/") ||
     url.pathname.endsWith(".css") ||

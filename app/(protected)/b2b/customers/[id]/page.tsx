@@ -8,8 +8,7 @@ import { useToast } from "@/components/ui/Toast";
 import { cn } from "@/lib/utils/cn";
 import { supabaseClient } from "@/lib/supabaseClient";
 import { format } from "date-fns";
-import {
-  generateCombinedLedgerPdf,
+import type {
   CombinedLedgerTransaction,
   CombinedLedgerPdfData,
 } from "@/lib/utils/combinedLedgerPdf";
@@ -406,6 +405,7 @@ export default function ClientLedgerDedicatedPage() {
         transactions: clientTransactions,
       };
 
+      const { generateCombinedLedgerPdf } = await import("@/lib/utils/combinedLedgerPdf");
       await generateCombinedLedgerPdf(pdfData);
 
       toast({

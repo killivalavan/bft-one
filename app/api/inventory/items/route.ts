@@ -110,18 +110,30 @@ export async function PUT(req: Request) {
 
     const { user, supa } = auth;
     const body = await req.json();
-    const { id, ...updates } = body;
+    const { id } = body;
 
     if (!id) {
       return NextResponse.json({ error: "Item id is required" }, { status: 400 });
     }
 
+    // Whitelist updatable fields only: prevent business_id or system field mass-assignment
+    const updates: Record<string, any> = {
+      updated_at: new Date().toISOString(),
+    };
+    if (body.name !== undefined && typeof body.name === "string") updates.name = body.name.trim();
+    if (body.sku !== undefined) updates.sku = body.sku ? String(body.sku).trim() : null;
+    if (body.category !== undefined) updates.category = body.category;
+    if (body.unit !== undefined) updates.unit = body.unit;
+    if (body.cost_per_unit !== undefined) updates.cost_per_unit = Number(body.cost_per_unit) || 0;
+    if (body.current_stock !== undefined) updates.current_stock = Number(body.current_stock) || 0;
+    if (body.min_reorder_level !== undefined) updates.min_reorder_level = Number(body.min_reorder_level) || 0;
+    if (body.optimal_stock_level !== undefined) updates.optimal_stock_level = Number(body.optimal_stock_level) || 0;
+    if (body.notify_at !== undefined) updates.notify_at = body.notify_at ? Number(body.notify_at) : null;
+    if (body.is_active !== undefined) updates.is_active = Boolean(body.is_active);
+
     const { data: updatedItem, error } = await supa
       .from("inventory_items")
-      .update({
-        ...updates,
-        updated_at: new Date().toISOString(),
-      })
+      .update(updates)
       .eq("id", id)
       .eq("business_id", user.businessId)
       .select()

@@ -24,56 +24,69 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    // Fetch sales, expenses, and orders for cross-tenant combined analytics
-    const [salesRes, expensesRes, ordersRes] = await Promise.all([
-      supa.from("daily_sales").select("business_id, total_cash_cents, upi_amount_cents"),
-      supa.from("daily_expenses").select("business_id, price_cents"),
-      supa.from("orders").select("business_id, total_amount, status"),
-    ]);
-
-    // Financial totals by tenant
+    // Prefer server-side SQL aggregation RPC to avoid PostgREST 1,000-row truncation and memory dumps
     const salesByBiz: Record<string, number> = {};
-    let platformTotalSales = 0;
-    (salesRes.data || []).forEach((s: any) => {
-      const bId = s.business_id || "a0000000-0000-0000-0000-000000000001";
-      const amount = ((s.total_cash_cents || 0) + (s.upi_amount_cents || 0)) / 100;
-      salesByBiz[bId] = (salesByBiz[bId] || 0) + amount;
-      platformTotalSales += amount;
-    });
-
     const expensesByBiz: Record<string, number> = {};
-    let platformTotalExpenses = 0;
-    (expensesRes.data || []).forEach((e: any) => {
-      const bId = e.business_id || "a0000000-0000-0000-0000-000000000001";
-      const amount = (e.price_cents || 0) / 100;
-      expensesByBiz[bId] = (expensesByBiz[bId] || 0) + amount;
-      platformTotalExpenses += amount;
-    });
-
     const ordersByBiz: Record<string, number> = {};
-    let platformTotalOrders = 0;
-    (ordersRes.data || []).forEach((o: any) => {
-      const bId = o.business_id || "a0000000-0000-0000-0000-000000000001";
-      ordersByBiz[bId] = (ordersByBiz[bId] || 0) + 1;
-      platformTotalOrders += 1;
-    });
-
-    // Fetch user counts per business
-    const { data: profiles } = await supa
-      .from("profiles")
-      .select("id, email, is_admin, business_id");
-
     const countsByBiz: Record<string, { totalUsers: number; adminEmail?: string }> = {};
+    let platformTotalSales = 0;
+    let platformTotalExpenses = 0;
+    let platformTotalOrders = 0;
     let platformTotalUsers = 0;
-    (profiles || []).forEach((p: any) => {
-      const bId = p.business_id || "a0000000-0000-0000-0000-000000000001";
-      if (!countsByBiz[bId]) countsByBiz[bId] = { totalUsers: 0 };
-      countsByBiz[bId].totalUsers += 1;
-      platformTotalUsers += 1;
-      if (p.is_admin && !countsByBiz[bId].adminEmail) {
-        countsByBiz[bId].adminEmail = p.email;
+
+    const { data: rpcMetrics, error: rpcErr } = await supa.rpc("get_platform_business_metrics");
+    if (!rpcErr && Array.isArray(rpcMetrics)) {
+      for (const m of rpcMetrics) {
+        if (!m?.business_id) continue;
+        const bId = m.business_id;
+        const sales = Number(m.total_sales) || 0;
+        const expenses = Number(m.total_expenses) || 0;
+        const orders = Number(m.order_count) || 0;
+        const users = Number(m.user_count) || 0;
+        salesByBiz[bId] = sales;
+        expensesByBiz[bId] = expenses;
+        ordersByBiz[bId] = orders;
+        countsByBiz[bId] = { totalUsers: users, adminEmail: m.admin_email || undefined };
+        platformTotalSales += sales;
+        platformTotalExpenses += expenses;
+        platformTotalOrders += orders;
+        platformTotalUsers += users;
       }
-    });
+    } else {
+      const [salesRes, expensesRes, ordersRes, profilesRes] = await Promise.all([
+        supa.from("daily_sales").select("business_id, total_cash_cents, upi_amount_cents"),
+        supa.from("daily_expenses").select("business_id, price_cents"),
+        supa.from("orders").select("business_id"),
+        supa.from("profiles").select("id, email, is_admin, business_id"),
+      ]);
+
+      for (const s of salesRes.data || []) {
+        if (!s.business_id) continue;
+        const amount = ((s.total_cash_cents || 0) + (s.upi_amount_cents || 0)) / 100;
+        salesByBiz[s.business_id] = (salesByBiz[s.business_id] || 0) + amount;
+        platformTotalSales += amount;
+      }
+      for (const e of expensesRes.data || []) {
+        if (!e.business_id) continue;
+        const amount = (e.price_cents || 0) / 100;
+        expensesByBiz[e.business_id] = (expensesByBiz[e.business_id] || 0) + amount;
+        platformTotalExpenses += amount;
+      }
+      for (const o of ordersRes.data || []) {
+        if (!o.business_id) continue;
+        ordersByBiz[o.business_id] = (ordersByBiz[o.business_id] || 0) + 1;
+        platformTotalOrders += 1;
+      }
+      for (const p of profilesRes.data || []) {
+        if (!p.business_id) continue;
+        if (!countsByBiz[p.business_id]) countsByBiz[p.business_id] = { totalUsers: 0 };
+        countsByBiz[p.business_id].totalUsers += 1;
+        platformTotalUsers += 1;
+        if (p.is_admin && !countsByBiz[p.business_id].adminEmail) {
+          countsByBiz[p.business_id].adminEmail = p.email;
+        }
+      }
+    }
 
     const enriched = (businesses || []).map((b: any) => {
       const totalSales = salesByBiz[b.id] || 0;
@@ -356,10 +369,13 @@ export async function DELETE(request: Request) {
       .filter((p) => !p.is_super_admin && p.id !== caller.id)
       .map((p) => p.id);
 
-    // 3. Cascade wipe tenant operational records
+    // 3. Cascade wipe tenant operational records across retail, B2B wholesale, and inventory
     await Promise.allSettled([
       supa.from("salary_entries").delete().eq("business_id", businessId),
       supa.from("salary_settlements").delete().eq("business_id", businessId),
+      supa.from("employee_increments").delete().eq("business_id", businessId),
+      supa.from("employee_achievements").delete().eq("business_id", businessId),
+      supa.from("employee_notices").delete().eq("business_id", businessId),
       supa.from("leaves").delete().eq("business_id", businessId),
       supa.from("timesheets").delete().eq("business_id", businessId),
       supa.from("daily_sales").delete().eq("business_id", businessId),
@@ -372,6 +388,19 @@ export async function DELETE(request: Request) {
       supa.from("external_contacts").delete().eq("business_id", businessId),
       supa.from("shifts").delete().eq("business_id", businessId),
       supa.from("notifications").delete().eq("business_id", businessId),
+      supa.from("invoices").delete().eq("business_id", businessId),
+      supa.from("b2b_dispatches").delete().eq("business_id", businessId),
+      supa.from("b2b_products").delete().eq("business_id", businessId),
+      supa.from("b2b_clients").delete().eq("business_id", businessId),
+      supa.from("b2b_payments").delete().eq("business_id", businessId),
+      supa.from("b2b_expenses").delete().eq("business_id", businessId),
+      supa.from("b2b_broadcasts").delete().eq("business_id", businessId),
+      supa.from("inventory_items").delete().eq("business_id", businessId),
+      supa.from("item_recipes").delete().eq("business_id", businessId),
+      supa.from("stock_ledger").delete().eq("business_id", businessId),
+      supa.from("suppliers").delete().eq("business_id", businessId),
+      supa.from("purchase_orders").delete().eq("business_id", businessId),
+      supa.from("audit_logs").delete().eq("business_id", businessId),
     ]);
 
     // 4. Delete user profiles and auth accounts

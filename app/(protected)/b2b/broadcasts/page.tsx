@@ -28,6 +28,7 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { BakerProduct, INITIAL_BAKER_PRODUCTS } from "../products/page";
+import { getAuthHeaders } from "@/lib/auth/clientAuth";
 import { formatCafeName, DEFAULT_BAKER_SAMPLE_STORES, sanitizeBakerStores } from "@/lib/utils/bakerUtils";
 import { fetchB2BClients, B2B_CUSTOMERS_UPDATED_EVENT } from "@/lib/services/b2bClients";
 import { SelectDropdown } from "@/components/ui/SelectDropdown";
@@ -259,14 +260,18 @@ export default function BakerBroadcastsPage() {
         return;
       }
 
-      // 1. Dispatch cross-tenant broadcast via backend API
-      const res = await fetch("/api/baker/broadcast", {
+      // 1. Dispatch cross-tenant broadcast and persist to b2b_broadcasts in a single request
+      const authHeaders = await getAuthHeaders();
+      const res = await fetch("/api/b2b/broadcasts", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: authHeaders,
         body: JSON.stringify({
+          id: newBroadcast.id,
+          business_id: business?.id,
           sender_business_id: business?.id,
           sender_name: business?.name || "Central Kitchen",
           target_type: targetType,
+          target_stores: newBroadcast.target_stores,
           target_store_ids: targetBusinessIds,
           target_store_names: targetStoreNames,
           title: title.trim(),
@@ -283,12 +288,9 @@ export default function BakerBroadcastsPage() {
         throw new Error(apiResult.error || "Failed to dispatch broadcast");
       }
 
-      // 2. Save to local broadcast feed & persist to Supabase via TanStack mutation
+      // 2. Save to local broadcast feed
       const updated = [newBroadcast, ...broadcasts];
       saveBroadcasts(updated);
-      publishBroadcastMutation.mutateAsync(newBroadcast).catch((err) => {
-        console.warn("Cloud broadcast note:", err);
-      });
 
       toast({
         title: "Broadcast Published!",

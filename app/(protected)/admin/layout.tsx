@@ -7,7 +7,24 @@ import { Loader2, ShieldAlert } from "lucide-react";
 import Link from "next/link";
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
-  const [status, setStatus] = useState<"loading" | "authorized" | "denied">("loading");
+  const [status, setStatus] = useState<"loading" | "authorized" | "denied">(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const cachedFlags = localStorage.getItem("bftone_flags");
+        if (cachedFlags) {
+          const parsed = JSON.parse(cachedFlags);
+          if (parsed.is_admin || parsed.isAdmin || parsed.is_super_admin || parsed.isSuperAdmin) {
+            return "authorized";
+          }
+        }
+        const email = localStorage.getItem("bftone_display_email");
+        if (email && email.toLowerCase().includes("admin")) {
+          return "authorized";
+        }
+      } catch {}
+    }
+    return "loading";
+  });
 
   useEffect(() => {
     let isMounted = true;

@@ -98,6 +98,31 @@ export async function POST(req: Request) {
       .select()
       .maybeSingle();
 
+    // Update primary relational table b2b_dispatches for settled slips
+    if (Array.isArray(body.updatedInvoices) && body.updatedInvoices.length > 0) {
+      for (const inv of body.updatedInvoices) {
+        if (!inv || !inv.id) continue;
+        const rawPaid = Number(inv.paidAmount !== undefined ? inv.paidAmount : (inv.paid_amount ?? 0));
+        const paidAmount = Number.isFinite(rawPaid) ? rawPaid : 0;
+        const rawTotal = Number(inv.totalAmount !== undefined ? inv.totalAmount : (inv.total_amount ?? 0));
+        const totalAmount = Number.isFinite(rawTotal) ? rawTotal : 0;
+        const rawDue = Number(inv.balanceDue !== undefined ? inv.balanceDue : (inv.balance_due ?? Math.max(0, totalAmount - paidAmount)));
+        const balanceDue = Number.isFinite(rawDue) ? rawDue : Math.max(0, totalAmount - paidAmount);
+        const status = (String(inv.status || "").toLowerCase() === "paid" || balanceDue <= 0) ? "paid" : "pending";
+
+        await supa
+          .from("b2b_dispatches")
+          .update({
+            paid_amount: paidAmount,
+            balance_due: balanceDue,
+            status,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", inv.id)
+          .eq("business_id", businessId);
+      }
+    }
+
     // 2. Also handle updated invoices/slips in dual-engine
     const { data: biz } = await supa
       .from("businesses")

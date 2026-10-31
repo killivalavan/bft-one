@@ -34,6 +34,11 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Unauthorized: Cannot cancel order of another business" }, { status: 403 });
     }
 
+    // Idempotency: Prevent duplicate restock if order was already canceled
+    if (ord.status === "canceled") {
+      return NextResponse.json({ ok: true, message: "Order is already canceled", restocked: 0 });
+    }
+
     const targetBizId = ord.business_id || callerBusinessId;
 
     // Fetch items

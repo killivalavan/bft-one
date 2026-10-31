@@ -216,7 +216,7 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
           ownerRef.current = undefined;
           setBusiness(NEUTRAL_BUSINESS);
           setStatus("resolving");
-          if (!currentUserId) clearTenantCache();
+          // Preserve warm-start cache during transient hydration without premature cache eviction
         }
       }
 

@@ -716,7 +716,9 @@ ${order.taxCents > 0 ? `🏛️ *GST (5%):* ₹${(order.taxCents / 100).toFixed(
             product_id: r.product_id,
             qty: r.qty,
           })),
+          idempotency_key: `pos_stock_${orderRecordId}`,
         },
+        customId: `stock_adjust_${orderRecordId}`,
       });
 
       // Prepare completed receipt

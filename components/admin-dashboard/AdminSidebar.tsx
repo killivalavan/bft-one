@@ -88,7 +88,7 @@ export function AdminSidebar({
   const router = useRouter();
   const { user, loading } = useUser();
   const { flags } = useProfile();
-  const { isModuleEnabled } = useTenant();
+  const { business, isModuleEnabled } = useTenant();
   const isBakerModuleEnabled = isModuleEnabled ? isModuleEnabled("baker_mode") : false;
   const isBillingEnabled = isModuleEnabled ? isModuleEnabled("billing") : true;
   const isTimesheetEnabled = isModuleEnabled ? isModuleEnabled("timesheet") : false;
@@ -255,7 +255,7 @@ export function AdminSidebar({
   async function handleLogout() {
     setProfileMenuOpen(false);
     const { performClientLogout } = await import("@/lib/auth/clientLogout");
-    await performClientLogout("/login");
+    await performClientLogout("/login", { currentTenantId: business?.id });
   }
 
   // Prevent background scroll when mobile drawer is open

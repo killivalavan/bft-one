@@ -3,7 +3,34 @@ import { authenticateRequest } from "@/lib/auth/serverAuth";
 
 export const dynamic = "force-dynamic";
 
-// Body: { items: Array<{ product_id:string; qty:number }> }
+interface ProductRecord {
+  id: string;
+  name: string;
+}
+
+interface StockRecord {
+  product_id: string;
+  max_qty: number;
+  available_qty: number;
+  notify_at_count?: number | null;
+}
+
+interface StockUpdatePayload {
+  product_id: string;
+  business_id: string;
+  max_qty: number;
+  available_qty: number;
+}
+
+interface NotificationPayload {
+  business_id: string;
+  product_id: string | null;
+  message: string;
+  kind: string;
+  meta: Record<string, unknown>;
+}
+
+// Body: { items: Array<{ product_id: string; qty: number }>; idempotency_key?: string; strict_stock?: boolean }
 export async function POST(req: Request) {
   try {
     const auth = await authenticateRequest(req);
@@ -18,11 +45,50 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Tenant context missing or invalid" }, { status: 400 });
     }
 
-    const body = (await req.json().catch(() => ({}))) as { items?: Array<{ product_id: string; qty: number }> };
+    const body = (await req.json().catch(() => ({}))) as {
+      items?: Array<{ product_id: string; qty: number }>;
+      idempotency_key?: string;
+      strict_stock?: boolean;
+    };
     const items = Array.isArray(body.items) ? body.items : [];
     if (items.length === 0) return NextResponse.json({ ok: true, skipped: true });
 
-    // Sum quantities per product
+    const idempotencyKey =
+      (typeof body.idempotency_key === "string" && body.idempotency_key.trim()) ||
+      req.headers.get("x-idempotency-key") ||
+      null;
+
+    // 1. Primary Path: Atomic Database-Side Stock & Recipe BOM Adjustment via RPC
+    const { data: rpcResult, error: rpcErr } = await supa.rpc("adjust_pos_stock_atomic", {
+      p_business_id: callerBusinessId,
+      p_items: items,
+      p_user_id: user.id || null,
+      p_idempotency_key: idempotencyKey,
+      p_strict_stock: Boolean(body.strict_stock),
+    });
+
+    if (!rpcErr) {
+      return NextResponse.json(rpcResult || { ok: true });
+    }
+
+    // If error was strict stock shortage, return 400 bad request immediately
+    if (rpcErr.message && rpcErr.message.includes("INSUFFICIENT_STOCK")) {
+      return NextResponse.json({ error: rpcErr.message, code: "INSUFFICIENT_STOCK" }, { status: 400 });
+    }
+
+    // If RPC does not exist in the database (e.g. pending migration), log warning and proceed to safe fallback
+    const isRpcMissing =
+      rpcErr.code === "42883" ||
+      rpcErr.code === "PGRST202" ||
+      (rpcErr.message && rpcErr.message.includes("adjust_pos_stock_atomic"));
+
+    if (!isRpcMissing) {
+      return NextResponse.json({ error: rpcErr.message }, { status: 500 });
+    }
+
+    console.warn("adjust_pos_stock_atomic RPC not detected; executing tenant-scoped application fallback.");
+
+    // 2. Application Fallback (Tenant Scoped & Clamped to Non-Negative)
     const usage = new Map<string, number>();
     for (const it of items) {
       if (!it?.product_id || !Number.isFinite(it?.qty)) continue;
@@ -32,15 +98,27 @@ export async function POST(req: Request) {
     const ids = Array.from(usage.keys());
 
     // Fetch stocks and products strictly scoped to tenant
-    const [{ data: stocks }, { data: prods }] = await Promise.all([
-      supa.from("product_stocks").select("product_id,max_qty,available_qty,notify_at_count").in("product_id", ids).eq("business_id", callerBusinessId),
-      supa.from("products").select("id,name").in("id", ids).eq("business_id", callerBusinessId),
+    const [{ data: rawStocks }, { data: rawProds }] = await Promise.all([
+      supa
+        .from("product_stocks")
+        .select("product_id,max_qty,available_qty,notify_at_count")
+        .in("product_id", ids)
+        .eq("business_id", callerBusinessId),
+      supa
+        .from("products")
+        .select("id,name")
+        .in("id", ids)
+        .eq("business_id", callerBusinessId),
     ]);
-    const nameById = new Map<string, string>((prods || []).map((p: any) => [p.id, p.name]));
-    const stockById = new Map<string, any>((stocks || []).map((s: any) => [s.product_id, s]));
 
-    const updates: any[] = [];
-    const notifs: Array<{ business_id: string; product_id: string | null; message: string; kind: string; meta: any }> = [];
+    const prods = (rawProds || []) as unknown as ProductRecord[];
+    const stocks = (rawStocks || []) as unknown as StockRecord[];
+
+    const nameById = new Map<string, string>(prods.map((p) => [p.id, p.name]));
+    const stockById = new Map<string, StockRecord>(stocks.map((s) => [s.product_id, s]));
+
+    const updates: StockUpdatePayload[] = [];
+    const notifs: NotificationPayload[] = [];
 
     for (const pid of ids) {
       const useQty = usage.get(pid) || 0;
@@ -55,6 +133,7 @@ export async function POST(req: Request) {
       const custom = (s.notify_at_count ?? null) as number | null;
       const lowThreshold = custom && custom > 0 ? custom : null;
       const name = nameById.get(pid) || "Product";
+
       // Low-stock only when a custom threshold is present
       if (lowThreshold !== null) {
         if (before > lowThreshold && after <= lowThreshold && after > 0) {
@@ -86,7 +165,7 @@ export async function POST(req: Request) {
     }
     // Insert notifications
     if (notifs.length > 0) {
-      await supa.from("notifications").insert(notifs as any);
+      await supa.from("notifications").insert(notifs);
     }
 
     // Recipe BOM Auto-Deduction for Inventory Items
@@ -102,7 +181,7 @@ export async function POST(req: Request) {
         for (const r of recipes) {
           const soldQty = usage.get(r.product_id) || 0;
           if (soldQty <= 0) continue;
-          const wasteFactor = 1 + ((r.waste_factor_pct || 0) / 100);
+          const wasteFactor = 1 + (r.waste_factor_pct || 0) / 100;
           const totalIngQty = (Number(r.quantity_required) || 0) * soldQty * wasteFactor;
           invDeductions.set(r.inventory_item_id, (invDeductions.get(r.inventory_item_id) || 0) + totalIngQty);
         }
@@ -145,7 +224,8 @@ export async function POST(req: Request) {
     }
 
     return NextResponse.json({ ok: true, updated: updates.length, notified: notifs.length });
-  } catch (e: any) {
-    return NextResponse.json({ error: e?.message || "unknown" }, { status: 500 });
+  } catch (e: unknown) {
+    const errorMsg = e instanceof Error ? e.message : "unknown";
+    return NextResponse.json({ error: errorMsg }, { status: 500 });
   }
 }

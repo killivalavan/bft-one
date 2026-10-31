@@ -80,3 +80,28 @@ export function sanitizeBakerStores(stores: any[]): BakerCustomerStore[] {
   });
 }
 
+/**
+ * Helper to reliably extract a Date object from any slip/invoice object format.
+ */
+export function getSlipDate(slip: any): Date {
+  if (!slip) return new Date();
+  if (slip.createdAt) {
+    const d = new Date(slip.createdAt);
+    if (!isNaN(d.getTime())) return d;
+  }
+  if (slip.created_at) {
+    const d = new Date(slip.created_at);
+    if (!isNaN(d.getTime())) return d;
+  }
+  if (slip.invoice_date) {
+    const d = new Date(slip.invoice_date);
+    if (!isNaN(d.getTime())) return d;
+  }
+  if (slip.date) {
+    const d = new Date(slip.date);
+    if (!isNaN(d.getTime())) return d;
+  }
+  return new Date();
+}
+
+

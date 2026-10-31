@@ -9,9 +9,20 @@ export type UserFlags = {
     businessId: string | null;
 };
 
+// Module-level in-memory cache shared across all useProfile() hook invocations
+// Eliminates layout unmounts and authorization flickers during client-side navigation
+let cachedProfileFlags: UserFlags | null = null;
+let profileResolved = false;
+
+export function resetProfileCache() {
+    cachedProfileFlags = null;
+    profileResolved = false;
+}
+
 export function useProfile() {
     const { user, loading: userLoading } = useUser();
     const [flags, setFlags] = useState<UserFlags | null>(() => {
+        if (cachedProfileFlags) return cachedProfileFlags;
         if (typeof window === 'undefined') return null;
         try {
             for (let i = 0; i < localStorage.length; i++) {
@@ -19,19 +30,21 @@ export function useProfile() {
                 if (key && (key.startsWith('bftone_flags') || key === 'bftone_flags')) {
                     const cached = JSON.parse(localStorage.getItem(key) || '{}');
                     if (cached && (cached.is_admin !== undefined || cached.isAdmin !== undefined)) {
-                        return {
+                        const parsed = {
                             isAdmin: !!(cached.is_admin ?? cached.isAdmin),
                             isStockManager: !!(cached.is_stock_manager ?? cached.isStockManager),
                             isSuperAdmin: !!(cached.is_super_admin ?? cached.isSuperAdmin),
                             businessId: cached.business_id || cached.businessId || null,
                         };
+                        cachedProfileFlags = parsed;
+                        return parsed;
                     }
                 }
             }
         } catch { }
         return null;
     });
-    const [loading, setLoading] = useState(true);
+    const [loading, setLoading] = useState<boolean>(() => !profileResolved && !flags);
 
     // Global fail-safe: never allow profile loading state to be stuck for > 6 seconds
     useEffect(() => {
@@ -45,6 +58,8 @@ export function useProfile() {
         if (userLoading) return;
 
         if (!user) {
+            cachedProfileFlags = null;
+            profileResolved = true;
             setFlags(null);
             setLoading(false);
             try { localStorage.removeItem('bftone_flags'); } catch { }
@@ -56,12 +71,14 @@ export function useProfile() {
             if (raw) {
                 const cached = JSON.parse(raw);
                 if (cached && cached.userId === user.id) {
-                    setFlags({
+                    const parsed = {
                         isAdmin: !!cached.is_admin,
                         isStockManager: !!cached.is_stock_manager,
                         isSuperAdmin: !!cached.is_super_admin,
                         businessId: cached.business_id || null,
-                    });
+                    };
+                    cachedProfileFlags = parsed;
+                    setFlags(parsed);
                 }
             }
         } catch { }
@@ -113,6 +130,9 @@ export function useProfile() {
                     isSuperAdmin: is_super_admin,
                     businessId: business_id,
                 };
+                cachedProfileFlags = newFlags;
+                profileResolved = true;
+
                 setFlags((prev) => {
                     if (
                         prev &&
@@ -148,4 +168,3 @@ export function useProfile() {
 
     return { flags, loading: loading || userLoading };
 }
-

@@ -1,60 +1,10 @@
 import { NextResponse } from "next/server";
 import { authenticateRequest } from "@/lib/auth/serverAuth";
+import { normalizeDispatch } from "@/lib/utils/b2bSlipWhatsapp";
 
 export const dynamic = "force-dynamic";
 
-function normalizeDispatch(inv: any) {
-  if (!inv) return inv;
-  const rawTotal = Number(inv.totalAmount !== undefined && inv.totalAmount !== null ? inv.totalAmount : (inv.total_amount ?? 0));
-  const totalAmount = Number.isFinite(rawTotal) ? rawTotal : 0;
-
-  const rawPaid = Number(inv.paidAmount !== undefined && inv.paidAmount !== null ? inv.paidAmount : (inv.paid_amount ?? 0));
-  const paidAmount = Number.isFinite(rawPaid) ? rawPaid : 0;
-
-  const rawDue = Number(inv.balanceDue !== undefined && inv.balanceDue !== null ? inv.balanceDue : (inv.balance_due ?? (totalAmount - paidAmount)));
-  const balanceDue = Number.isFinite(rawDue) ? rawDue : Math.max(0, totalAmount - paidAmount);
-
-  const customerName = inv.customerName || inv.client_name || inv.customer_name || "Partner Store";
-  const invoiceNumber = inv.invoiceNumber || inv.slip_number || inv.invoice_number || `SLIP-${inv.id || "0"}`;
-  const customerPhone = inv.customerPhone || inv.client_phone || inv.customer_phone || "";
-  const customerAddress = inv.customerAddress || inv.client_address || inv.customer_address || "";
-  const clientId = inv.clientId || inv.client_id || "";
-
-  const rawStatus = String(inv.status || "").toLowerCase();
-  const status = (rawStatus === "paid" || balanceDue <= 0) ? "paid" : "unpaid";
-
-  const isReturn = Boolean(
-    inv.isReturn ||
-    (invoiceNumber || "").startsWith("RET-") ||
-    (inv.title || "").includes("RETURN") ||
-    totalAmount < 0
-  );
-
-  return {
-    ...inv,
-    id: inv.id || invoiceNumber,
-    invoiceNumber,
-    slip_number: invoiceNumber,
-    customerName,
-    client_name: customerName,
-    customerPhone,
-    client_phone: customerPhone,
-    customerAddress,
-    client_address: customerAddress,
-    clientId,
-    client_id: clientId,
-    totalAmount,
-    total_amount: totalAmount,
-    paidAmount,
-    paid_amount: paidAmount,
-    balanceDue,
-    balance_due: balanceDue,
-    status,
-    isReturn,
-    title: inv.title || (isReturn ? "RETURN & CREDIT SLIP" : "DELIVERY SLIP"),
-    date: inv.date || inv.invoice_date || (inv.created_at ? inv.created_at.split("T")[0] : new Date().toISOString().split("T")[0]),
-  };
-}
+export { normalizeDispatch };
 
 export async function GET(req: Request) {
   try {

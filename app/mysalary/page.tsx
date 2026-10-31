@@ -5,7 +5,7 @@ import { supabaseClient } from "@/lib/supabaseClient";
 import { Button } from "@/components/ui/Button";
 import { ChevronLeft, ChevronRight, Wallet, MinusCircle, PiggyBank, Download, Loader2, TrendingUp } from "lucide-react";
 import { StatCard } from "@/components/ui/StatCard";
-import jsPDF from "jspdf";
+// lazy-loaded on PDF download
 import { useToast } from "@/components/ui/Toast";
 import { SalaryChart } from "@/components/mysalary/SalaryChart";
 import { AnimatedNumber } from "@/components/ui/AnimatedNumber";
@@ -67,6 +67,7 @@ export default function MySalaryPage() {
   async function downloadPayslip() {
     try {
       setDownloading(true);
+      const { default: jsPDF } = await import("jspdf");
       const doc = new jsPDF();
 
       // Load Logo

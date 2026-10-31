@@ -202,11 +202,11 @@ export default function SuperAdminPage() {
     }
   }
 
-  function handleSwitchWorkspace(slug: string, name: string) {
+  async function handleSwitchWorkspace(slug: string, name: string) {
     document.cookie = `tenant_slug=${slug}; path=/; max-age=${60 * 60 * 24 * 30}; SameSite=Lax`;
     try {
-      localStorage.removeItem("bftone_tenant_cache");
-      localStorage.removeItem("seyalpro_app_mode");
+      const { clearTenantClientState } = await import("@/lib/auth/clientLogout");
+      await clearTenantClientState();
     } catch {}
     toast({
       title: `Switched to ${name}`,

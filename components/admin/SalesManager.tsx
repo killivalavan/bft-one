@@ -5,8 +5,8 @@ import { supabaseClient } from "@/lib/supabaseClient";
 import { useTenant } from "@/lib/context/TenantContext";
 import { Button } from "@/components/ui/Button";
 import { Loader2, Download, TrendingUp, TrendingDown, ChevronLeft, ChevronRight } from "lucide-react";
-import jsPDF from "jspdf";
-import autoTable from "jspdf-autotable";
+// jsPDF and autoTable lazy-loaded in exportPdf
+
 import { format, startOfMonth, endOfMonth, addMonths, isSameMonth, isSameYear, addYears, getYear } from "date-fns";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from "recharts";
 
@@ -177,7 +177,8 @@ export function SalesManager() {
     }
 
     // --- Export ---
-    function exportPdf() {
+    async function exportPdf() {
+        const [{ default: jsPDF }, { default: autoTable }] = await Promise.all([import("jspdf"), import("jspdf-autotable")]);
         const doc = new jsPDF();
         let titleTime = "";
         if (view === 'daily') titleTime = format(currentDate, 'MMMM yyyy');

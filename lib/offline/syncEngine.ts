@@ -79,10 +79,10 @@ export async function getSyncReport(businessId?: string): Promise<SyncStatusRepo
   try {
     const allOps = await getAllItems<SyncQueueItem>(STORES.sync_queue);
     const filteredOps = businessId
-      ? allOps.filter((o) => o.business_id === businessId || o.business_id === "default" || !o.business_id)
+      ? allOps.filter((o) => o.business_id === businessId)
       : allOps;
     pendingCount = filteredOps.filter((o) => o.status === "pending" || o.status === "syncing").length;
-    failedCount = filteredOps.filter((o) => o.status === "failed").length;
+    failedCount = filteredOps.filter((o) => o.status === "failed" || o.status === "rejected").length;
   } catch {}
 
   const lastSyncStr = await getMeta<string>("last_sync_timestamp");
@@ -151,25 +151,51 @@ export async function enqueueSyncOperation(params: {
   customId?: string;
 }): Promise<SyncQueueItem> {
   const operationId = params.customId || crypto.randomUUID();
+  let resolvedUserId = params.userId || null;
+  let resolvedBusinessId = params.businessId;
+
+  // If businessId or userId is missing/default, attempt resolution from current session
+  if (!resolvedUserId || !resolvedBusinessId || resolvedBusinessId === "default") {
+    try {
+      const { data: { session } } = await supabaseClient.auth.getSession().catch(() => ({ data: { session: null } }));
+      if (session?.user) {
+        if (!resolvedUserId) resolvedUserId = session.user.id;
+        if (!resolvedBusinessId || resolvedBusinessId === "default") {
+          const { data: prof } = await supabaseClient
+            .from("profiles")
+            .select("business_id")
+            .eq("id", session.user.id)
+            .maybeSingle();
+          if (prof?.business_id) {
+            resolvedBusinessId = prof.business_id;
+          }
+        }
+      }
+    } catch {}
+  }
+
+  const isInvalidTenant = !resolvedBusinessId || resolvedBusinessId === "default" || !UUID_REGEX.test(resolvedBusinessId);
+
   const queueItem: SyncQueueItem = {
     id: operationId,
     client_operation_id: operationId,
-    business_id: params.businessId,
-    user_id: params.userId || null,
+    business_id: resolvedBusinessId || "unassigned",
+    user_id: resolvedUserId,
     table_name: params.tableName,
     action: params.action,
     payload: params.payload,
-    status: "pending",
+    status: isInvalidTenant ? "rejected" : "pending",
     retry_count: 0,
+    last_error: isInvalidTenant ? "Quarantined: Missing or unassigned business ID at time of mutation." : null,
     created_at: new Date().toISOString(),
   };
 
   await putItem<SyncQueueItem>(STORES.sync_queue, queueItem);
-  emitSyncReport(params.businessId);
+  emitSyncReport(resolvedBusinessId);
 
-  // If online, trigger background sync opportunistically
-  if (typeof navigator !== "undefined" && navigator.onLine) {
-    triggerBackgroundSync(params.businessId);
+  // If online and tenant is valid, trigger background sync opportunistically
+  if (!isInvalidTenant && typeof navigator !== "undefined" && navigator.onLine) {
+    triggerBackgroundSync(resolvedBusinessId);
   }
 
   return queueItem;
@@ -216,9 +242,83 @@ export async function processSyncQueue(businessId?: string): Promise<{
     return { successCount: 0, failedCount: 0, errors: ["Server unreachable or offline"] };
   }
 
+  // 1. Session verification: Offline mutations require an authenticated session
+  let { data: { session } } = await supabaseClient.auth.getSession().catch(() => ({ data: { session: null } }));
+  if (!session?.user) {
+    const refreshed = await supabaseClient.auth.refreshSession().catch(() => ({ data: { session: null } }));
+    session = refreshed.data?.session || null;
+  }
+
+  if (!session?.user?.id) {
+    emitSyncReport(businessId);
+    return {
+      successCount: 0,
+      failedCount: 0,
+      errors: ["Authentication required: Cannot sync offline operations without an active session."],
+    };
+  }
+
+  // 2. Resolve caller's authoritative tenant context
+  let callerProf: { business_id?: string | null; is_super_admin?: boolean } | null = null;
+  try {
+    const { data: prof } = await supabaseClient
+      .from("profiles")
+      .select("business_id, is_super_admin")
+      .eq("id", session.user.id)
+      .maybeSingle();
+    callerProf = prof;
+  } catch (err: any) {
+    console.warn("[SyncEngine] Failed to resolve user profile:", err);
+  }
+
+  if (!callerProf) {
+    emitSyncReport(businessId);
+    return {
+      successCount: 0,
+      failedCount: 0,
+      errors: ["Cannot determine tenant authorization: profile not found."],
+    };
+  }
+
+  const isSuperAdmin = Boolean(callerProf.is_super_admin);
+  const userBizId = callerProf.business_id;
+
+  if (!isSuperAdmin && (!userBizId || !UUID_REGEX.test(userBizId))) {
+    emitSyncReport(businessId);
+    return {
+      successCount: 0,
+      failedCount: 0,
+      errors: ["Account has no valid business workspace assigned."],
+    };
+  }
+
+  // Authoritative tenant for this sync batch
+  const activeTenantId = isSuperAdmin
+    ? (businessId && UUID_REGEX.test(businessId) ? businessId : userBizId)
+    : userBizId;
+
+  if (!activeTenantId) {
+    emitSyncReport(businessId);
+    return {
+      successCount: 0,
+      failedCount: 0,
+      errors: ["No target business context resolved for sync."],
+    };
+  }
+
+  // If a specific businessId was requested and caller is NOT super admin, ensure it matches userBizId
+  if (!isSuperAdmin && businessId && businessId !== userBizId) {
+    emitSyncReport(businessId);
+    return {
+      successCount: 0,
+      failedCount: 0,
+      errors: [`Tenant mismatch: Requested business (${businessId}) does not match active session business (${userBizId}).`],
+    };
+  }
+
   isCurrentlySyncing = true;
   currentLastError = null;
-  emitSyncReport(businessId);
+  emitSyncReport(activeTenantId);
 
   let successCount = 0;
   let failedCount = 0;
@@ -226,10 +326,24 @@ export async function processSyncQueue(businessId?: string): Promise<{
 
   try {
     const allOps = await getAllItems<SyncQueueItem>(STORES.sync_queue);
+
+    // Quarantine any ops with unassigned or invalid business_id
+    for (const op of allOps) {
+      if ((!op.business_id || op.business_id === "default" || !UUID_REGEX.test(op.business_id)) && op.status !== "rejected") {
+        op.status = "rejected";
+        op.last_error = "Quarantined: Mutation has no valid tenant business ID.";
+        await putItem<SyncQueueItem>(STORES.sync_queue, op);
+      }
+    }
+
+    // STRICT MULTI-TENANT ISOLATION (TEN-01):
+    // Only process operations that belong strictly to the active authenticated tenant.
+    // Operations from other stores are left untouched in the queue for their respective sessions.
     const pendingOps = allOps.filter(
       (o) =>
-        (!businessId || o.business_id === businessId || o.business_id === "default" || !o.business_id) &&
-        (o.status === "pending" || o.status === "failed")
+        o.business_id === activeTenantId &&
+        (o.status === "pending" || o.status === "failed") &&
+        (o.retry_count || 0) < 5
     );
 
     // Sort by dependency priority then creation timestamp
@@ -245,7 +359,7 @@ export async function processSyncQueue(businessId?: string): Promise<{
       await putItem<SyncQueueItem>(STORES.sync_queue, op);
 
       try {
-        await executeCloudMutation(op);
+        await executeCloudMutation(op, activeTenantId, session.user.id);
         op.status = "synced";
         op.synced_at = new Date().toISOString();
         op.last_error = null;
@@ -253,11 +367,18 @@ export async function processSyncQueue(businessId?: string): Promise<{
         successCount++;
       } catch (err: any) {
         console.warn(`[SyncEngine] Error syncing ${op.table_name} (${op.id}):`, err);
-        op.status = "failed";
         op.retry_count = (op.retry_count || 0) + 1;
         const errMessage: string = err?.message || String(err) || "Unknown sync error";
         op.last_error = errMessage;
         currentLastError = errMessage;
+
+        // If permanent isolation violation or exceeded retry threshold, quarantine as rejected
+        if (op.retry_count >= 5 || errMessage.includes("Tenant mismatch") || errMessage.includes("isolation violation")) {
+          op.status = "rejected";
+        } else {
+          op.status = "failed";
+        }
+
         await putItem<SyncQueueItem>(STORES.sync_queue, op);
         failedCount++;
         errors.push(`${op.table_name}: ${errMessage}`);
@@ -273,7 +394,7 @@ export async function processSyncQueue(businessId?: string): Promise<{
     errors.push(currentLastError!);
   } finally {
     isCurrentlySyncing = false;
-    emitSyncReport(businessId);
+    emitSyncReport(activeTenantId);
   }
 
   return { successCount, failedCount, errors };
@@ -285,90 +406,34 @@ export async function processSyncQueue(businessId?: string): Promise<{
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-async function getEffectiveBusinessId(requestedBizId?: string): Promise<string> {
-  try {
-    let { data: { session } } = await supabaseClient.auth.getSession().catch(() => ({ data: { session: null } }));
-    if (!session?.user) {
-      const refreshed = await supabaseClient.auth.refreshSession().catch(() => ({ data: { session: null } }));
-      session = refreshed.data?.session || null;
-    }
-
-    if (session?.user?.id) {
-      let prof: { business_id?: any; is_super_admin?: any } | null = null;
-      try {
-        const res = await supabaseClient
-          .from("profiles")
-          .select("business_id, is_super_admin")
-          .eq("id", session.user.id)
-          .maybeSingle();
-        prof = res.data;
-      } catch {}
-
-      if (prof?.business_id) {
-        if (prof.is_super_admin && requestedBizId && UUID_REGEX.test(requestedBizId) && requestedBizId !== "default") {
-          return requestedBizId;
-        }
-        return prof.business_id;
-      }
-    }
-  } catch (e) {
-    console.warn("[SyncEngine] Failed to resolve user profile business_id:", e);
-  }
-
-  if (requestedBizId && UUID_REGEX.test(requestedBizId) && requestedBizId !== "default") {
-    return requestedBizId;
-  }
-  
-  // SEC-01 & SEC-04: Fail closed. Never default unassigned mutations to Navalur!
-  throw new Error("Cannot sync offline operation: Tenant business ID could not be resolved.");
-}
-
-async function executeCloudMutation(op: SyncQueueItem): Promise<void> {
+async function executeCloudMutation(
+  op: SyncQueueItem,
+  activeTenantId: string,
+  sessionUserId: string
+): Promise<void> {
   const { table_name, action, payload } = op;
 
-  // SEC-04: Validate tenant session boundary.
-  // Prevent Store B's logged-in session from absorbing Store A's pending offline mutations.
-  const { data: { session } } = await supabaseClient.auth.getSession().catch(() => ({ data: { session: null } }));
-  if (session?.user?.id) {
-    let currentProf: { business_id?: string; is_super_admin?: boolean } | null = null;
-    try {
-      const res = await supabaseClient
-        .from("profiles")
-        .select("business_id, is_super_admin")
-        .eq("id", session.user.id)
-        .maybeSingle();
-      currentProf = res.data;
-    } catch {}
-
-    if (
-      currentProf &&
-      !currentProf.is_super_admin &&
-      currentProf.business_id &&
-      op.business_id &&
-      op.business_id !== "default" &&
-      currentProf.business_id !== op.business_id
-    ) {
-      throw new Error(`Tenant mismatch: Pending mutation belongs to business ${op.business_id}, but active session belongs to business ${currentProf.business_id}.`);
-    }
+  // Strict tenant boundary assertion:
+  // Op must belong to activeTenantId, and activeTenantId must be a valid UUID
+  if (!op.business_id || op.business_id !== activeTenantId || !UUID_REGEX.test(op.business_id)) {
+    throw new Error(
+      `Tenant isolation violation: Mutation business_id (${op.business_id}) does not match authorized session tenant (${activeTenantId}).`
+    );
   }
 
-  const effectiveBizId = await getEffectiveBusinessId(op.business_id);
-
-  // Auto-sanitize top-level business_id on payload if applicable
+  // Ensure payload's business_id strictly matches the authorized tenant
   if (payload && typeof payload === "object" && !Array.isArray(payload)) {
-    if (!payload.business_id || !UUID_REGEX.test(payload.business_id) || payload.business_id === "default") {
-      payload.business_id = effectiveBizId;
-    }
+    payload.business_id = activeTenantId;
   }
 
   switch (table_name) {
     case "orders": {
       if (action === "INSERT" || action === "UPDATE") {
-        payload.business_id = effectiveBizId;
+        payload.business_id = activeTenantId;
 
-        const { data: { session } } = await supabaseClient.auth.getSession().catch(() => ({ data: { session: null } }));
-        if (!payload.user_id && session?.user?.id) {
-          payload.user_id = session.user.id;
+        // Preserve original user_id if set on payload, or fall back to session user
+        if (!payload.user_id) {
+          payload.user_id = sessionUserId;
         }
 
         let { error } = await supabaseClient
@@ -376,41 +441,18 @@ async function executeCloudMutation(op: SyncQueueItem): Promise<void> {
           .upsert(payload, { onConflict: "id" });
 
         if (error) {
-          // If RLS violation, attempt one-time retry with profile's live business_id
-          if (error.message?.includes("row-level security policy") && session?.user?.id) {
-            let prof: { business_id?: any } | null = null;
-            try {
-              const res = await supabaseClient
-                .from("profiles")
-                .select("business_id")
-                .eq("id", session.user.id)
-                .maybeSingle();
-              prof = res.data;
-            } catch {}
-
-            if (prof?.business_id && prof.business_id !== payload.business_id) {
-              console.warn(`[SyncEngine] RLS violation recovery with profile business_id ${prof.business_id}`);
-              payload.business_id = prof.business_id;
-              const retryRes = await supabaseClient
-                .from("orders")
-                .upsert(payload, { onConflict: "id" });
-              error = retryRes.error;
-            }
-          }
-
           // If error is due to optional columns not yet added to live DB (e.g. customer_name, payment_mode), fallback to core columns
           if (
-            error &&
-            (error.code === "PGRST204" ||
-              error.message?.includes("column") ||
-              error.message?.includes("schema cache"))
+            error.code === "PGRST204" ||
+            error.message?.includes("column") ||
+            error.message?.includes("schema cache")
           ) {
             console.warn("[SyncEngine] Retrying orders upsert with core schema:", error.message);
             const corePayload: any = {
               id: payload.id,
               total_cents: payload.total_cents ?? 0,
               status: payload.status || "completed",
-              business_id: payload.business_id,
+              business_id: activeTenantId,
             };
             if (payload.user_id) corePayload.user_id = payload.user_id;
             if (payload.created_at) corePayload.created_at = payload.created_at;
@@ -419,12 +461,12 @@ async function executeCloudMutation(op: SyncQueueItem): Promise<void> {
               .from("orders")
               .upsert(corePayload, { onConflict: "id" });
             if (coreErr) throw coreErr;
-          } else if (error) {
+          } else {
             throw error;
           }
         }
       } else if (action === "DELETE") {
-        const { error } = await supabaseClient.from("orders").delete().eq("id", payload.id);
+        const { error } = await supabaseClient.from("orders").delete().eq("id", payload.id).eq("business_id", activeTenantId);
         if (error) throw error;
       }
       break;
@@ -438,10 +480,7 @@ async function executeCloudMutation(op: SyncQueueItem): Promise<void> {
           .filter((item: any) => item.product_id && UUID_REGEX.test(item.product_id))
           .map((item: any) => ({
             ...item,
-            business_id:
-              item.business_id && UUID_REGEX.test(item.business_id) && item.business_id !== "default"
-                ? item.business_id
-                : effectiveBizId,
+            business_id: activeTenantId,
           }));
 
         if (validItems.length > 0) {
@@ -455,7 +494,6 @@ async function executeCloudMutation(op: SyncQueueItem): Promise<void> {
             }
           }
         } else {
-          // Items were demo/sample non-UUID products (e.g. "demo-t3"), gracefully skip
           console.warn("[SyncEngine] Skipped order_items sync for non-UUID sample items:", items);
         }
       }
@@ -463,11 +501,12 @@ async function executeCloudMutation(op: SyncQueueItem): Promise<void> {
     }
 
     case "stock_adjust": {
-      // Direct call to stock adjustment API route or RPC
+      const { getAuthHeaders } = await import("@/lib/auth/clientAuth");
+      const headers = await getAuthHeaders();
       const res = await fetch("/api/stock/adjust", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        headers,
+        body: JSON.stringify({ ...payload, business_id: activeTenantId }),
       });
       if (!res.ok) {
         const errJson = await res.json().catch(() => ({}));
@@ -478,112 +517,11 @@ async function executeCloudMutation(op: SyncQueueItem): Promise<void> {
 
     case "stock_ledger": {
       if (action === "INSERT") {
-        const { error } = await supabaseClient.from("stock_ledger").insert(payload);
+        const { error } = await supabaseClient.from("stock_ledger").insert({
+          ...payload,
+          business_id: activeTenantId,
+        });
         if (error && error.code !== "23505") throw error;
-      }
-      break;
-    }
-
-    case "daily_expenses": {
-      if (action === "INSERT" || action === "UPDATE") {
-        const { error } = await supabaseClient
-          .from("daily_expenses")
-          .upsert(payload, { onConflict: "id" });
-        if (error) throw error;
-      } else if (action === "DELETE") {
-        const { error } = await supabaseClient.from("daily_expenses").delete().eq("id", payload.id);
-        if (error) throw error;
-      }
-      break;
-    }
-
-    case "monthly_expenses": {
-      if (action === "INSERT" || action === "UPDATE") {
-        const { error } = await supabaseClient
-          .from("monthly_expenses")
-          .upsert(payload, { onConflict: "id" });
-        if (error) throw error;
-      } else if (action === "DELETE") {
-        const { error } = await supabaseClient.from("monthly_expenses").delete().eq("id", payload.id);
-        if (error) throw error;
-      }
-      break;
-    }
-
-    case "invoices": {
-      if (action === "INSERT" || action === "UPDATE") {
-        const { error } = await supabaseClient
-          .from("invoices")
-          .upsert(payload, { onConflict: "id" });
-        if (error) throw error;
-      } else if (action === "DELETE") {
-        const { error } = await supabaseClient.from("invoices").delete().eq("id", payload.id);
-        if (error) throw error;
-      }
-      break;
-    }
-
-    case "timesheets": {
-      if (action === "INSERT" || action === "UPDATE") {
-        const { error } = await supabaseClient
-          .from("timesheets")
-          .upsert(payload, { onConflict: "id" });
-        if (error) throw error;
-      }
-      break;
-    }
-
-    case "leaves": {
-      if (action === "INSERT" || action === "UPDATE") {
-        const { error } = await supabaseClient
-          .from("leaves")
-          .upsert(payload, { onConflict: "id" });
-        if (error) throw error;
-      }
-      break;
-    }
-
-    case "external_contacts":
-    case "customers": {
-      const targetTable = "external_contacts";
-      if (action === "INSERT" || action === "UPDATE") {
-        const { error } = await supabaseClient
-          .from(targetTable)
-          .upsert(payload, { onConflict: "id" });
-        if (error) throw error;
-      } else if (action === "DELETE") {
-        const { error } = await supabaseClient.from(targetTable).delete().eq("id", payload.id);
-        if (error) throw error;
-      }
-      break;
-    }
-
-    case "suppliers": {
-      if (action === "INSERT" || action === "UPDATE") {
-        const { error } = await supabaseClient
-          .from("suppliers")
-          .upsert(payload, { onConflict: "id" });
-        if (error) throw error;
-      }
-      break;
-    }
-
-    case "inventory_items": {
-      if (action === "INSERT" || action === "UPDATE") {
-        const { error } = await supabaseClient
-          .from("inventory_items")
-          .upsert(payload, { onConflict: "id" });
-        if (error) throw error;
-      }
-      break;
-    }
-
-    case "purchase_orders": {
-      if (action === "INSERT" || action === "UPDATE") {
-        const { error } = await supabaseClient
-          .from("purchase_orders")
-          .upsert(payload, { onConflict: "id" });
-        if (error) throw error;
       }
       break;
     }
@@ -593,19 +531,21 @@ async function executeCloudMutation(op: SyncQueueItem): Promise<void> {
         const items = Array.isArray(payload) ? payload : [payload];
         const { error } = await supabaseClient
           .from("purchase_order_items")
-          .upsert(items, { onConflict: "id" });
+          .upsert(items.map((i: any) => ({ ...i, business_id: activeTenantId })), { onConflict: "id" });
         if (error) throw error;
       }
       break;
     }
 
     default: {
-      // Generic Supabase handler fallback
+      // Unified handler for daily_expenses, monthly_expenses, invoices, timesheets, leaves,
+      // external_contacts/customers, suppliers, inventory_items, purchase_orders, etc.
+      const targetTable = table_name === "customers" ? "external_contacts" : table_name;
       if (action === "INSERT" || action === "UPDATE") {
-        const { error } = await supabaseClient.from(table_name).upsert(payload, { onConflict: "id" });
+        const { error } = await supabaseClient.from(targetTable).upsert({ ...payload, business_id: activeTenantId }, { onConflict: "id" });
         if (error) throw error;
       } else if (action === "DELETE") {
-        const { error } = await supabaseClient.from(table_name).delete().eq("id", payload.id);
+        const { error } = await supabaseClient.from(targetTable).delete().eq("id", payload.id).eq("business_id", activeTenantId);
         if (error) throw error;
       }
     }

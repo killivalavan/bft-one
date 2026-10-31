@@ -18,16 +18,18 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Action is required" }, { status: 400 });
     }
 
-    // Helper: Verify target user belongs to caller's business
-    async function verifyUserBelongsToBusiness(targetUserId: string): Promise<boolean> {
-      if (caller.isSuperAdmin) return true;
+    // Helper: Verify target user belongs to caller's business and return authoritative business_id
+    async function resolveTargetUserBusinessId(targetUserId: string): Promise<string | null> {
       const { data: p } = await supa
         .from("profiles")
         .select("business_id")
         .eq("id", targetUserId)
         .maybeSingle();
-      if (!p) return false;
-      return Boolean(p.business_id && p.business_id === caller.businessId);
+      if (!p) return null;
+      if (!caller.isSuperAdmin && (!p.business_id || p.business_id !== caller.businessId)) {
+        return null;
+      }
+      return p.business_id || caller.businessId || null;
     }
 
     // 1. UPDATE EMPLOYEE PROFILE & INCREMENT POLICY
@@ -50,7 +52,8 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: "userId is required" }, { status: 400 });
       }
 
-      if (!(await verifyUserBelongsToBusiness(userId))) {
+      const targetBizId = await resolveTargetUserBusinessId(userId);
+      if (!targetBizId) {
         return NextResponse.json({ error: "Forbidden: Cannot modify employee of another business." }, { status: 403 });
       }
 
@@ -95,7 +98,8 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: "Missing required increment fields" }, { status: 400 });
       }
 
-      if (!(await verifyUserBelongsToBusiness(userId))) {
+      const targetBizId = await resolveTargetUserBusinessId(userId);
+      if (!targetBizId) {
         return NextResponse.json({ error: "Forbidden: Cannot add increment for employee of another business." }, { status: 403 });
       }
 
@@ -103,7 +107,7 @@ export async function POST(request: Request) {
       const { data: incRow, error: incErr } = await supa
         .from("employee_increments")
         .insert({
-          business_id: caller.businessId,
+          business_id: targetBizId,
           user_id: userId,
           effective_date: effectiveDate,
           previous_salary_cents: previousSalaryCents || 0,
@@ -198,7 +202,8 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: "Missing achievement fields" }, { status: 400 });
       }
 
-      if (!(await verifyUserBelongsToBusiness(userId))) {
+      const targetBizId = await resolveTargetUserBusinessId(userId);
+      if (!targetBizId) {
         return NextResponse.json({ error: "Forbidden: Cannot award achievement to employee of another business." }, { status: 403 });
       }
 
@@ -206,7 +211,7 @@ export async function POST(request: Request) {
         .from("employee_achievements")
         .upsert(
           {
-            business_id: caller.businessId,
+            business_id: targetBizId,
             user_id: userId,
             badge_key: badgeKey,
             title,
@@ -263,10 +268,15 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: "Title and message are required" }, { status: 400 });
       }
 
+      const noticeBizId = (caller.isSuperAdmin && body.businessId) ? body.businessId : caller.businessId;
+      if (!noticeBizId) {
+        return NextResponse.json({ error: "Tenant business context required to publish notice" }, { status: 400 });
+      }
+
       const { data: noticeRow, error: noticeErr } = await supa
         .from("employee_notices")
         .insert({
-          business_id: caller.businessId,
+          business_id: noticeBizId,
           title,
           message,
           priority: priority || "normal",

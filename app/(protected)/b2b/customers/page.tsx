@@ -7,9 +7,10 @@ import { useToast } from "@/components/ui/Toast";
 import { cn } from "@/lib/utils/cn";
 import { supabaseClient } from "@/lib/supabaseClient";
 import { format } from "date-fns";
-import { generateCombinedLedgerPdf, CombinedLedgerPdfData, CombinedLedgerTransaction } from "@/lib/utils/combinedLedgerPdf";
-import { generateBillPdf, BillPdfData } from "@/lib/utils/billPdf";
-import { formatCafeName, capitalizeWords, sanitizeBakerStores } from "@/lib/utils/bakerUtils";
+import type { CombinedLedgerPdfData, CombinedLedgerTransaction } from "@/lib/utils/combinedLedgerPdf";
+import type { BillPdfData } from "@/lib/utils/billPdf";
+import { getAuthHeaders } from "@/lib/auth/clientAuth";
+import { formatCafeName, capitalizeWords, sanitizeBakerStores, getSlipDate } from "@/lib/utils/bakerUtils";
 import { generateWhatsAppSlipMessage } from "@/lib/utils/b2bSlipWhatsapp";
 import {
   fetchB2BClients,
@@ -52,26 +53,8 @@ interface SeyalProPartner {
   address: string;
 }
 
-// Helper to reliably get Date object from any slip format
-export function getSlipDate(slip: any): Date {
-  if (slip.createdAt) {
-    const d = new Date(slip.createdAt);
-    if (!isNaN(d.getTime())) return d;
-  }
-  if (slip.created_at) {
-    const d = new Date(slip.created_at);
-    if (!isNaN(d.getTime())) return d;
-  }
-  if (slip.invoice_date) {
-    const d = new Date(slip.invoice_date);
-    if (!isNaN(d.getTime())) return d;
-  }
-  if (slip.date) {
-    const d = new Date(slip.date);
-    if (!isNaN(d.getTime())) return d;
-  }
-  return new Date();
-}
+// Helper to reliably get Date object from any slip format (delegates to bakerUtils)
+export { getSlipDate };
 
 // Date preset helper
 export function getDateRangeInterval(
@@ -241,7 +224,8 @@ export default function BakerCustomersPage() {
     window.addEventListener(B2B_CUSTOMERS_UPDATED_EVENT, handleStoresUpdated);
 
     if (business?.id) {
-      fetch(`/api/baker/clients/lookup?sender_business_id=${business.id}`)
+      getAuthHeaders()
+        .then((headers) => fetch(`/api/baker/clients/lookup?sender_business_id=${business.id}`, { headers }))
         .then((r) => r.json())
         .then((res) => {
           if (res.ok && Array.isArray(res.stores)) {
@@ -666,6 +650,7 @@ export default function BakerCustomersPage() {
       transactions,
     };
 
+    const { generateCombinedLedgerPdf } = await import("@/lib/utils/combinedLedgerPdf");
     await generateCombinedLedgerPdf(pdfData);
 
     toast({
@@ -1938,7 +1923,7 @@ export default function BakerCustomersPage() {
               <div className="flex gap-2 pt-2">
                 <button
                   type="button"
-                  onClick={() => {
+                  onClick={async () => {
                     const pdfData: BillPdfData = {
                       orderId: viewingSlipDetails.invoiceNumber,
                       invoiceTitle: isRet ? "RETURN & CREDIT SLIP" : "DELIVERY SLIP",
@@ -1959,6 +1944,7 @@ export default function BakerCustomersPage() {
                       totalAmount: absTotal,
                       paymentMode: isRet ? "Adjusted / Deducted from Balance" : "Pending Settlement",
                     };
+                    const { generateBillPdf } = await import("@/lib/utils/billPdf");
                     generateBillPdf(pdfData);
                   }}
                   className={cn(

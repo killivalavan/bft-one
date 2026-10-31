@@ -26,9 +26,9 @@ import { FixedPriceManager, FixedPriceItem } from "@/components/expenses/FixedPr
 import { ExpenseAIAgent } from "@/components/expenses/ExpenseAIAgent";
 import { calculateDailyRecurringProjections, DailyRecurringProjectedItem } from "@/lib/ai/expense-agent";
 import { Tag, Sparkles, Bot, Layers } from "lucide-react";
-import jsPDF from "jspdf";
-import autoTable from "jspdf-autotable";
-import html2canvas from "html2canvas-pro";
+import type jsPDF from "jspdf";
+// autoTable and html2canvas lazy-loaded in exportOverviewPdf
+
 import { useTenant } from "@/lib/context/TenantContext";
 import { SyncStatusBadge } from "@/components/offline/SyncStatusBadge";
 import {
@@ -1239,6 +1239,7 @@ export default function ExpensesPage() {
         if (!el) return y;
         const pageWidth = doc.internal.pageSize.getWidth();
         const imgWidth = pageWidth - 28;
+        const { default: html2canvas } = await import("html2canvas-pro");
         const canvas = await html2canvas(el, { scale: 2, backgroundColor: "#ffffff" });
         const imgHeight = (canvas.height * imgWidth) / canvas.width;
 
@@ -1254,6 +1255,7 @@ export default function ExpensesPage() {
     async function exportOverviewPdf() {
         setExportingPdf(true);
         try {
+            const [{ default: jsPDF }, { default: autoTable }] = await Promise.all([import("jspdf"), import("jspdf-autotable")]);
             const doc = new jsPDF();
             let y = 20;
 

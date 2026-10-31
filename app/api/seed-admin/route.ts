@@ -46,10 +46,13 @@ export async function POST(request: Request) {
     const isStockManager = body.isStockManager ?? false;
     const targetRole = isAdmin ? "admin" : "staff";
 
-    // 3. Check if user already exists
-    const { data: list } = await supa.auth.admin.listUsers();
-    const found = list?.users.find((u) => u.email?.toLowerCase() === email);
-    let userId = found?.id;
+    // 3. Check if user already exists (O(1) indexed query instead of O(N) auth.listUsers dump)
+    const { data: existingProfile } = await supa
+      .from("profiles")
+      .select("id")
+      .eq("email", email)
+      .maybeSingle();
+    let userId = existingProfile?.id;
 
     if (!userId) {
       // Option A: Send Email Invite

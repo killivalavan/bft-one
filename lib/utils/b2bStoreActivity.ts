@@ -1,4 +1,4 @@
-import { getSlipDate } from "@/app/(protected)/b2b/customers/page";
+import { getSlipDate } from "./bakerUtils.ts";
 
 export interface StoreActivityAnalysis {
   storeId: string;
@@ -95,14 +95,15 @@ export function analyzeStoreReorderActivity(
 
     // Filter only delivery slips for this store (exclude returns)
     const storeSlips = invoices.filter((inv) => {
-      const invCustomer = (inv.customerName || "").toLowerCase().trim();
+      const invCustomer = (inv.customerName || inv.client_name || "").toLowerCase().trim();
+      const matchesStore = invCustomer === storeKey || (inv.clientId && inv.clientId === store.id) || (inv.client_id && inv.client_id === store.id);
       const isRet = Boolean(
         inv.isReturn ||
         (inv.invoiceNumber || "").startsWith("RET-") ||
         (inv.title || "").includes("RETURN") ||
         (inv.totalAmount || 0) < 0
       );
-      return invCustomer === storeKey && !isRet;
+      return matchesStore && !isRet;
     });
 
     // Sort chronologically ascending
