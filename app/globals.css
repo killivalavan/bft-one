@@ -305,3 +305,12 @@ select option:checked {
   min-height: 44px;
   min-width: 44px;
 }
+
+/* Hide scrollbar across all major browsers */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}

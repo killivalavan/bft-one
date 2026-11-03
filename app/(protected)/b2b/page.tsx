@@ -24,6 +24,19 @@ import { capitalizeWords } from "./products/page";
 import { fetchB2BClients, B2B_CUSTOMERS_UPDATED_EVENT } from "@/lib/services/b2bClients";
 import StoreActivityMonitor, { MonitorStoreRecord } from "@/components/baker/StoreActivityMonitor";
 import DispatchClientIntelligence from "@/components/baker/DispatchClientIntelligence";
+import dynamic from "next/dynamic";
+import { B2BCitySkeleton } from "@/components/baker/city/B2BCitySkeleton";
+
+const B2BCityDashboard = dynamic(
+  () =>
+    import("@/components/baker/city/B2BCityDashboard").then(
+      (m) => m.B2BCityDashboard
+    ),
+  {
+    ssr: false,
+    loading: () => <B2BCitySkeleton />,
+  }
+);
 
 export interface InvoiceItem {
   id?: string;
@@ -104,6 +117,54 @@ export default function HomeBakerDashboardPage() {
 
   // Active Reporting Period Filter
   const [reportingPeriod, setReportingPeriod] = useState<ReportingPeriod>("this_month");
+  // 3D View: Visible by default on refresh/initial visit.
+  // When user clicks "Hide 3D City", hidden state is remembered across in-app page jumps (e.g. /b2b -> /b2b/dispatch -> /b2b) via sessionStorage.
+  const [show3DCity, setShow3DCity] = useState<boolean>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        return sessionStorage.getItem("bftone_b2b_hide_3d_city") !== "true";
+      } catch {}
+    }
+    return true;
+  });
+  const [hasActivated3D, setHasActivated3D] = useState<boolean>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        return sessionStorage.getItem("bftone_b2b_hide_3d_city") !== "true";
+      } catch {}
+    }
+    return true;
+  });
+
+  // On page refresh / hard reload / new window load, clear the sessionStorage flag so 3D loads by default
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      try {
+        sessionStorage.removeItem("bftone_b2b_hide_3d_city");
+      } catch {}
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, []);
+
+  const handleToggle3D = () => {
+    setShow3DCity((prev) => {
+      const next = !prev;
+      if (next && !hasActivated3D) {
+        setHasActivated3D(true);
+      }
+      if (typeof window !== "undefined") {
+        try {
+          if (!next) {
+            sessionStorage.setItem("bftone_b2b_hide_3d_city", "true");
+          } else {
+            sessionStorage.removeItem("bftone_b2b_hide_3d_city");
+          }
+        } catch {}
+      }
+      return next;
+    });
+  };
 
   // Visual Intelligence Hub State
   const [activeChartTab, setActiveChartTab] = useState<"products" | "clients" | "matrix" | "trend">("products");
@@ -500,12 +561,17 @@ export default function HomeBakerDashboardPage() {
   }
 
   return (
-    <div className="w-full max-w-6xl group-data-[sidebar-collapsed=true]:max-w-none mx-auto space-y-6">
+    <div className="w-full max-w-6xl group-data-[sidebar-collapsed=true]:max-w-none mx-auto space-y-4 sm:space-y-5">
       {/* ========================================================= */}
-      {/* 1. TOP HEADER & REPORTING PERIOD CONTROLS                 */}
+      {/* 1. TOP HEADER & PRIMARY ACTIONS                           */}
       {/* ========================================================= */}
-      <div className="sticky top-14 md:top-0 z-20 w-full px-1 sm:px-2 md:px-0 bg-[#F8FAFC] pt-1.5 sm:pt-2 md:pt-3 pb-2.5 sm:pb-3 transition-all">
-        <div className="w-full px-3.5 sm:px-5 py-3 sm:py-3.5 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 sm:gap-3.5 bg-white rounded-3xl border border-[#E2E8F0] shadow-xs">
+      <div className="sticky top-14 md:top-0 z-30 w-full transition-all">
+        {/* Top Grey Spacer above card only */}
+        <div className="w-full h-1.5 sm:h-2 md:h-3 bg-[#F8FAFC]" />
+
+        {/* Card Container (Transparent background so corners never bleed grey) */}
+        <div className="w-full px-1 sm:px-2 md:px-0">
+          <div className="w-full px-3.5 sm:px-5 py-3 sm:py-3.5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-3.5 bg-white rounded-3xl border border-[#E2E8F0] shadow-xs">
           {/* Store Identity & Welcome Message */}
           <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
             <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-xl sm:rounded-2xl bg-blue-600 text-white flex items-center justify-center font-black text-lg sm:text-xl shadow-xs shrink-0 ring-4 ring-blue-50">
@@ -528,20 +594,73 @@ export default function HomeBakerDashboardPage() {
             </div>
           </div>
 
-          {/* Period Switcher & Primary Action (Full-width friendly on small view) */}
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-2.5 w-full lg:w-auto shrink-0">
+          {/* Primary Action Buttons (3D Toggle & New Dispatch Slip) */}
+          <div className="flex items-center gap-2 sm:gap-2.5 shrink-0 self-end sm:self-center">
+            {/* 3D City View Toggle */}
+            <button
+              type="button"
+              onClick={handleToggle3D}
+              className={cn(
+                "px-3.5 py-2 rounded-xl text-xs font-extrabold transition-all flex items-center justify-center gap-1.5 whitespace-nowrap cursor-pointer border",
+                show3DCity
+                  ? "bg-slate-900 text-white border-slate-900 shadow-xs"
+                  : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
+              )}
+              title="Toggle interactive 3D View"
+            >
+              <Layers size={14} className="shrink-0" aria-hidden="true" />
+              <span>{show3DCity ? "Hide 3D View" : "3D View"}</span>
+            </button>
+
+            {/* Quick Action Button: New Dispatch Slip */}
+            <Link
+              href="/b2b/dispatch"
+              className="justify-center px-4 py-2 sm:px-3.5 sm:py-2 rounded-xl text-xs font-black bg-[#2563EB] hover:bg-blue-700 text-white transition-all shadow-xs flex items-center gap-1.5 whitespace-nowrap active:scale-95 cursor-pointer ring-2 ring-blue-600/20"
+            >
+              <Plus size={15} className="shrink-0" aria-hidden="true" />
+              <span>New Dispatch Slip</span>
+            </Link>
+          </div>
+        </div>
+      </div>
+    </div>
+
+      <div className="w-full px-1 sm:px-2 md:px-0 pt-2.5 sm:pt-3 pb-6 space-y-5 sm:space-y-6">
+        {/* Interactive Three.js 3D Supply City Dashboard (Load Once, Toggle Fast) */}
+        {hasActivated3D && (
+          <div className={cn("w-full transition-opacity duration-300", !show3DCity && "hidden")}>
+            <React.Suspense fallback={<B2BCitySkeleton />}>
+              <B2BCityDashboard
+                bizId={bizId}
+                businessName={business?.name || "B2B Supply Hub"}
+                isVisible={show3DCity}
+              />
+            </React.Suspense>
+          </div>
+        )}
+
+        {/* Active Reporting Period Sub-Bar with Period Switcher Pills */}
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs text-slate-500 bg-white px-3.5 sm:px-4 py-2.5 rounded-xl sm:rounded-2xl border border-slate-200 shadow-2xs">
+          <div className="flex items-center gap-2.5 sm:gap-3 flex-wrap">
+            <div className="flex items-center gap-1.5">
+              <span className="font-bold text-slate-800 text-[11px] sm:text-xs">Active Window:</span>
+              <span className="px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 font-extrabold text-[10.5px] sm:text-[11px] border border-blue-200">
+                {periodDateRanges.dateBadge}
+              </span>
+            </div>
+
             {/* Period Filter Dropdown / Pill Group */}
             <div
-              className="inline-flex items-center p-1 bg-slate-100 rounded-xl border border-slate-200/80 text-xs font-bold text-slate-600 justify-between sm:justify-start w-full sm:w-auto overflow-x-auto scrollbar-none"
+              className="inline-flex items-center p-0.5 sm:p-1 bg-slate-100 rounded-xl border border-slate-200/80 text-xs font-bold text-slate-600 overflow-x-auto scrollbar-none"
               role="group"
               aria-label="Reporting period selector"
             >
-              <Calendar size={13} className="text-slate-400 ml-1.5 mr-1 shrink-0 hidden xs:inline" aria-hidden="true" />
+              <Calendar size={12} className="text-slate-400 ml-1.5 mr-1 shrink-0 hidden xs:inline" aria-hidden="true" />
               <button
                 type="button"
                 onClick={() => setReportingPeriod("this_month")}
                 className={cn(
-                  "flex-1 sm:flex-initial text-center px-2 py-1.5 sm:px-2.5 sm:py-1 rounded-lg transition-all cursor-pointer text-[11px] sm:text-xs font-bold whitespace-nowrap",
+                  "px-2 py-1 sm:px-2.5 sm:py-0.5 rounded-lg transition-all cursor-pointer text-[10.5px] sm:text-[11px] font-bold whitespace-nowrap",
                   reportingPeriod === "this_month"
                     ? "bg-white text-blue-700 shadow-2xs font-extrabold"
                     : "hover:text-slate-900"
@@ -554,7 +673,7 @@ export default function HomeBakerDashboardPage() {
                 type="button"
                 onClick={() => setReportingPeriod("last_30_days")}
                 className={cn(
-                  "flex-1 sm:flex-initial text-center px-2 py-1.5 sm:px-2.5 sm:py-1 rounded-lg transition-all cursor-pointer text-[11px] sm:text-xs font-bold whitespace-nowrap",
+                  "px-2 py-1 sm:px-2.5 sm:py-0.5 rounded-lg transition-all cursor-pointer text-[10.5px] sm:text-[11px] font-bold whitespace-nowrap",
                   reportingPeriod === "last_30_days"
                     ? "bg-white text-blue-700 shadow-2xs font-extrabold"
                     : "hover:text-slate-900"
@@ -567,7 +686,7 @@ export default function HomeBakerDashboardPage() {
                 type="button"
                 onClick={() => setReportingPeriod("last_7_days")}
                 className={cn(
-                  "flex-1 sm:flex-initial text-center px-2 py-1.5 sm:px-2.5 sm:py-1 rounded-lg transition-all cursor-pointer text-[11px] sm:text-xs font-bold whitespace-nowrap",
+                  "px-2 py-1 sm:px-2.5 sm:py-0.5 rounded-lg transition-all cursor-pointer text-[10.5px] sm:text-[11px] font-bold whitespace-nowrap",
                   reportingPeriod === "last_7_days"
                     ? "bg-white text-blue-700 shadow-2xs font-extrabold"
                     : "hover:text-slate-900"
@@ -580,7 +699,7 @@ export default function HomeBakerDashboardPage() {
                 type="button"
                 onClick={() => setReportingPeriod("all_time")}
                 className={cn(
-                  "flex-1 sm:flex-initial text-center px-2 py-1.5 sm:px-2.5 sm:py-1 rounded-lg transition-all cursor-pointer text-[11px] sm:text-xs font-bold whitespace-nowrap",
+                  "px-2 py-1 sm:px-2.5 sm:py-0.5 rounded-lg transition-all cursor-pointer text-[10.5px] sm:text-[11px] font-bold whitespace-nowrap",
                   reportingPeriod === "all_time"
                     ? "bg-white text-blue-700 shadow-2xs font-extrabold"
                     : "hover:text-slate-900"
@@ -590,29 +709,9 @@ export default function HomeBakerDashboardPage() {
                 All Time
               </button>
             </div>
-
-            {/* Quick Action Button: New Dispatch Slip */}
-            <Link
-              href="/b2b/dispatch"
-              className="w-full sm:w-auto justify-center px-4 py-2 sm:px-3.5 sm:py-2 rounded-xl text-xs font-black bg-[#2563EB] hover:bg-blue-700 text-white transition-all shadow-xs flex items-center gap-1.5 whitespace-nowrap active:scale-95 cursor-pointer ring-2 ring-blue-600/20"
-            >
-              <Plus size={15} className="shrink-0" aria-hidden="true" />
-              <span>New Dispatch Slip</span>
-            </Link>
           </div>
-        </div>
-      </div>
 
-      <div className="w-full px-1 sm:px-2 md:px-0 pt-1 pb-6 space-y-5 sm:space-y-6">
-        {/* Active Reporting Period Sub-Bar */}
-        <div className="flex flex-col xs:flex-row items-start xs:items-center justify-between gap-1.5 text-xs text-slate-500 bg-white px-3.5 sm:px-4 py-2.5 rounded-xl sm:rounded-2xl border border-slate-200 shadow-2xs">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="font-bold text-slate-800 text-[11px] sm:text-xs">Active Window:</span>
-            <span className="px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 font-extrabold text-[10.5px] sm:text-[11px] border border-blue-200">
-              {periodDateRanges.dateBadge}
-            </span>
-          </div>
-          <div className="flex items-center gap-2 text-[10.5px] sm:text-[11px] text-slate-500">
+          <div className="flex items-center gap-2 text-[10.5px] sm:text-[11px] text-slate-500 font-medium">
             <span>{currentInvoices.length} slip{currentInvoices.length === 1 ? "" : "s"}</span>
             <span className="text-slate-300">·</span>
             <span>{totalDeliveredPieces} units dispatched</span>

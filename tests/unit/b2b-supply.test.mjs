@@ -26,6 +26,7 @@ import {
 } from "../../lib/utils/bakerUtils.ts";
 
 import { analyzeStoreReorderActivity } from "../../lib/utils/b2bStoreActivity.ts";
+import { computeCityLayout } from "../../components/baker/city/cityLayoutEngine.ts";
 
 describe("B2B Supply & Wholesale Suite", () => {
   describe("Dispatch Normalization & Return Detection", () => {
@@ -266,6 +267,95 @@ describe("B2B Supply & Wholesale Suite", () => {
       assert.ok(summary.notOrdering.some((s) => s.storeId === "store-stale"));
       // store-active should have recent orders
       assert.ok(summary.normal.some((s) => s.storeId === "store-active"));
+    });
+  });
+
+  describe("3D Supply City Layout Engine (computeCityLayout)", () => {
+    it("dynamically increases 3D store buildings and shifts the Add Client plot when a new client is added", () => {
+      const initialStores = [
+        {
+          id: "c1",
+          name: "Chai Galli Cafe",
+          displayName: "Chai Galli Cafe",
+          phone: "9876543210",
+          address: "OMR",
+          healthStatus: "healthy",
+          cadenceStatus: "normal",
+          billedAmount: 4200,
+          paidAmount: 4200,
+          unpaidDues: 0,
+          dispatchedUnits: 40,
+          slipsCount: 3,
+          topProduct: "Croissant",
+          lastOrderDateStr: "Today",
+          daysSinceLastOrder: 0,
+          explanation: "Active partner",
+        },
+        {
+          id: "c2",
+          name: "The Corner Roast",
+          displayName: "The Corner Roast",
+          phone: "9876543211",
+          address: "ECR",
+          healthStatus: "urgent",
+          cadenceStatus: "not_ordering",
+          billedAmount: 6500,
+          paidAmount: 3000,
+          unpaidDues: 3500,
+          dispatchedUnits: 65,
+          slipsCount: 5,
+          topProduct: "Sourdough",
+          lastOrderDateStr: "12d ago",
+          daysSinceLastOrder: 12,
+          explanation: "Overdue order",
+        },
+      ];
+
+      const layoutBefore = computeCityLayout(initialStores);
+      assert.equal(layoutBefore.storePlacements.length, 2);
+      assert.equal(layoutBefore.hqPlacement.kind, "hq");
+      assert.equal(layoutBefore.warehousePlacement.kind, "warehouse");
+      assert.equal(layoutBefore.financePlacement.kind, "finance");
+
+      // Next available slot is currently occupied by addPlotPlacement
+      const nextPlotCoords = { x: layoutBefore.addPlotPlacement.x, z: layoutBefore.addPlotPlacement.z };
+
+      // Add a 3rd client store
+      const updatedStores = [
+        ...initialStores,
+        {
+          id: "c3",
+          name: "BFT Navalur",
+          displayName: "BFT Navalur",
+          phone: "9876543212",
+          address: "Navalur",
+          healthStatus: "new",
+          cadenceStatus: "new_or_idle",
+          billedAmount: 0,
+          paidAmount: 0,
+          unpaidDues: 0,
+          dispatchedUnits: 0,
+          slipsCount: 0,
+          topProduct: "Assorted Items",
+          lastOrderDateStr: "No dispatches yet",
+          daysSinceLastOrder: null,
+          explanation: "New client",
+          isNewlyAdded: true,
+        },
+      ];
+
+      const layoutAfter = computeCityLayout(updatedStores);
+      assert.equal(layoutAfter.storePlacements.length, 3);
+
+      // The 3rd store takes the exact plot where "+ Add Client Store" was, and "+ Add Client Store" moves to slot #4
+      const newStoreBuilding = layoutAfter.storePlacements[2];
+      assert.equal(newStoreBuilding.x, nextPlotCoords.x);
+      assert.equal(newStoreBuilding.z, nextPlotCoords.z);
+      assert.ok(newStoreBuilding.routeWaypoints.length >= 2);
+      assert.notDeepEqual(
+        { x: layoutAfter.addPlotPlacement.x, z: layoutAfter.addPlotPlacement.z },
+        nextPlotCoords
+      );
     });
   });
 });
