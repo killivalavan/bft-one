@@ -378,7 +378,7 @@ export async function generateBillPdf(data: BillPdfData) {
 
   let currentY = 16;
 
-  // Background Watermark: "SeyalPro" - Prominently & elegantly branded
+  // Background Watermark: "CounterCub" - Prominently & elegantly branded
   const drawBackgroundWatermark = () => {
     try {
       if (typeof (doc as any).saveGraphicsState === "function") {
@@ -387,7 +387,7 @@ export async function generateBillPdf(data: BillPdfData) {
       doc.setFont(fontName, "bold");
       doc.setFontSize(48);
       doc.setTextColor(226, 234, 246); // Clean slate-blue tint (#E2EAF6), visible and legible
-      doc.text("SeyalPro", pageWidth / 2, pageHeight / 2 - 2, {
+      doc.text("CounterCub", pageWidth / 2, pageHeight / 2 - 2, {
         align: "center",
         angle: 30,
       });
@@ -763,14 +763,14 @@ export async function generateBillPdf(data: BillPdfData) {
   doc.setTextColor(100, 116, 139); // #64748B (matches UI uppercase signatory)
   doc.text("AUTHORISED SIGNATORY", sigCenterX, signatureY + actualSigHeight + 4, { align: "center" });
 
-  // --- Watermark & Branding Footer: "Powered by SeyalPro" ---
+  // --- Watermark & Branding Footer: "Powered by CounterCub" ---
   const totalPages = (doc as any).internal.getNumberOfPages();
   for (let i = 1; i <= totalPages; i++) {
     doc.setPage(i);
     doc.setFont(fontName, "bold");
     doc.setFontSize(7.5);
     doc.setTextColor(148, 163, 184); // #94A3B8 Subtle slate
-    doc.text("Powered by SeyalPro App • B2B Store Stock Inward & Settlement Tracking", pageWidth / 2, pageHeight - 7, { align: "center" });
+    doc.text("Powered by CounterCub App • B2B Store Stock Inward & Settlement Tracking", pageWidth / 2, pageHeight - 7, { align: "center" });
   }
 
   // Download PDF file with kebab-case filename (e.g. invoice-a00018-brown-fening-tea-protechsoft-technologies-pvt-ltd.pdf)

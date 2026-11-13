@@ -8,7 +8,8 @@ export interface LogoutOptions {
 }
 
 /**
- * Safely removes tenant-specific data from localStorage and IndexedDB.
+ * Safely removes tenant-specific data from localStorage, sessionStorage, cookies,
+ * Service Worker CacheStorage, and IndexedDB (SEC-18).
  * Can be called during store switching or tenant eviction.
  */
 export async function clearTenantBrowserStorage(
@@ -27,21 +28,21 @@ export async function clearTenantBrowserStorage(
         const key = localStorage.key(i);
         if (!key) continue;
 
-        // If specific tenantId provided, only remove keys explicitly tied to that tenant or active session
         if (tenantId) {
           if (
             key.endsWith(`_${tenantId}`) ||
             key.includes(tenantId) ||
+            key === "countercub_tenant_cache" ||
             key === "bftone_tenant_cache" ||
             key === "bftone_active_tenant_id" ||
             key === "bftone_active_tab" ||
+            key === "countercub_app_mode" ||
             key === "seyalpro_app_mode"
           ) {
             keysToRemove.push(key);
           }
         } else {
-          // General logout: remove all SeyalPro/BFT tenant and session keys
-          // Preserve device hardware configuration unless preserveSharedSettings === false
+          // General logout: remove all CounterCub/SeyalPro/BFT tenant and session keys
           const isSharedConfig =
             options.preserveSharedSettings !== false &&
             (key === "client_device_id" ||
@@ -49,7 +50,14 @@ export async function clearTenantBrowserStorage(
               key.startsWith("theme") ||
               key.startsWith("printer_"));
 
-          if (!isSharedConfig && (key.startsWith("bftone_") || key.startsWith("bft_") || key === "seyalpro_app_mode")) {
+          if (
+            !isSharedConfig &&
+            (key.startsWith("countercub_") ||
+              key.startsWith("bftone_") ||
+              key.startsWith("bft_") ||
+              key.startsWith("seyalpro_") ||
+              key === "seyalpro_app_mode")
+          ) {
             keysToRemove.push(key);
           }
         }
@@ -72,22 +80,35 @@ export async function clearTenantBrowserStorage(
     }
   } catch {}
 
-  // 3. Tenant Cookie Expiration
+  // 3. Tenant & Impersonation Cookie Expiration
   try {
     if (typeof document !== "undefined") {
       document.cookie = "tenant_slug=; path=/; max-age=0; SameSite=Lax";
+      document.cookie = "cc_impersonation_session=; path=/; max-age=0; SameSite=Strict";
     }
   } catch {}
 
-  // 4. IndexedDB Scoped Tenant Cleansing
+  // 4. Service Worker CacheStorage Cleansing (SEC-18)
+  try {
+    if ("caches" in window && window.caches) {
+      const cacheKeys = await window.caches.keys();
+      await Promise.all(cacheKeys.map((k) => window.caches.delete(k)));
+    }
+    if ("serviceWorker" in navigator && navigator.serviceWorker?.controller) {
+      navigator.serviceWorker.controller.postMessage({ type: "CLEAR_TENANT_CACHE" });
+    }
+  } catch (swErr) {
+    console.warn("Failed to purge Service Worker caches during logout:", swErr);
+  }
+
+  // 5. IndexedDB Scoped Tenant Cleansing
   try {
     if (window.indexedDB) {
       if (tenantId) {
-        // Isolate deletion to the specific tenant in IndexedDB
         const { clearTenantData } = await import("@/lib/offline/db");
         await clearTenantData(tenantId).catch(() => {});
       } else {
-        // If logging out completely without tenant context, delete the offline databases
+        window.indexedDB.deleteDatabase("countercub_offline_v1");
         window.indexedDB.deleteDatabase("seyalpro_offline_v1");
         window.indexedDB.deleteDatabase("bftone_offline_db");
       }

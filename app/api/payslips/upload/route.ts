@@ -26,19 +26,41 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "File exceeds maximum permitted size of 10MB." }, { status: 400 });
     }
 
-    // Verify target employee belongs to caller's business
+    if (!caller.businessId) {
+      return NextResponse.json(
+        { error: "Verified business context is required to upload payslips." },
+        { status: 403 }
+      );
+    }
+
+    if (
+      userId.includes("..") ||
+      userId.includes("/") ||
+      userId.includes("\\") ||
+      monthLabel.includes("..") ||
+      monthLabel.includes("/") ||
+      monthLabel.includes("\\")
+    ) {
+      return NextResponse.json(
+        { error: "Invalid path characters in userId or monthLabel." },
+        { status: 400 }
+      );
+    }
+
+    // Verify target employee belongs to caller's verified business context (fail closed on null business_id)
     if (userId && userId !== "general") {
       const { data: targetProfile, error: profErr } = await supa
         .from("profiles")
         .select("id, business_id")
         .eq("id", userId)
+        .eq("business_id", caller.businessId)
         .maybeSingle();
 
       if (profErr || !targetProfile) {
-        return NextResponse.json({ error: "Target employee profile not found." }, { status: 404 });
+        return NextResponse.json({ error: "Target employee profile not found in this business." }, { status: 404 });
       }
 
-      if (!caller.isSuperAdmin && targetProfile.business_id && targetProfile.business_id !== caller.businessId) {
+      if (!targetProfile.business_id || targetProfile.business_id !== caller.businessId) {
         return NextResponse.json(
           { error: "Forbidden: Cannot upload payslips for employees of another business." },
           { status: 403 }
@@ -54,8 +76,8 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Invalid file format: File must be a valid PDF document." }, { status: 400 });
     }
 
-    const sanitizedMonth = monthLabel.replace(/[^a-zA-Z0-9_-]/g, "_");
-    const sanitizedUserId = (userId || "general").replace(/[^a-zA-Z0-9_-]/g, "_");
+    const sanitizedMonth = monthLabel.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 64);
+    const sanitizedUserId = (userId || caller.id).replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 64);
     const filePath = `${caller.businessId}/${sanitizedUserId}/${sanitizedMonth}_payslip.pdf`;
 
     const { error: uploadError } = await supa.storage
@@ -70,14 +92,23 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: uploadError.message }, { status: 500 });
     }
 
-    const {
-      data: { publicUrl },
-    } = supa.storage.from("payslips").getPublicUrl(filePath);
+    // Generate short-lived 5-minute signed URL from private bucket (never expose public permanent URLs)
+    const { data: signedData, error: signedErr } = await supa.storage
+      .from("payslips")
+      .createSignedUrl(filePath, 300);
+
+    if (signedErr || !signedData?.signedUrl) {
+      return NextResponse.json(
+        { error: signedErr?.message || "Failed to generate signed URL for payslip." },
+        { status: 500 }
+      );
+    }
 
     return NextResponse.json({
       success: true,
-      url: publicUrl,
+      url: signedData.signedUrl,
       path: filePath,
+      expiresIn: 300,
     });
   } catch (error: any) {
     console.error("API error uploading payslip:", error);

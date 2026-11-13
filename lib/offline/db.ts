@@ -145,6 +145,7 @@ export interface LocalDailyExpense {
   item_name: string;
   quantity: number;
   price_cents: number;
+  unit?: string | null;
   submitted_by?: string | null;
   created_at: string;
   notes?: string | null;

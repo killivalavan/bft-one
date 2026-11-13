@@ -1,6 +1,13 @@
 import { NextResponse } from "next/server";
 import { authenticateRequest } from "@/lib/auth/serverAuth";
 import { formatCafeName } from "@/lib/utils/bakerUtils";
+import { validateTenantSlug } from "@/lib/utils/slugValidator";
+import {
+  generateStoreReferenceId,
+  normalizeStorePrefix,
+  resolveLoginIdentifierToEmail,
+} from "@/lib/utils/storeIdGenerator";
+import { addCalendarMonths, normalizeLegacyPlanKey } from "@/lib/subscription/plans";
 
 export const dynamic = "force-dynamic";
 
@@ -14,11 +21,31 @@ export async function GET(request: Request) {
 
     const { supa } = auth;
 
-    // Fetch businesses
-    const { data: businesses, error } = await supa
-      .from("businesses")
-      .select("*")
-      .order("created_at", { ascending: false });
+    // Fetch businesses, deleted store archive, current subscriptions, and product counts
+    const [
+      { data: businesses, error },
+      { data: deletedLogs },
+      { data: currentSubs },
+      { data: posProductsRows },
+      { data: b2bProductsRows },
+      { data: nonAdminProfiles },
+    ] = await Promise.all([
+      supa.from("businesses").select("*").order("created_at", { ascending: false }),
+      supa
+        .from("audit_logs")
+        .select("id, target_id, details, actor_email, created_at")
+        .eq("action", "BUSINESS_DELETED")
+        .order("created_at", { ascending: false })
+        .limit(100),
+      supa.from("tenant_subscriptions").select("*").eq("is_current", true),
+      supa.from("products").select("business_id").or("active.is.null,active.eq.true"),
+      supa.from("b2b_products").select("business_id").or("is_active.is.null,is_active.eq.true"),
+      supa
+        .from("profiles")
+        .select("business_id")
+        .eq("is_admin", false)
+        .or("is_super_admin.is.null,is_super_admin.eq.false"),
+    ]);
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
@@ -88,9 +115,32 @@ export async function GET(request: Request) {
       }
     }
 
+    const subByBiz: Record<string, any> = {};
+    for (const s of currentSubs || []) {
+      if (s?.business_id) subByBiz[s.business_id] = s;
+    }
+    const posProductsByBiz: Record<string, number> = {};
+    for (const p of posProductsRows || []) {
+      if (p?.business_id) posProductsByBiz[p.business_id] = (posProductsByBiz[p.business_id] || 0) + 1;
+    }
+    const b2bProductsByBiz: Record<string, number> = {};
+    for (const bp of b2bProductsRows || []) {
+      if (bp?.business_id) b2bProductsByBiz[bp.business_id] = (b2bProductsByBiz[bp.business_id] || 0) + 1;
+    }
+    const employeeSeatsByBiz: Record<string, number> = {};
+    for (const pr of nonAdminProfiles || []) {
+      if (pr?.business_id) employeeSeatsByBiz[pr.business_id] = (employeeSeatsByBiz[pr.business_id] || 0) + 1;
+    }
+
     const enriched = (businesses || []).map((b: any) => {
       const totalSales = salesByBiz[b.id] || 0;
       const totalExpenses = expensesByBiz[b.id] || 0;
+      let b2bCount = b2bProductsByBiz[b.id] || 0;
+      if (b2bCount === 0 && Array.isArray(b?.enabled_modules?._b2b_data?.products)) {
+        b2bCount = b.enabled_modules._b2b_data.products.filter(
+          (p: any) => p?.is_active !== false
+        ).length;
+      }
       return {
         ...b,
         user_count: countsByBiz[b.id]?.totalUsers || 0,
@@ -99,11 +149,26 @@ export async function GET(request: Request) {
         total_expenses: totalExpenses,
         net_profit: totalSales - totalExpenses,
         order_count: ordersByBiz[b.id] || 0,
+        subscription: subByBiz[b.id] || null,
+        active_products_count: (posProductsByBiz[b.id] || 0) + b2bCount,
+        employee_seats_count: employeeSeatsByBiz[b.id] || 0,
       };
     });
 
+    const deletedBusinesses = (deletedLogs || []).map((log: any) => ({
+      id: log.target_id || log.id,
+      name: log.details?.businessName || "Deleted Store",
+      slug: log.details?.slug || "",
+      store_id: log.details?.storeId || "",
+      admin_email: log.details?.adminEmail || "N/A",
+      plan_type: log.details?.planType || "pro",
+      deleted_by: log.details?.deletedBy || log.actor_email || "Super Admin",
+      deleted_at: log.created_at,
+    }));
+
     return NextResponse.json({
       businesses: enriched,
+      deletedBusinesses,
       analytics: {
         totalSales: platformTotalSales,
         totalExpenses: platformTotalExpenses,
@@ -132,10 +197,18 @@ export async function POST(request: Request) {
     const {
       name,
       slug,
+      storeId: rawStoreId,
+      storePrefix: rawStorePrefix,
       adminEmail,
       adminPassword,
+      planId,
       planType = "pro",
       maxUsers = 25,
+      billingDurationMonths = 1,
+      startDate,
+      expiryDate,
+      subscriptionStatus = "active",
+      customOverrides,
       currencySymbol = "₹",
       timezone = "Asia/Kolkata",
       geofenceLat,
@@ -161,8 +234,65 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Admin password must be at least 6 characters" }, { status: 400 });
     }
 
-    const normalizedSlug = slug.toLowerCase().trim().replace(/[^a-z0-9-]/g, "-");
-    const normalizedEmail = adminEmail.toLowerCase().trim();
+    // Authoritative DNS-safe & reserved subdomain validation (SEC-12)
+    const slugValidation = validateTenantSlug(slug);
+    if (!slugValidation.valid) {
+      return NextResponse.json(
+        {
+          error: slugValidation.error || "Invalid subdomain slug.",
+          code: slugValidation.code,
+        },
+        { status: 400 }
+      );
+    }
+
+    const normalizedSlug = slugValidation.normalizedSlug;
+    const normalizedEmail = resolveLoginIdentifierToEmail(adminEmail, normalizedSlug);
+
+    // Resolve & validate Store Reference ID and Prefix (e.g., BFT32523, CK2342)
+    const generatedRef = generateStoreReferenceId(name.trim(), rawStorePrefix?.trim() || undefined);
+    const finalStorePrefix = rawStorePrefix?.trim()
+      ? normalizeStorePrefix(rawStorePrefix)
+      : generatedRef.prefix;
+    let finalStoreId = rawStoreId?.trim()
+      ? rawStoreId.toUpperCase().replace(/[^A-Z0-9]/g, "")
+      : generatedRef.storeId;
+
+    // Check active businesses & retired_slugs for conflicts before insert
+    const [{ data: existingBiz }, { data: retiredSlug }, { data: allBizIds }] = await Promise.all([
+      supa.from("businesses").select("id").eq("slug", normalizedSlug).maybeSingle(),
+      supa.from("retired_slugs").select("slug").eq("slug", normalizedSlug).maybeSingle(),
+      supa.from("businesses").select("id, enabled_modules"),
+    ]);
+
+    const usedStoreIds = new Set(
+      (allBizIds || [])
+        .map((b: any) => String(b?.enabled_modules?.store_id || "").toUpperCase())
+        .filter(Boolean)
+    );
+    if (usedStoreIds.has(finalStoreId)) {
+      // Regenerate if there is an accidental collision
+      let attempts = 0;
+      while (usedStoreIds.has(finalStoreId) && attempts < 10) {
+        finalStoreId = generateStoreReferenceId(name.trim(), finalStorePrefix).storeId;
+        attempts++;
+      }
+    }
+
+    if (existingBiz) {
+      return NextResponse.json(
+        {
+          error: `Subdomain slug '${normalizedSlug}' is already registered by an active store.`,
+          code: "SLUG_CONFLICT",
+        },
+        { status: 409 }
+      );
+    }
+
+    // Allow Super Admin to re-provision a slug from a previously deleted store
+    if (retiredSlug) {
+      await supa.from("retired_slugs").delete().eq("slug", normalizedSlug);
+    }
 
     // Enforce Industry Standard Password Policy for Shop Admin
     const { validatePasswordPolicy } = await import("@/lib/utils/passwordPolicy");
@@ -171,33 +301,84 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: policy.errors.join(" ") }, { status: 400 });
     }
 
+    const enrichedModules = {
+      ...(enabledModules || {}),
+      store_id: finalStoreId,
+      store_prefix: finalStorePrefix,
+    };
+
+    const normalizedPlanKey = normalizeLegacyPlanKey(planType);
+    const { data: selectedPlan } = await supa
+      .from("subscription_plans")
+      .select("*")
+      .eq(planId ? "id" : "plan_key", planId || normalizedPlanKey)
+      .maybeSingle();
+
+    const effectivePlanKey = selectedPlan?.plan_key || normalizedPlanKey;
+    const effectiveEmployeeLimit =
+      customOverrides?.max_employee_seats !== undefined && customOverrides?.max_employee_seats !== ""
+        ? Math.max(0, Number(customOverrides.max_employee_seats))
+        : effectivePlanKey === "free"
+          ? 0
+          : maxUsers !== undefined && maxUsers !== null
+            ? Math.max(0, Number(maxUsers))
+            : (selectedPlan?.max_employee_seats ?? 25);
+
+    const effectiveProductLimit =
+      customOverrides?.is_unlimited_products === true
+        ? null
+        : customOverrides?.max_active_products !== undefined && customOverrides?.max_active_products !== ""
+          ? Math.max(0, Number(customOverrides.max_active_products))
+          : (selectedPlan ? selectedPlan.max_active_products : 250);
+
+    const effectivePrice =
+      customOverrides?.monthly_price !== undefined && customOverrides?.monthly_price !== ""
+        ? Math.max(0, Number(customOverrides.monthly_price))
+        : Number(selectedPlan?.monthly_price ?? 0);
+
+    const effectiveSupportLevel =
+      customOverrides?.support_level === "priority" || customOverrides?.support_level === "standard"
+        ? customOverrides.support_level
+        : (selectedPlan?.support_level || "standard");
+
     // 1. Create Business Record
     const { data: newBiz, error: bizErr } = await supa
       .from("businesses")
       .insert({
         name: name.trim(),
         slug: normalizedSlug,
-        plan_type: planType,
-        max_users: Number(maxUsers) || 25,
+        plan_type: effectivePlanKey,
+        max_users: effectiveEmployeeLimit,
         currency_symbol: currencySymbol,
         timezone: timezone,
         geofence_lat: geofenceLat ? Number(geofenceLat) : null,
         geofence_lng: geofenceLng ? Number(geofenceLng) : null,
         geofence_radius_meters: Number(geofenceRadiusMeters) || 150,
         geofence_enabled: !!geofenceEnabled,
-        enabled_modules: enabledModules,
+        enabled_modules: enrichedModules,
         is_active: true,
       })
       .select("*")
       .single();
 
     if (bizErr) {
+      const isConflict =
+        bizErr.code === "23505" ||
+        bizErr.message?.toLowerCase().includes("duplicate") ||
+        bizErr.message?.toLowerCase().includes("retired");
+      if (isConflict) {
+        return NextResponse.json(
+          { error: `Subdomain slug '${normalizedSlug}' is already taken or retired.`, code: "SLUG_CONFLICT" },
+          { status: 409 }
+        );
+      }
       return NextResponse.json({ error: `Failed to create business: ${bizErr.message}` }, { status: 500 });
     }
 
     const businessId = newBiz.id;
 
-    // 2. Create Initial Owner Auth User
+    // 2. Create Initial Owner Auth User (or reclaim orphaned auth account from a deleted store)
+    let newUserId: string | undefined;
     const { data: userAuth, error: authErr } = await supa.auth.admin.createUser({
       email: normalizedEmail,
       password: adminPassword,
@@ -205,12 +386,60 @@ export async function POST(request: Request) {
     });
 
     if (authErr) {
-      // Rollback business if auth creation fails
-      await supa.from("businesses").delete().eq("id", businessId);
-      return NextResponse.json({ error: `Failed to create admin user: ${authErr.message}` }, { status: 500 });
-    }
+      const alreadyExists =
+        authErr.message?.toLowerCase().includes("already") ||
+        authErr.message?.toLowerCase().includes("exists");
 
-    const newUserId = userAuth.user.id;
+      if (alreadyExists) {
+        const { data: existingProf } = await supa
+          .from("profiles")
+          .select("id, business_id, is_super_admin")
+          .eq("email", normalizedEmail)
+          .maybeSingle();
+
+        let belongsToActiveBiz = false;
+        if (existingProf?.is_super_admin) {
+          belongsToActiveBiz = true;
+        } else if (existingProf?.business_id) {
+          const { data: activeOwnerBiz } = await supa
+            .from("businesses")
+            .select("id")
+            .eq("id", existingProf.business_id)
+            .maybeSingle();
+          belongsToActiveBiz = Boolean(activeOwnerBiz);
+        }
+
+        if (belongsToActiveBiz) {
+          await supa.from("businesses").delete().eq("id", businessId);
+          return NextResponse.json(
+            { error: `Admin email '${normalizedEmail}' is already assigned to an active store.` },
+            { status: 409 }
+          );
+        }
+
+        // Reclaim orphaned auth user (from a previously deleted store or failed onboarding)
+        const { data: listData } = await supa.auth.admin.listUsers({ page: 1, perPage: 1000 });
+        const orphanAuth = (listData?.users || []).find(
+          (u: any) => u.email?.toLowerCase() === normalizedEmail
+        );
+        if (orphanAuth) {
+          const { error: upErr } = await supa.auth.admin.updateUserById(orphanAuth.id, {
+            password: adminPassword,
+            email_confirm: true,
+          });
+          if (!upErr) {
+            newUserId = orphanAuth.id;
+          }
+        }
+      }
+
+      if (!newUserId) {
+        await supa.from("businesses").delete().eq("id", businessId);
+        return NextResponse.json({ error: `Failed to create admin user: ${authErr.message}` }, { status: 500 });
+      }
+    } else {
+      newUserId = userAuth.user.id;
+    }
 
     // 3. Create Admin Profile in profiles table with business_id
     const { error: profErr } = await supa.from("profiles").upsert({
@@ -222,7 +451,70 @@ export async function POST(request: Request) {
     });
 
     if (profErr) {
+      // Rollback auth user and business record so no orphaned tenant remains
+      await supa.auth.admin.deleteUser(newUserId).catch(() => {});
+      await supa.from("businesses").delete().eq("id", businessId);
       return NextResponse.json({ error: `Failed to set profile: ${profErr.message}` }, { status: 500 });
+    }
+
+    // 3b. Create initial Tenant Subscription snapshot & audit event
+    if (selectedPlan) {
+      const startDt = startDate ? new Date(startDate) : new Date();
+      const validStart = Number.isNaN(startDt.getTime()) ? new Date() : startDt;
+      const duration = effectivePlanKey === "free" ? null : (Number(billingDurationMonths) || 1);
+      let computedExpiry: string | null = null;
+      if (expiryDate) {
+        const expDt = new Date(expiryDate);
+        if (!Number.isNaN(expDt.getTime())) computedExpiry = expDt.toISOString();
+      } else if (effectivePlanKey !== "free" && duration) {
+        computedExpiry = addCalendarMonths(validStart, duration).toISOString();
+      }
+
+      const validStatus = ["active", "pending", "suspended", "expired"].includes(subscriptionStatus)
+        ? subscriptionStatus
+        : "active";
+
+      const { data: createdSub } = await supa
+        .from("tenant_subscriptions")
+        .insert({
+          business_id: businessId,
+          plan_id: selectedPlan.id,
+          plan_key_snapshot: effectivePlanKey,
+          plan_name_snapshot: selectedPlan.plan_name,
+          subscription_status: validStatus,
+          start_date: validStart.toISOString(),
+          expiry_date: computedExpiry,
+          billing_duration_months: duration,
+          price_snapshot: effectivePrice,
+          product_limit_snapshot: effectiveProductLimit,
+          employee_limit_snapshot: effectiveEmployeeLimit,
+          support_level_snapshot: effectiveSupportLevel,
+          custom_limit_overrides: customOverrides && typeof customOverrides === "object" ? customOverrides : {},
+          is_current: true,
+          created_by: auth.user.id,
+        })
+        .select("*")
+        .single();
+
+      if (createdSub) {
+        await supa.from("subscription_events").insert({
+          business_id: businessId,
+          subscription_id: createdSub.id,
+          event_type: "SUBSCRIPTION_CREATED",
+          previous_values: {},
+          new_values: {
+            plan_key: effectivePlanKey,
+            status: validStatus,
+            expiry_date: computedExpiry,
+            price: effectivePrice,
+            product_limit: effectiveProductLimit,
+            employee_limit: effectiveEmployeeLimit,
+          },
+          admin_id: auth.user.id,
+          admin_email: auth.user.email,
+          reason: "Initial client onboarding subscription assignment",
+        });
+      }
     }
 
     // 4. Audit Log
@@ -243,7 +535,7 @@ export async function POST(request: Request) {
       ok: true,
       business: newBiz,
       adminUser: { id: newUserId, email: normalizedEmail },
-      subdomainUrl: `https://${normalizedSlug}.seyalpro.com`,
+      subdomainUrl: `https://${normalizedSlug}.countercub.com`,
     });
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || "Internal server error" }, { status: 500 });
@@ -278,9 +570,52 @@ export async function PATCH(request: Request) {
 
     if (!id) return NextResponse.json({ error: "Business ID required" }, { status: 400 });
 
+    const { data: currentBiz, error: currentBizErr } = await supa
+      .from("businesses")
+      .select("id, name, slug")
+      .eq("id", id)
+      .maybeSingle();
+
+    if (currentBizErr || !currentBiz) {
+      return NextResponse.json({ error: "Business not found" }, { status: 404 });
+    }
+
     const updates: any = { updated_at: new Date().toISOString() };
     if (name?.trim()) updates.name = formatCafeName(name.trim());
-    if (slug?.trim()) updates.slug = slug.toLowerCase().trim().replace(/[^a-z0-9-]/g, "-");
+
+    let previousSlug: string | null = null;
+    if (slug !== undefined && slug !== null && String(slug).trim() !== "") {
+      const slugValidation = validateTenantSlug(slug);
+      if (!slugValidation.valid) {
+        return NextResponse.json(
+          {
+            error: slugValidation.error || "Invalid subdomain slug.",
+            code: slugValidation.code,
+          },
+          { status: 400 }
+        );
+      }
+      const nextSlug = slugValidation.normalizedSlug;
+      if (nextSlug !== currentBiz.slug) {
+        const [{ data: conflictBiz }, { data: retiredSlug }] = await Promise.all([
+          supa.from("businesses").select("id").eq("slug", nextSlug).neq("id", id).maybeSingle(),
+          supa.from("retired_slugs").select("slug").eq("slug", nextSlug).maybeSingle(),
+        ]);
+
+        if (conflictBiz || retiredSlug) {
+          return NextResponse.json(
+            {
+              error: `Subdomain slug '${nextSlug}' is already registered or permanently retired.`,
+              code: "SLUG_CONFLICT",
+            },
+            { status: 409 }
+          );
+        }
+        previousSlug = currentBiz.slug;
+        updates.slug = nextSlug;
+      }
+    }
+
     if (typeof is_active === "boolean") updates.is_active = is_active;
     if (plan_type) updates.plan_type = plan_type;
     if (max_users) updates.max_users = Number(max_users);
@@ -299,7 +634,16 @@ export async function PATCH(request: Request) {
       .select("*")
       .single();
 
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    if (error) {
+      const isConflict =
+        error.code === "23505" ||
+        error.message?.toLowerCase().includes("duplicate") ||
+        error.message?.toLowerCase().includes("retired");
+      if (isConflict) {
+        return NextResponse.json({ error: error.message, code: "SLUG_CONFLICT" }, { status: 409 });
+      }
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
 
     // Log Audit Event
     const { logAuditEvent, extractClientMetadata } = await import("@/lib/services/auditLogger");
@@ -308,10 +652,12 @@ export async function PATCH(request: Request) {
       businessId: id,
       actorId: caller.id,
       actorEmail: caller.email,
-      action: "BUSINESS_UPDATED",
+      action: previousSlug ? "BUSINESS_SLUG_CHANGED" : "BUSINESS_UPDATED",
       targetType: "business",
       targetId: id,
-      details: { updates },
+      details: previousSlug
+        ? { previousSlug, newSlug: updates.slug, updates }
+        : { updates },
       ...clientMeta,
     });
 
@@ -351,7 +697,7 @@ export async function DELETE(request: Request) {
     // 1. Fetch business details for audit logging
     const { data: targetBiz, error: findErr } = await supa
       .from("businesses")
-      .select("id, name, slug")
+      .select("id, name, slug, plan_type, enabled_modules")
       .eq("id", businessId)
       .maybeSingle();
 
@@ -362,8 +708,13 @@ export async function DELETE(request: Request) {
     // 2. Fetch all user profile IDs belonging to this business
     const { data: profiles } = await supa
       .from("profiles")
-      .select("id, email, is_super_admin")
+      .select("id, email, is_admin, is_super_admin")
       .eq("business_id", businessId);
+
+    const primaryAdminEmail =
+      (profiles || []).find((p: any) => p.is_admin)?.email ||
+      (profiles || [])[0]?.email ||
+      "None";
 
     const userIds = (profiles || [])
       .filter((p) => !p.is_super_admin && p.id !== caller.id)
@@ -423,11 +774,16 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: `Failed to remove business: ${delBizErr.message}` }, { status: 500 });
     }
 
-    // 6. Log Audit Event
+    // Free up the deleted store's slug so Super Admin can re-onboard it if needed
+    if (targetBiz.slug) {
+      await supa.from("retired_slugs").delete().eq("slug", targetBiz.slug.toLowerCase().trim());
+    }
+
+    // 6. Log Audit Event (use null businessId so FK ON DELETE SET NULL does not block archiving)
     const { logAuditEvent, extractClientMetadata } = await import("@/lib/services/auditLogger");
     const clientMeta = extractClientMetadata(request);
     await logAuditEvent({
-      businessId,
+      businessId: null as any,
       actorId: caller.id,
       actorEmail: caller.email,
       action: "BUSINESS_DELETED",
@@ -436,6 +792,9 @@ export async function DELETE(request: Request) {
       details: {
         businessName: targetBiz.name,
         slug: targetBiz.slug,
+        storeId: (targetBiz as any)?.enabled_modules?.store_id || "",
+        adminEmail: primaryAdminEmail,
+        planType: (targetBiz as any)?.plan_type || "pro",
         deletedUserCount: userIds.length,
         deletedBy: caller.email,
       },

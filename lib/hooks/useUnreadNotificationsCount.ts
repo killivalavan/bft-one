@@ -137,18 +137,26 @@ export function useUnreadNotificationsCount() {
     window.addEventListener("focus", handleFocus);
     window.addEventListener("bftone_notifications_read", handleReadEvent);
 
-    // Realtime listener for incoming notifications
+    // Realtime listener for incoming notifications strictly scoped by business_id
+    if (!bizId) {
+      return () => {
+        window.removeEventListener("focus", handleFocus);
+        window.removeEventListener("bftone_notifications_read", handleReadEvent);
+      };
+    }
+
     const channel = supabaseClient
-      .channel(`notif-count-${bizId || "global"}`)
+      .channel(`notif-count-${bizId}`)
       .on(
         "postgres_changes",
         {
           event: "INSERT",
           schema: "public",
           table: "notifications",
+          filter: `business_id=eq.${bizId}`,
         },
         (payload: { new?: { business_id?: string } }) => {
-          if (!bizId || payload.new?.business_id === bizId) {
+          if (payload.new?.business_id === bizId) {
             setUnreadCount((prev) => prev + 1);
           }
         }

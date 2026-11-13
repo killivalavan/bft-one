@@ -185,7 +185,7 @@ export default function RaiseIssueModal({ isOpen, onClose, initialTab = "list", 
 
       toast({
         title: "Issue Reported Successfully",
-        description: `Ticket ${generatedTicket} logged with SeyalPro support team.`,
+        description: `Ticket ${generatedTicket} logged with CounterCub support team.`,
         variant: "success",
       });
 
@@ -253,7 +253,7 @@ export default function RaiseIssueModal({ isOpen, onClose, initialTab = "list", 
                   </div>
                   <div>
                     <h2 className="text-xl font-extrabold text-zinc-900 tracking-tight flex items-center gap-2">
-                      SeyalPro Support Hub
+                      CounterCub Support Hub
                     </h2>
                     <p className="text-xs text-zinc-500">
                       Store: <span className="font-bold text-zinc-800">{business?.name || "Your Store"}</span>
@@ -509,12 +509,12 @@ export default function RaiseIssueModal({ isOpen, onClose, initialTab = "list", 
                             </div>
                           )}
 
-                          {/* SEYALPRO RESOLUTION NOTE (Highlighted if present) */}
+                          {/* COUNTERCUB RESOLUTION NOTE (Highlighted if present) */}
                           {ticket.resolution_notes && (
                             <div className="rounded-xl bg-emerald-50 border border-emerald-200/90 p-3.5 space-y-1.5">
                               <div className="flex items-center gap-1.5 text-emerald-900 font-extrabold text-xs">
                                 <Sparkles size={14} className="text-emerald-600" />
-                                <span>SeyalPro Engineer Resolution / Note:</span>
+                                <span>CounterCub Engineer Resolution / Note:</span>
                               </div>
                               <p className="text-xs text-emerald-800 leading-relaxed whitespace-pre-wrap font-medium">
                                 {ticket.resolution_notes}
@@ -548,10 +548,10 @@ export default function RaiseIssueModal({ isOpen, onClose, initialTab = "list", 
                         Ticket Reference: #{submittedTicket.ticketNumber}
                       </span>
                       <h2 className="text-2xl font-extrabold text-zinc-900">
-                        Issue Reported to SeyalPro!
+                        Issue Reported to CounterCub!
                       </h2>
                       <p className="text-xs text-zinc-500 max-w-md mx-auto leading-relaxed">
-                        Thank you! Your issue report and screenshot have been directly delivered to SeyalPro engineering. You can track the status in real-time under the <strong>Raised Issues</strong> tab.
+                        Thank you! Your issue report and screenshot have been directly delivered to CounterCub engineering. You can track the status in real-time under the <strong>Raised Issues</strong> tab.
                       </p>
                     </div>
 
@@ -742,7 +742,7 @@ export default function RaiseIssueModal({ isOpen, onClose, initialTab = "list", 
                         ) : (
                           <>
                             <Send size={14} />
-                            <span>Submit Issue to SeyalPro</span>
+                            <span>Submit Issue to CounterCub</span>
                           </>
                         )}
                       </Button>

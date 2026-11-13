@@ -27,10 +27,15 @@ import {
   Percent,
   RefreshCw,
 } from "lucide-react";
-import { BakerProduct, INITIAL_BAKER_PRODUCTS } from "../products/page";
-import { getAuthHeaders } from "@/lib/auth/clientAuth";
-import { formatCafeName, DEFAULT_BAKER_SAMPLE_STORES, sanitizeBakerStores } from "@/lib/utils/bakerUtils";
+import {
+  type BakerProduct,
+  INITIAL_BAKER_PRODUCTS,
+  formatCafeName,
+  DEFAULT_BAKER_SAMPLE_STORES,
+  sanitizeBakerStores,
+} from "@/lib/utils/bakerUtils";
 import { fetchB2BClients, B2B_CUSTOMERS_UPDATED_EVENT } from "@/lib/services/b2bClients";
+import { getAuthHeaders } from "@/lib/auth/clientAuth";
 import { SelectDropdown } from "@/components/ui/SelectDropdown";
 import { useB2BBroadcasts, usePublishBroadcastMutation } from "@/lib/hooks/useB2BData";
 
@@ -253,7 +258,7 @@ export default function BakerBroadcastsPage() {
       if (targetBusinessIds.length === 0) {
         toast({
           title: "External Client Only",
-          description: "This store does not use the SeyalPro app. Please share this advisory via WhatsApp.",
+          description: "This store does not use the CounterCub app. Please share this advisory via WhatsApp.",
           variant: "error",
         });
         setIsSending(false);
@@ -333,13 +338,13 @@ export default function BakerBroadcastsPage() {
     const targetStore = stores.find((s) => b.target_stores.includes(s.id)) || resolvedTargetStores[0];
     const phone = targetStore?.phone ? targetStore.phone.replace(/[^0-9]/g, "") : "";
     
-    let text = `*SeyalPro B2B Advisory*\n`;
+    let text = `*CounterCub B2B Advisory*\n`;
     text += `*${b.title}*\n\n`;
     text += `${b.message}\n\n`;
     if (b.product_name) text += `📦 *Item:* ${b.product_name}\n`;
     if (b.quantity) text += `🔢 *Available Qty:* ${b.quantity} pcs\n`;
     if (b.discount_rate) text += `🏷️ *Offer Rate:* ₹${b.discount_rate} / pc\n`;
-    text += `\n_Sent via SeyalPro Central Kitchen Dispatch_`;
+    text += `\n_Sent via CounterCub Central Kitchen Dispatch_`;
 
     const encoded = encodeURIComponent(text);
     const url = phone ? `https://api.whatsapp.com/send?phone=${phone}&text=${encoded}` : `https://api.whatsapp.com/send?text=${encoded}`;
@@ -373,11 +378,11 @@ export default function BakerBroadcastsPage() {
                   Client Broadcasts &amp; Alerts
                 </h1>
                 <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-blue-100 text-blue-800 border border-blue-200 shrink-0">
-                  SeyalPro B2B
+                  CounterCub B2B
                 </span>
               </div>
               <p className="text-[11px] sm:text-xs text-[#64748B] hidden sm:block mt-0.5">
-                Notify connected SeyalPro client stores about surplus stock, delays, and fresh batches
+                Notify connected CounterCub client stores about surplus stock, delays, and fresh batches
               </p>
             </div>
           </div>
@@ -449,7 +454,7 @@ export default function BakerBroadcastsPage() {
                     Compose Client Notification
                   </h2>
                   <p className="text-[11px] text-[#64748B]">
-                    Delivers in-app alert to client store SeyalPro apps &amp; notification bells
+                    Delivers in-app alert to client store CounterCub apps &amp; notification bells
                   </p>
                 </div>
               </div>
@@ -491,7 +496,7 @@ export default function BakerBroadcastsPage() {
                   )}
                 >
                   <Store size={14} className="shrink-0" />
-                  <span>All Connected SeyalPro Stores ({seyalProConnectedStores.length})</span>
+                  <span>All Connected CounterCub Stores ({seyalProConnectedStores.length})</span>
                 </button>
                 <button
                   type="button"
@@ -533,7 +538,7 @@ export default function BakerBroadcastsPage() {
                         value: st.id,
                         label: formatCafeName(st.name),
                         sublabel: st.phone ? `Phone: ${st.phone}` : undefined,
-                        badge: st.business_id ? "⚡ SeyalPro App" : "📱 WhatsApp",
+                        badge: st.business_id ? "⚡ CounterCub App" : "📱 WhatsApp",
                         badgeVariant: st.business_id ? ("info" as const) : ("default" as const),
                         icon: <Store size={13} className="text-slate-400" />,
                       })),
@@ -556,7 +561,7 @@ export default function BakerBroadcastsPage() {
                             </p>
                             {selectedStore?.business_id ? (
                               <span className="px-1.5 py-0.2 rounded-md text-[9px] font-black uppercase tracking-wider bg-blue-100 text-blue-900 border border-blue-200">
-                                ⚡ SeyalPro App Linked
+                                ⚡ CounterCub App Linked
                               </span>
                             ) : (
                               <span className="px-1.5 py-0.2 rounded-md text-[9px] font-bold text-amber-800 bg-amber-50 border border-amber-200">
@@ -667,10 +672,10 @@ export default function BakerBroadcastsPage() {
                   <AlertCircle size={15} className="text-amber-600 shrink-0 mt-0.5" />
                   <div className="space-y-0.5">
                     <p className="font-extrabold text-[12px] text-amber-950">
-                      External Client — No SeyalPro App Connected
+                      External Client — No CounterCub App Connected
                     </p>
                     <p className="text-[11px] text-amber-850 leading-relaxed">
-                      In-app notifications are only delivered to stores using the SeyalPro app. Since <strong className="text-amber-950 font-bold">{formatCafeName(selectedStore.name)}</strong> is an external client, dispatch this advisory directly via WhatsApp.
+                      In-app notifications are only delivered to stores using the CounterCub app. Since <strong className="text-amber-950 font-bold">{formatCafeName(selectedStore.name)}</strong> is an external client, dispatch this advisory directly via WhatsApp.
                     </p>
                   </div>
                 </div>
@@ -681,10 +686,10 @@ export default function BakerBroadcastsPage() {
                   <AlertCircle size={15} className="text-amber-600 shrink-0 mt-0.5" />
                   <div className="space-y-0.5">
                     <p className="font-extrabold text-[12px] text-amber-950">
-                      No SeyalPro Connected Stores
+                      No CounterCub Connected Stores
                     </p>
                     <p className="text-[11px] text-amber-850 leading-relaxed">
-                      None of your registered clients are linked to a SeyalPro account yet. Link them in <Link href="/b2b/customers" className="underline font-bold text-blue-700">Client Ledgers</Link> to enable live in-app notifications.
+                      None of your registered clients are linked to a CounterCub account yet. Link them in <Link href="/b2b/customers" className="underline font-bold text-blue-700">Client Ledgers</Link> to enable live in-app notifications.
                     </p>
                   </div>
                 </div>
@@ -719,7 +724,7 @@ export default function BakerBroadcastsPage() {
                   onClick={() => {
                     const targetStore = resolvedTargetStores[0];
                     const phone = targetStore?.phone ? targetStore.phone.replace(/[^0-9]/g, "") : "";
-                    let text = `*SeyalPro B2B Advisory*\n*${title}*\n\n${message}\n`;
+                    let text = `*CounterCub B2B Advisory*\n*${title}*\n\n${message}\n`;
                     if (selectedProductName) text += `📦 Item: ${selectedProductName}\n`;
                     if (quantity) text += `🔢 Qty: ${quantity} pcs\n`;
                     if (discountRate) text += `🏷️ Offer Price: ₹${discountRate}\n`;

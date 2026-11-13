@@ -532,7 +532,7 @@ export function ProfileDetailsSection({ profile, onProfileUpdated }: ProfileDeta
                     {profile.department || "Operations & Field"}
                   </div>
                   <div className="text-xs text-slate-500 mt-1 leading-tight">
-                    Assigned business unit within SeyalPro network.
+                    Assigned business unit within CounterCub network.
                   </div>
                 </div>
               </div>

@@ -14,16 +14,14 @@ export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);
     const requestedBizId = searchParams.get("business_id");
 
-    const businessId = requestedBizId && requestedBizId !== "default"
-      ? requestedBizId
-      : caller.businessId;
-
-    if (!caller.isSuperAdmin && businessId !== caller.businessId) {
+    if (requestedBizId && requestedBizId !== "default" && requestedBizId !== caller.businessId) {
       return NextResponse.json(
         { error: "Forbidden: Cannot access broadcasts of another business." },
         { status: 403 }
       );
     }
+
+    const businessId = caller.businessId;
 
     // 1. Try relational table
     const { data: tableData, error: tableError } = await supa
@@ -62,18 +60,14 @@ export async function POST(req: Request) {
     const body = await req.json().catch(() => ({}));
 
     const requestedBizId = body.business_id || body.sender_business_id;
-    const targetBizId = requestedBizId && requestedBizId !== "default"
-      ? requestedBizId
-      : caller.businessId;
-
-    if (!caller.isSuperAdmin && targetBizId !== caller.businessId) {
+    if (requestedBizId && requestedBizId !== "default" && requestedBizId !== caller.businessId) {
       return NextResponse.json(
         { error: "Forbidden: Cannot send broadcasts for another business." },
         { status: 403 }
       );
     }
 
-    const businessId = targetBizId;
+    const businessId = caller.businessId;
     const title = body.title?.trim() || "Wholesale Advisory";
     const message = body.message?.trim() || "";
     const category = body.category || "Production";
@@ -117,46 +111,31 @@ export async function POST(req: Request) {
       })
       .eq("id", businessId);
 
-    // 3. Optional cross-tenant notification fan-out when target_store_ids are specified
-    const candidateIds: string[] = Array.isArray(body.target_store_ids) ? body.target_store_ids : [];
-    const targets: string[] = [];
-    if (candidateIds.length > 0 && message) {
-      const { data: allBusinesses } = await supa.from("businesses").select("id, name, slug");
-      const matchedTargets: { id: string; name: string }[] = [];
-      for (const rawId of candidateIds) {
-        if (!rawId || rawId === "all") continue;
-        const idLower = String(rawId).toLowerCase();
-        const found = (allBusinesses || []).find(
-          (b) => b.id === rawId || b.slug?.toLowerCase() === idLower || b.name?.toLowerCase() === idLower
-        );
-        if (found && found.id !== businessId && !matchedTargets.some((t) => t.id === found.id)) {
-          matchedTargets.push({ id: found.id, name: found.name });
-        }
-      }
-      if (matchedTargets.length > 0) {
-        const senderName = biz?.name || body.sender_name || "Central Kitchen";
-        const suffix = body.product_name && body.quantity
-          ? ` (${body.quantity}x ${body.product_name}${body.discount_rate ? ` @ ₹${body.discount_rate}` : ""})`
-          : "";
-        const formattedMsg = `📢 [${String(category).toUpperCase()}] ${title}: ${message}${suffix}`;
-        await supa.from("notifications").insert(
-          matchedTargets.map((tb) => ({
-            business_id: tb.id,
-            kind: "baker_broadcast",
-            message: formattedMsg,
-            meta: {
-              sender_name: senderName,
-              category,
-              title,
-              product_name: body.product_name || null,
-              quantity: body.quantity || null,
-              discount_rate: body.discount_rate || null,
-              sender_business_id: businessId || null,
-            },
-          }))
-        );
-        targets.push(...matchedTargets.map((t) => t.name));
-      }
+    // 3. Record broadcast notification strictly within the caller's own business tenant
+    const targets: string[] = Array.isArray(broadcastPayload.target_stores)
+      ? broadcastPayload.target_stores.map(String)
+      : [];
+    if (message && businessId) {
+      const senderName = biz?.name || body.sender_name || "Central Kitchen";
+      const suffix = body.product_name && body.quantity
+        ? ` (${body.quantity}x ${body.product_name}${body.discount_rate ? ` @ ₹${body.discount_rate}` : ""})`
+        : "";
+      const formattedMsg = `📢 [${String(category).toUpperCase()}] ${title}: ${message}${suffix}`;
+      await supa.from("notifications").insert({
+        business_id: businessId,
+        kind: "baker_broadcast",
+        message: formattedMsg,
+        meta: {
+          sender_name: senderName,
+          category,
+          title,
+          product_name: body.product_name || null,
+          quantity: body.quantity || null,
+          discount_rate: body.discount_rate || null,
+          sender_business_id: businessId,
+          target_stores: targets,
+        },
+      });
     }
 
     return NextResponse.json({

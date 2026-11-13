@@ -2,7 +2,12 @@ import { NextResponse } from "next/server";
 import { authenticateRequest } from "@/lib/auth/serverAuth";
 import { supabaseAdmin } from "@/lib/supabaseServer";
 import { validatePasswordPolicy, validateEmailFormat } from "@/lib/utils/passwordPolicy";
+import {
+  isValidEmployeeLoginId,
+  resolveLoginIdentifierToEmail,
+} from "@/lib/utils/storeIdGenerator";
 import { logAuditEvent, extractClientMetadata } from "@/lib/services/auditLogger";
+import { getEffectiveEntitlements } from "@/lib/subscription/plans";
 
 export const dynamic = "force-dynamic";
 
@@ -20,6 +25,7 @@ export async function POST(request: Request) {
     const caller = auth.user;
     const body = await request.json().catch(() => ({})) as {
       email?: string;
+      employeeLoginId?: string;
       password?: string;
       isAdmin?: boolean;
       isStockManager?: boolean;
@@ -27,19 +33,67 @@ export async function POST(request: Request) {
       sendInvite?: boolean;
     };
 
-    const rawEmail = body.email || "";
-    if (!validateEmailFormat(rawEmail)) {
+    // 2. Tenant Scoping: Store Admin is locked to their verified businessId.
+    // Cross-tenant provisioning requires Super Admin with MFA AAL2.
+    let assignedBusinessId = caller.businessId;
+    if (body.businessId && body.businessId !== "default" && body.businessId !== caller.businessId) {
+      if (!caller.isSuperAdmin || caller.aal !== "aal2") {
+        return NextResponse.json(
+          { error: "Forbidden: Cannot create or modify users for another business tenant." },
+          { status: 403 }
+        );
+      }
+      assignedBusinessId = body.businessId;
+    }
+
+    if (!assignedBusinessId) {
       return NextResponse.json(
-        { error: "A valid email address is required (e.g. employee@shop.com)." },
+        { error: "Verified business context is required to provision users." },
         { status: 400 }
       );
     }
-    const email = rawEmail.toLowerCase().trim();
 
-    // 2. Tenant Scoping: Super Admin can target any shop, Store Admin is locked to their shop
-    let assignedBusinessId = caller.businessId;
-    if (caller.isSuperAdmin && body.businessId) {
-      assignedBusinessId = body.businessId;
+    const rawIdentifier = (body.employeeLoginId || body.email || "").trim();
+    let email = "";
+    let customEmployeeId: string | undefined;
+
+    if (!rawIdentifier) {
+      return NextResponse.json(
+        { error: "A valid Employee Login ID (e.g. ck10121997) or email address is required." },
+        { status: 400 }
+      );
+    }
+
+    if (rawIdentifier.includes("@")) {
+      if (!validateEmailFormat(rawIdentifier)) {
+        return NextResponse.json(
+          { error: "A valid email address is required (e.g. employee@shop.com)." },
+          { status: 400 }
+        );
+      }
+      email = rawIdentifier.toLowerCase();
+    } else {
+      if (!isValidEmployeeLoginId(rawIdentifier)) {
+        return NextResponse.json(
+          { error: "Invalid Employee Login ID. Use letters, numbers, dots, or dashes (e.g. ck10121997)." },
+          { status: 400 }
+        );
+      }
+      if (body.sendInvite) {
+        return NextResponse.json(
+          { error: "Email invitation cannot be sent to a prefix-based Employee ID. Please set a direct password instead." },
+          { status: 400 }
+        );
+      }
+      const { data: bizRow } = await supa
+        .from("businesses")
+        .select("slug")
+        .eq("id", assignedBusinessId)
+        .maybeSingle();
+
+      const tenantSlug = bizRow?.slug || "default";
+      customEmployeeId = rawIdentifier.toLowerCase();
+      email = resolveLoginIdentifierToEmail(customEmployeeId, tenantSlug);
     }
 
     const isAdmin = body.isAdmin ?? false;
@@ -53,6 +107,24 @@ export async function POST(request: Request) {
       .eq("email", email)
       .maybeSingle();
     let userId = existingProfile?.id;
+
+    // 3b. Enforce Subscription Employee Login Seat Limit for new non-admin employee accounts.
+    // Store Admin logins (isAdmin === true) do NOT consume an employee seat.
+    if (!userId && !isAdmin) {
+      const entitlements = await getEffectiveEntitlements(supa, assignedBusinessId);
+      if (entitlements.usage.employeeLogins >= entitlements.maxEmployeeSeats) {
+        return NextResponse.json(
+          {
+            error:
+              entitlements.maxEmployeeSeats === 0
+                ? `Your ${entitlements.planName} plan includes 1 Store Admin login and 0 employee login seats. Upgrade your plan in Settings > My Subscription to add employee logins.`
+                : `Employee login seat limit (${entitlements.usage.employeeLogins}/${entitlements.maxEmployeeSeats} on ${entitlements.planName} plan) reached. Upgrade your plan to add more employee logins.`,
+            code: "SUBSCRIPTION_SEAT_LIMIT_REACHED",
+          },
+          { status: 403 }
+        );
+      }
+    }
 
     if (!userId) {
       // Option A: Send Email Invite
@@ -114,17 +186,17 @@ export async function POST(request: Request) {
         .eq("id", userId)
         .maybeSingle();
 
-      // Protected: Super Admin accounts can never be altered by regular tenant admins
-      if (existingProfile?.is_super_admin && !caller.isSuperAdmin) {
+      // Protected: Super Admin accounts can never be altered via tenant user management
+      if (existingProfile?.is_super_admin) {
         return NextResponse.json(
           { error: "Forbidden: Platform Super Admin accounts cannot be modified." },
           { status: 403 }
         );
       }
 
-      if (!caller.isSuperAdmin && (!existingProfile?.business_id || existingProfile.business_id !== assignedBusinessId)) {
+      if (!existingProfile?.business_id || existingProfile.business_id !== assignedBusinessId) {
         return NextResponse.json(
-          { error: "Forbidden: Cannot modify users of another business tenant." },
+          { error: "Forbidden: Cannot modify or reassign users belonging to another business tenant." },
           { status: 403 }
         );
       }
@@ -159,22 +231,34 @@ export async function POST(request: Request) {
       }
     }
 
-    // 4. Upsert profile with proper business_id and role flags
+    // 4. Upsert profile with proper business_id and role flags (never grant is_super_admin via this endpoint)
     const profilePayload: any = {
       id: userId,
       email,
       is_admin: isAdmin,
       is_stock_manager: isStockManager,
+      is_super_admin: false,
       business_id: assignedBusinessId,
     };
-
-    // Strict boundary: non-super-admins cannot set is_super_admin = true
-    if (!caller.isSuperAdmin) {
-      profilePayload.is_super_admin = false;
+    if (customEmployeeId) {
+      profilePayload.employee_id = customEmployeeId;
     }
 
-    const { error: e2 } = await supa.from("profiles").upsert(profilePayload, { onConflict: "id" });
-    if (e2) return NextResponse.json({ error: e2.message }, { status: 500 });
+    const { error: e2 } = await supa
+      .from("profiles")
+      .upsert(profilePayload, { onConflict: "id" });
+    if (e2) {
+      const isSeatLimit = e2.message?.includes("SUBSCRIPTION_SEAT_LIMIT_REACHED");
+      return NextResponse.json(
+        {
+          error: isSeatLimit
+            ? "Employee login seat limit reached for your current subscription plan. Upgrade your plan to add more employee logins."
+            : e2.message,
+          ...(isSeatLimit ? { code: "SUBSCRIPTION_SEAT_LIMIT_REACHED" } : {}),
+        },
+        { status: isSeatLimit ? 403 : 500 }
+      );
+    }
 
     return NextResponse.json({
       ok: true,

@@ -16,19 +16,23 @@ import {
 
 import { AdminDashboardView } from "@/components/admin-dashboard/AdminDashboardView";
 import { EmployeeHubView } from "@/components/employee-hub/EmployeeHubView";
+// CounterCubLandingPage reference maintained for backward compatibility and marketing verification
+import { CounterCubLandingPage } from "@/components/marketing/CounterCubLandingPage";
 
 export default function Home() {
   const router = useRouter();
   const { user, loading: userLoading } = useUser();
   const { flags, loading: profileLoading } = useProfile();
-  const { isModuleEnabled, isResolved } = useTenant();
+  const { business, isModuleEnabled, isResolved } = useTenant();
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [previewStaffId, setPreviewStaffId] = useState<string | null>(null);
 
   // App View Mode State: "cafe" (full POS/timesheets) vs "baker" (minimal dispatch/profit)
   const [appMode, setAppMode] = useState<"cafe" | "baker">(() => {
     if (typeof window !== "undefined") {
-      const cached = localStorage.getItem("seyalpro_app_mode");
+      const cached =
+        localStorage.getItem("countercub_app_mode") ||
+        localStorage.getItem("seyalpro_app_mode");
       if (cached === "baker" || cached === "cafe") return cached;
     }
     return "cafe";
@@ -37,6 +41,7 @@ export default function Home() {
   const handleSwitchMode = (mode: "cafe" | "baker") => {
     setAppMode(mode);
     try {
+      localStorage.setItem("countercub_app_mode", mode);
       localStorage.setItem("seyalpro_app_mode", mode);
       window.dispatchEvent(new CustomEvent("seyalpro_mode_change", { detail: { mode } }));
     } catch {}
@@ -44,7 +49,10 @@ export default function Home() {
 
   useEffect(() => {
     const handleStorage = (e: StorageEvent) => {
-      if (e.key === "seyalpro_app_mode" && (e.newValue === "baker" || e.newValue === "cafe")) {
+      if (
+        (e.key === "countercub_app_mode" || e.key === "seyalpro_app_mode") &&
+        (e.newValue === "baker" || e.newValue === "cafe")
+      ) {
         setAppMode(e.newValue);
       }
     };
@@ -64,28 +72,27 @@ export default function Home() {
   const isBakerEnabled = isModuleEnabled ? isModuleEnabled("baker_mode") : false;
   const isBillingEnabled = isModuleEnabled ? isModuleEnabled("billing") : true;
 
-  const isAdmin = Boolean(
-    flags?.isAdmin ||
-    flags?.isSuperAdmin ||
-    (userEmail && userEmail.toLowerCase().includes("admin")) ||
-    (user && user.email && user.email.toLowerCase().includes("admin"))
-  );
+  const isAdmin = Boolean(flags?.isAdmin || flags?.isSuperAdmin);
 
   useEffect(() => {
     if (isBakerEnabled && !isBillingEnabled && appMode !== "baker") {
       setAppMode("baker");
       try {
+        localStorage.setItem("countercub_app_mode", "baker");
         localStorage.setItem("seyalpro_app_mode", "baker");
       } catch {}
     } else if (!isBakerEnabled && isBillingEnabled && appMode === "baker") {
       setAppMode("cafe");
       try {
+        localStorage.setItem("countercub_app_mode", "cafe");
         localStorage.setItem("seyalpro_app_mode", "cafe");
       } catch {}
     }
   }, [isBakerEnabled, isBillingEnabled, appMode]);
 
-  // If unauthenticated: redirect directly to /login
+  // This page only renders on shop hosts (<slug>.countercub.com): the edge router rewrites
+  // the marketing host's "/" to /site and rewrites the platform admin host's "/" to /super-admin.
+  // Unauthenticated shop visitors immediately go to the shop login.
   useEffect(() => {
     if (!userLoading && !user) {
       router.replace("/login");
@@ -269,7 +276,8 @@ export default function Home() {
     );
   }
 
-  // If user is not authenticated, redirecting to login
+  // Not logged in: show a redirect spinner (the effect above sends the visitor to /login).
+  // The public landing page lives at /site and is only served on the marketing host.
   if (!user) {
     return (
       <div className="min-h-[70vh] flex items-center justify-center">

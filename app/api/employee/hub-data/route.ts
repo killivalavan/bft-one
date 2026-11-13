@@ -38,6 +38,7 @@ export async function GET(request: Request) {
       .from("profiles")
       .select(fullSelect)
       .eq("id", targetUserId)
+      .eq("business_id", caller.businessId)
       .maybeSingle();
 
     if (fullProfErr || !fullProf) {
@@ -48,6 +49,7 @@ export async function GET(request: Request) {
           "id, email, full_name, is_admin, created_at, in_time, base_salary_cents, fixed_allowance_cents, contact_number, emergency_contact_number, business_id"
         )
         .eq("id", targetUserId)
+        .eq("business_id", caller.businessId)
         .maybeSingle();
 
       profile = baseProf;
@@ -59,11 +61,9 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "Profile not found" }, { status: 404 });
     }
 
-    // Tenant boundary check: ensure store admin can only preview employees belonging to their store
-    if (caller.isAdmin && requestedUserId && !caller.isSuperAdmin) {
-      if (profile.business_id && profile.business_id !== caller.businessId) {
-        return NextResponse.json({ error: "Forbidden: Cannot view employee belonging to another business." }, { status: 403 });
-      }
+    // Tenant boundary check (fail closed on missing or mismatched business_id)
+    if (!profile.business_id || profile.business_id !== caller.businessId) {
+      return NextResponse.json({ error: "Forbidden: Cannot view employee belonging to another business." }, { status: 403 });
     }
 
     // Default dates and identity
@@ -113,6 +113,7 @@ export async function GET(request: Request) {
         .from("employee_increments")
         .select("id, effective_date, previous_salary_cents, new_salary_cents, increment_amount_cents, reason, approved_by")
         .eq("user_id", targetUserId)
+        .eq("business_id", caller.businessId)
         .order("effective_date", { ascending: false });
 
       if (!incErr && incRows && incRows.length > 0) {
@@ -160,7 +161,8 @@ export async function GET(request: Request) {
       const { data: achRows, error: achErr } = await supa
         .from("employee_achievements")
         .select("id, badge_key, title, description, category, achieved_date, is_unlocked")
-        .eq("user_id", targetUserId);
+        .eq("user_id", targetUserId)
+        .eq("business_id", caller.businessId);
 
       if (!achErr && achRows && achRows.length > 0) {
         achievements = STANDARD_ACHIEVEMENTS_CATALOG.map((catItem) => {

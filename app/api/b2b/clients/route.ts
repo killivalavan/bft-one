@@ -14,17 +14,14 @@ export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);
     const requestedBizId = searchParams.get("business_id");
 
-    const businessId = requestedBizId && requestedBizId !== "default"
-      ? requestedBizId
-      : caller.businessId;
-
-    // Tenant boundary check: only Super Admin can inspect another business's clients
-    if (!caller.isSuperAdmin && businessId !== caller.businessId) {
+    if (requestedBizId && requestedBizId !== "default" && requestedBizId !== caller.businessId) {
       return NextResponse.json(
         { error: "Forbidden: Cannot access clients belonging to another business." },
         { status: 403 }
       );
     }
+
+    const businessId = caller.businessId;
 
     // 1. Try dedicated b2b_clients table
     const { data: tableData, error: tableError } = await supa
@@ -80,18 +77,14 @@ export async function POST(req: Request) {
     const body = await req.json().catch(() => ({}));
     const { action } = body;
 
-    const targetBizId = body.business_id && body.business_id !== "default"
-      ? body.business_id
-      : caller.businessId;
-
-    if (!caller.isSuperAdmin && targetBizId !== caller.businessId) {
+    if (body.business_id && body.business_id !== "default" && body.business_id !== caller.businessId) {
       return NextResponse.json(
         { error: "Forbidden: Cannot modify clients for another business." },
         { status: 403 }
       );
     }
 
-    const business_id = targetBizId;
+    const business_id = caller.businessId;
 
     // Handle bulk sync
     if (action === "sync" && Array.isArray(body.clients)) {
@@ -240,18 +233,14 @@ export async function PUT(req: Request) {
     const body = await req.json().catch(() => ({}));
     const { id, name, phone, address, linked_business_id } = body;
 
-    const targetBizId = body.business_id && body.business_id !== "default"
-      ? body.business_id
-      : caller.businessId;
-
-    if (!caller.isSuperAdmin && targetBizId !== caller.businessId) {
+    if (body.business_id && body.business_id !== "default" && body.business_id !== caller.businessId) {
       return NextResponse.json(
         { error: "Forbidden: Cannot update clients for another business." },
         { status: 403 }
       );
     }
 
-    const business_id = targetBizId;
+    const business_id = caller.businessId;
 
     if (!id || !name?.trim()) {
       return NextResponse.json({ error: "id and name are required" }, { status: 400 });
@@ -328,16 +317,14 @@ export async function DELETE(req: Request) {
     const requestedBizId = searchParams.get("business_id");
     const id = searchParams.get("id");
 
-    const businessId = requestedBizId && requestedBizId !== "default"
-      ? requestedBizId
-      : caller.businessId;
-
-    if (!caller.isSuperAdmin && businessId !== caller.businessId) {
+    if (requestedBizId && requestedBizId !== "default" && requestedBizId !== caller.businessId) {
       return NextResponse.json(
         { error: "Forbidden: Cannot delete clients of another business." },
         { status: 403 }
       );
     }
+
+    const businessId = caller.businessId;
 
     if (!id) {
       return NextResponse.json({ error: "id is required" }, { status: 400 });

@@ -103,6 +103,7 @@ export async function POST(req: Request) {
       const varianceCost = varianceQty * (Number(item.cost_per_unit) || 0);
 
       auditItems.push({
+        business_id: user.businessId,
         audit_id: audit.id,
         inventory_item_id: c.inventory_item_id,
         expected_stock: expected,

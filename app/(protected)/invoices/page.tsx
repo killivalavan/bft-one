@@ -80,6 +80,7 @@ export type SavedInvoice = {
   totalAmount: number;
   status: "paid" | "unpaid";
   paymentMode: string;
+  source?: string;
   notes?: string;
   bankDetails?: { bankName: string; accountNo: string; ifsc: string; branch: string };
   upiDetails?: { upiId: string; payeeName: string };
@@ -191,6 +192,7 @@ export default function InvoicesPage() {
   const [adjustments, setAdjustments] = useState<CustomAdjustment[]>([]);
 
   const [invoiceStatus, setInvoiceStatus] = useState<"paid" | "unpaid">("paid");
+  const [isSaving, setIsSaving] = useState(false);
 
   // Bank & UPI details
   const [bankDetails, setBankDetails] = useState({ bankName: "", accountNo: "", ifsc: "", branch: "" });
@@ -231,47 +233,83 @@ export default function InvoicesPage() {
       }
     } catch {}
 
-    // Load from local storage cache immediately (instant render)
+    // Helper to normalize invoices strictly for corporate tax invoices
+    const normalizeInvoiceItem = (inv: any): SavedInvoice => {
+      const rawTotal = Number(inv.total_amount ?? inv.totalAmount ?? 0);
+      const rawPaid = Number(inv.paid_amount ?? inv.paidAmount ?? 0);
+      const rawDue = Number(inv.balance_due ?? inv.balanceDue ?? (rawTotal - rawPaid));
+      const s = String(inv.status || "").toLowerCase();
+      const isPaid = s === "paid" || (rawTotal > 0 && rawDue <= 0);
+
+      return {
+        id: inv.id || `inv-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        invoiceNumber: inv.invoice_number || inv.invoiceNumber || inv.slip_number || "INV-001",
+        title: inv.title || "TAX INVOICE",
+        date: inv.date || inv.invoice_date || (inv.created_at ? inv.created_at.split("T")[0] : new Date().toISOString().split("T")[0]),
+        dueDate: inv.due_date || inv.dueDate || "",
+        customerName: inv.customer_name || inv.customerName || "Corporate Client",
+        customerPhone: inv.customer_phone || inv.customerPhone || "",
+        customerAddress: inv.customer_address || inv.customerAddress || "",
+        customerGstin: inv.customer_gstin || inv.customerGstin || "",
+        items: Array.isArray(inv.items) ? inv.items : [],
+        subtotal: Number(inv.subtotal ?? inv.total_amount ?? inv.totalAmount ?? 0),
+        taxRate: Number(inv.tax_rate || inv.taxRate || 0),
+        taxAmount: Number(inv.tax_amount || inv.taxAmount || 0),
+        tdsAmount: Number(inv.tds_amount || inv.tdsAmount || 0),
+        discountAmount: Number(inv.discount_amount || inv.discountAmount || 0),
+        additionalCharges: Number(inv.additional_charges || inv.additionalCharges || 0),
+        adjustments: inv.adjustments || [],
+        totalAmount: rawTotal,
+        status: isPaid ? "paid" : "unpaid",
+        paymentMode: inv.payment_mode || inv.paymentMode || "UPI",
+        source: inv.source || "corporate",
+        bankDetails: inv.bank_details || inv.bankDetails,
+        upiDetails: inv.upi_details || inv.upiDetails,
+        createdAt: inv.created_at || inv.createdAt || new Date().toISOString(),
+      };
+    };
+
+    // Load from local storage cache immediately (strictly isolated for corporate invoices)
+    let localCachedInvoices: SavedInvoice[] = [];
     try {
-      const stored = localStorage.getItem(`bftone_pos_invoices_${bizId}`) || localStorage.getItem(`bftone_invoices_${bizId}`);
-      if (stored) {
-        setInvoices(JSON.parse(stored));
+      const rawPos = localStorage.getItem(`bftone_pos_invoices_${bizId}`);
+      if (rawPos) {
+        const list = JSON.parse(rawPos);
+        if (Array.isArray(list)) {
+          localCachedInvoices = list.map(normalizeInvoiceItem);
+          setInvoices(localCachedInvoices);
+        }
       }
     } catch {}
 
-    // Asynchronously fetch authoritative cloud invoices from Supabase
+    // Asynchronously fetch authoritative cloud corporate invoices from Supabase
     (async () => {
       try {
         const headers = await getAuthHeaders();
-        const res = await fetch(`/api/invoices?business_id=${bizId}`, { headers });
+        const res = await fetch(`/api/invoices?business_id=${bizId}&source=corporate`, { headers });
         if (res.ok) {
           const data = await res.json();
-          if (Array.isArray(data.invoices) && data.invoices.length > 0) {
-            const mapped = data.invoices.map((inv: any) => ({
-              id: inv.id,
-              invoiceNumber: inv.invoice_number || inv.invoiceNumber || "INV-001",
-              title: inv.title || "TAX INVOICE",
-              date: inv.date,
-              dueDate: inv.due_date || inv.dueDate,
-              customerName: inv.customer_name || inv.customerName,
-              customerPhone: inv.customer_phone || inv.customerPhone,
-              customerAddress: inv.customer_address || inv.customerAddress,
-              customerGstin: inv.customer_gstin || inv.customerGstin,
-              items: inv.items || [],
-              subtotal: Number(inv.subtotal || 0),
-              taxRate: Number(inv.tax_rate || inv.taxRate || 0),
-              taxAmount: Number(inv.tax_amount || inv.taxAmount || 0),
-              tdsAmount: Number(inv.tds_amount || inv.tdsAmount || 0),
-              discountAmount: Number(inv.discount_amount || inv.discountAmount || 0),
-              additionalCharges: Number(inv.additional_charges || 0),
-              adjustments: inv.adjustments || [],
-              totalAmount: Number(inv.total_amount || inv.totalAmount || 0),
-              status: inv.status || "pending",
-              paymentMode: inv.payment_mode || inv.paymentMode || "UPI",
-              createdAt: inv.created_at || inv.createdAt,
-            }));
-            setInvoices(mapped);
-            localStorage.setItem(`bftone_pos_invoices_${bizId}`, JSON.stringify(mapped));
+          if (Array.isArray(data.invoices)) {
+            const mappedCloud = data.invoices.map(normalizeInvoiceItem);
+            
+            // Intelligent Cache Merge: Never wipe out locally created invoices that haven't synced yet
+            const cloudIds = new Set(mappedCloud.map((inv: SavedInvoice) => inv.id));
+            const unsyncedLocal = localCachedInvoices.filter((loc: SavedInvoice) => !cloudIds.has(loc.id));
+            const finalMerged = [...unsyncedLocal, ...mappedCloud];
+
+            setInvoices(finalMerged);
+            localStorage.setItem(`bftone_pos_invoices_${bizId}`, JSON.stringify(finalMerged));
+
+            // If there were unsynced local invoices, eagerly push them to cloud
+            if (unsyncedLocal.length > 0) {
+              for (const pending of unsyncedLocal) {
+                fetch("/api/invoices", {
+                  method: "POST",
+                  headers: { ...headers, "Content-Type": "application/json" },
+                  body: JSON.stringify({ ...pending, source: "corporate", business_id: bizId }),
+                }).catch(() => {});
+              }
+            }
           }
         }
       } catch (e) {
@@ -317,30 +355,33 @@ export default function InvoicesPage() {
     })();
   }, [business?.id]);
 
-  // Persist Invoices (Offline-First IndexedDB + Sync Queue)
-  function persistInvoices(updated: SavedInvoice[]) {
+  // Persist Invoices (Offline-First IndexedDB + Sync Queue + Cloud API)
+  async function persistInvoices(updated: SavedInvoice[]) {
     setInvoices(updated);
     const bizId = business?.id || "default";
     try {
       localStorage.setItem(`bftone_pos_invoices_${bizId}`, JSON.stringify(updated));
     } catch {}
 
-    // Asynchronously push to authoritative Supabase cloud API
-    (async () => {
-      try {
-        const headers = await getAuthHeaders();
-        for (const inv of updated) {
-          fetch("/api/invoices", {
-            method: "POST",
-            headers,
-            body: JSON.stringify({
-              ...inv,
-              business_id: bizId,
-            }),
-          }).catch(() => {});
-        }
-      } catch {}
-    })();
+    // Push to authoritative Supabase cloud API
+    try {
+      const headers = await getAuthHeaders({ "Content-Type": "application/json" });
+      for (const inv of updated) {
+        await fetch("/api/invoices", {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            ...inv,
+            source: "corporate",
+            business_id: bizId,
+          }),
+        }).catch((err) => {
+          console.warn("Direct invoice cloud push warning:", err);
+        });
+      }
+    } catch (apiErr) {
+      console.warn("Direct cloud persist failed, queued for background sync:", apiErr);
+    }
 
     // Save to IndexedDB & queue sync mutations
     updated.forEach((inv) => {
@@ -522,7 +563,7 @@ export default function InvoicesPage() {
       }
 
       if (field === "qty" || field === "rate") {
-        const q = field === "qty" ? Math.max(0, Number(value) || 0) : row.qty;
+        const q = field === "qty" ? (value === "" || value === null || value === undefined ? 0 : Math.max(0, Number(value) || 0)) : row.qty;
         const r = field === "rate" ? Math.max(0, Number(value) || 0) : row.rate;
         updated.amount = q * r;
       }
@@ -703,51 +744,61 @@ export default function InvoicesPage() {
   }
 
   // Save Current Invoice in Builder
-  function handleSaveInvoice() {
+  async function handleSaveInvoice() {
     if (!billedToName.trim()) {
       toast({ title: "Customer Name Required", description: "Please enter or select the Billed To client name", variant: "error" });
       return;
     }
 
-    // Auto-save client to customer directory for future dropdown selection
-    saveCustomerToDirectory(billedToName, billedToAddress, billedToPhone, billedToGstin);
+    setIsSaving(true);
+    try {
+      // Auto-save client to customer directory for future dropdown selection
+      saveCustomerToDirectory(billedToName, billedToAddress, billedToPhone, billedToGstin);
 
-    const payload: SavedInvoice = {
-      id: currentInvoiceId || `inv-${Date.now()}`,
-      invoiceNumber,
-      title: invoiceTitle,
-      date: invoiceDate,
-      dueDate,
-      customerName: billedToName.trim(),
-      customerPhone: billedToPhone.trim(),
-      customerAddress: billedToAddress.trim(),
-      customerGstin: billedToGstin.trim(),
-      items: [...items],
-      subtotal: calculatedSubtotal,
-      taxRate: enableGst ? taxRate : 0,
-      taxAmount: calculatedTax,
-      tdsAmount: totalDeductions,
-      discountAmount: 0,
-      additionalCharges: totalAdditions,
-      adjustments: [...adjustments],
-      totalAmount: calculatedGrandTotal,
-      status: invoiceStatus,
-      paymentMode: "UPI / Bank",
-      bankDetails: showBankDetails ? bankDetails : undefined,
-      upiDetails: showUpiDetails ? upiDetails : undefined,
-      createdAt: new Date().toISOString(),
-    };
+      const payload: SavedInvoice = {
+        id: currentInvoiceId || `inv-${Date.now()}`,
+        invoiceNumber,
+        title: invoiceTitle,
+        date: invoiceDate,
+        dueDate,
+        customerName: billedToName.trim(),
+        customerPhone: billedToPhone.trim(),
+        customerAddress: billedToAddress.trim(),
+        customerGstin: billedToGstin.trim(),
+        items: [...items],
+        subtotal: calculatedSubtotal,
+        taxRate: enableGst ? taxRate : 0,
+        taxAmount: calculatedTax,
+        tdsAmount: totalDeductions,
+        discountAmount: 0,
+        additionalCharges: totalAdditions,
+        adjustments: [...adjustments],
+        totalAmount: calculatedGrandTotal,
+        status: invoiceStatus,
+        paymentMode: "UPI / Bank",
+        source: "corporate",
+        bankDetails: showBankDetails ? bankDetails : undefined,
+        upiDetails: showUpiDetails ? upiDetails : undefined,
+        createdAt: new Date().toISOString(),
+      };
 
-    let updated: SavedInvoice[];
-    if (currentInvoiceId) {
-      updated = invoices.map(inv => inv.id === currentInvoiceId ? payload : inv);
-    } else {
-      updated = [payload, ...invoices];
+      let updated: SavedInvoice[];
+      if (currentInvoiceId) {
+        updated = invoices.map(inv => inv.id === currentInvoiceId ? payload : inv);
+      } else {
+        updated = [payload, ...invoices];
+      }
+
+      await persistInvoices(updated);
+      toast({ title: "Invoice Saved! 💾", description: `Invoice #${invoiceNumber} stored successfully in cloud`, variant: "success" });
+      setView("list");
+    } catch (saveErr: any) {
+      console.error("Save invoice error:", saveErr);
+      toast({ title: "Save Warning", description: "Saved locally, pending cloud sync", variant: "warning" });
+      setView("list");
+    } finally {
+      setIsSaving(false);
     }
-
-    persistInvoices(updated);
-    toast({ title: "Invoice Saved! 💾", description: `Invoice #${invoiceNumber} stored successfully`, variant: "success" });
-    setView("list");
   }
 
   // Generate & Download PDF
@@ -1984,7 +2035,7 @@ export default function InvoicesPage() {
               {/* Billed By & Billed To Cards (Styled with Brand Color Code) */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {/* Card 1: Billed By (Brand Primary Blue Theme, No Border) */}
-                <div className="p-5 rounded-2xl bg-[#EFF6FF] shadow-xs space-y-4 relative overflow-hidden transition-all hover:shadow-sm">
+                <div className="p-5 rounded-2xl bg-[#EFF6FF] shadow-xs space-y-4 relative transition-all hover:shadow-sm">
                   <div className="absolute -top-10 -right-10 w-28 h-28 bg-blue-500/10 rounded-full blur-2xl pointer-events-none" />
 
                   {/* Header with Icon and Badge */}
@@ -2005,7 +2056,7 @@ export default function InvoicesPage() {
 
                   {/* Separate Store Name Box */}
                   <div className="w-full bg-white/95 border border-blue-100 rounded-xl px-3.5 py-2.5 text-xs font-semibold text-[#0F172A] flex items-center justify-between shadow-2xs">
-                    <span className="truncate">{billedByName || business?.name || "SeyalPro"}</span>
+                    <span className="truncate">{billedByName || business?.name || "CounterCub"}</span>
                     <span className="px-2 py-0.5 rounded-md bg-blue-50 text-[10px] font-bold text-[#2563EB] border border-blue-100 shrink-0">
                       Store Profile
                     </span>
@@ -2017,7 +2068,7 @@ export default function InvoicesPage() {
                       <div className="space-y-1.5">
                         <div className="flex items-center justify-between">
                           <h4 className="text-sm font-bold text-[#0F172A]">
-                            {billedByName || business?.name || "SeyalPro"}
+                            {billedByName || business?.name || "CounterCub"}
                           </h4>
                           <button
                             type="button"
@@ -2110,7 +2161,7 @@ export default function InvoicesPage() {
                 </div>
 
                 {/* Card 2: Billed To (Same bg as Billed By, No Border) */}
-                <div className="p-5 rounded-2xl bg-[#EFF6FF] shadow-xs space-y-4 relative overflow-hidden transition-all hover:shadow-sm">
+                <div className="p-5 rounded-2xl bg-[#EFF6FF] shadow-xs space-y-4 relative transition-all hover:shadow-sm">
                   <div className="absolute -top-10 -right-10 w-28 h-28 bg-blue-500/10 rounded-full blur-2xl pointer-events-none" />
 
                   {/* Header with Icon and Badge */}
@@ -2135,7 +2186,7 @@ export default function InvoicesPage() {
                       <ArrowRightLeft className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
                       <span className="font-semibold">
                         {billedToName.toLowerCase().includes("bft") || billedToName.toLowerCase().includes("tea") || billedToName.toLowerCase().includes("navalur")
-                          ? "Connected SeyalPro Cafe (BFT Navalur) — 1-Click stock inward & settlement active"
+                          ? "Connected CounterCub Cafe (BFT Navalur) — 1-Click stock inward & settlement active"
                           : "B2B Supply Bridge active for connected partner cafes"}
                       </span>
                     </div>
@@ -2422,8 +2473,22 @@ export default function InvoicesPage() {
                               <input
                                 type="number"
                                 min="1"
-                                value={row.qty || ""}
-                                onChange={e => updateRow(row.id, "qty", Number(e.target.value))}
+                                value={row.qty === 0 ? "" : row.qty}
+                                onFocus={e => e.target.select()}
+                                onChange={e => {
+                                  const val = e.target.value;
+                                  if (val === "") {
+                                    updateRow(row.id, "qty", 0);
+                                  } else {
+                                    const parsed = Number(val);
+                                    updateRow(row.id, "qty", isNaN(parsed) ? 1 : Math.max(1, parsed));
+                                  }
+                                }}
+                                onBlur={() => {
+                                  if (!row.qty || row.qty < 1) {
+                                    updateRow(row.id, "qty", 1);
+                                  }
+                                }}
                                 className="w-full px-2 py-2 bg-white rounded-lg border border-[#E2E8F0] focus:border-[#2563EB] text-center font-bold text-xs text-[#0F172A] outline-none transition-colors"
                               />
                             </div>
@@ -2886,16 +2951,26 @@ export default function InvoicesPage() {
                     <button
                       type="button"
                       onClick={handleSaveInvoice}
-                      className="w-full sm:flex-1 py-3 px-4 bg-[#2563EB] hover:bg-[#1D4ED8] text-white rounded-xl text-xs sm:text-sm font-semibold shadow-sm flex items-center justify-center gap-2 transition-all cursor-pointer hover:shadow-md"
+                      disabled={isSaving}
+                      className="w-full sm:flex-1 py-3 px-4 bg-[#2563EB] hover:bg-[#1D4ED8] disabled:opacity-60 text-white rounded-xl text-xs sm:text-sm font-semibold shadow-sm flex items-center justify-center gap-2 transition-all cursor-pointer hover:shadow-md"
                     >
-                      <Save className="w-4 h-4" />
-                      <span>Save Invoice</span>
+                      {isSaving ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          <span>Saving...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Save className="w-4 h-4" />
+                          <span>Save Invoice</span>
+                        </>
+                      )}
                     </button>
                   </div>
 
                   {/* Watermark / Branding Footer */}
                   <p className="text-center text-[11px] font-bold text-slate-400 tracking-wider uppercase pt-2">
-                    Powered by SeyalPro
+                    Powered by CounterCub
                   </p>
                 </div>
               </div>

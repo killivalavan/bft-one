@@ -19,7 +19,8 @@ export async function POST(req: Request) {
     const { data: stocks, error: stErr } = await supa
       .from("product_stocks")
       .select("product_id, available_qty, notify_at_count")
-      .in("product_id", ids);
+      .in("product_id", ids)
+      .eq("business_id", caller.businessId);
 
     if (stErr) return NextResponse.json({ error: stErr.message }, { status: 500 });
 
@@ -33,18 +34,13 @@ export async function POST(req: Request) {
     }
 
     if (toClear.length > 0) {
-      let query = supa
+      const { error: delErr } = await supa
         .from("notifications")
         .delete()
         .in("product_id", toClear)
-        .eq("kind", "stock");
+        .eq("kind", "stock")
+        .eq("business_id", caller.businessId);
 
-      // Scope deletion strictly to caller's business tenant
-      if (!caller.isSuperAdmin) {
-        query = query.eq("business_id", caller.businessId);
-      }
-
-      const { error: delErr } = await query;
       if (delErr) return NextResponse.json({ error: delErr.message }, { status: 500 });
     }
 

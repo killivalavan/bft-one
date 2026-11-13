@@ -1,6 +1,6 @@
 {
-  "name": "SeyalPro - Retail & Cafe POS",
-  "short_name": "SeyalPro",
+  "name": "CounterCub — Retail & Cafe POS",
+  "short_name": "CounterCub",
   "description": "Offline-First Point of Sale, Multi-Tenant Inventory & Business Operations Platform",
   "start_url": "/",
   "display": "standalone",

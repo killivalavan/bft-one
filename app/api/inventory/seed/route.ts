@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { authenticateRequest } from "@/lib/auth/serverAuth";
-import { supabaseAdmin } from "@/lib/supabaseServer";
+import { getEffectiveEntitlements } from "@/lib/subscription/plans";
 
 export const dynamic = "force-dynamic";
 
@@ -14,10 +14,21 @@ export async function POST(req: Request) {
     const { user: caller, supa } = auth;
     const body = await req.json().catch(() => ({}));
 
-    // Only Super Admin can seed on behalf of another business
-    const businessId = caller.isSuperAdmin && body.business_id
-      ? body.business_id
-      : caller.businessId;
+    if (process.env.NODE_ENV === "production" && !caller.isSuperAdmin) {
+      return NextResponse.json(
+        { error: "Forbidden: Destructive demo inventory seeding is disabled in production." },
+        { status: 403 }
+      );
+    }
+
+    if (body.business_id && body.business_id !== "default" && body.business_id !== caller.businessId) {
+      return NextResponse.json(
+        { error: "Forbidden: Cannot seed inventory for another business." },
+        { status: 403 }
+      );
+    }
+
+    const businessId = caller.businessId;
 
     // Clean up existing records for this business so clean seed applies
     await Promise.all([
@@ -60,20 +71,31 @@ export async function POST(req: Request) {
       const coldCatId = catCold?.id;
       const snacksCatId = catSnacks?.id;
 
-      // Create Products
-      const prodsToInsert = [
+      // Create Products (respecting subscription active product limit)
+      const entitlements = await getEffectiveEntitlements(supa, businessId);
+      const remainingSlots =
+        entitlements.maxActiveProducts === null
+          ? 4
+          : Math.max(0, entitlements.maxActiveProducts - entitlements.usage.activeProducts);
+
+      const allProdsToInsert = [
         { business_id: businessId, name: "Special Masala Chai", price: 20.00, category_id: hotCatId },
         { business_id: businessId, name: "South Indian Filter Coffee", price: 25.00, category_id: hotCatId },
         { business_id: businessId, name: "Brown Sugar Boba Milk Tea", price: 120.00, category_id: coldCatId },
         { business_id: businessId, name: "Crispy Mini Samosa (3 Pcs)", price: 30.00, category_id: snacksCatId },
       ];
+      const prodsToInsert = allProdsToInsert.slice(0, remainingSlots);
 
-      const { data: createdProds } = await supa
-        .from("products")
-        .insert(prodsToInsert)
-        .select();
+      if (prodsToInsert.length > 0) {
+        const { data: createdProds } = await supa
+          .from("products")
+          .insert(prodsToInsert)
+          .select();
 
-      existingProducts = createdProds || [];
+        existingProducts = createdProds || [];
+      } else {
+        existingProducts = [];
+      }
     }
 
     // 2. Seed Suppliers

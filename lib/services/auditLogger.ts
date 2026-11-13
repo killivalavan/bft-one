@@ -18,7 +18,12 @@ export type AuditAction =
   | "SUPER_ADMIN_MFA_FAILED"
   | "SUPER_ADMIN_BOOTSTRAP"
   | "PRIVILEGE_ELEVATION_ATTEMPT"
-  | "TENANT_SUSPENDED";
+  | "TENANT_SUSPENDED"
+  | "SMART_IMPORT_EXECUTED"
+  | "SMART_IMPORT_ROLLED_BACK"
+  | "SUPPORT_IMPERSONATION_STARTED"
+  | "SUPPORT_IMPERSONATION_REVOKED"
+  | "BUSINESS_SLUG_CHANGED";
 
 export interface AuditEventParams {
   businessId?: string | null;
@@ -30,6 +35,7 @@ export interface AuditEventParams {
   details?: Record<string, any>;
   ipAddress?: string;
   userAgent?: string;
+  request?: Request;
 }
 
 /**
@@ -52,6 +58,7 @@ export function extractClientMetadata(request: Request): {
 export async function logAuditEvent(params: AuditEventParams): Promise<boolean> {
   try {
     const supa = supabaseAdmin();
+    const meta = params.request ? extractClientMetadata(params.request) : {};
     const payload = {
       business_id: params.businessId || null,
       actor_id: params.actorId || null,
@@ -60,8 +67,8 @@ export async function logAuditEvent(params: AuditEventParams): Promise<boolean> 
       target_type: params.targetType || null,
       target_id: params.targetId || null,
       details: params.details || {},
-      ip_address: params.ipAddress || null,
-      user_agent: params.userAgent || null,
+      ip_address: params.ipAddress || meta.ipAddress || null,
+      user_agent: params.userAgent || meta.userAgent || null,
     };
 
     const { error } = await supa.from("audit_logs").insert(payload);

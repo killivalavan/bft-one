@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { supabaseClient } from "@/lib/supabaseClient";
+import { useTenant } from "@/lib/context/TenantContext";
 import { PendingOrderCard } from "@/components/pending/PendingOrderCard";
 import { ChevronLeft, Inbox } from "lucide-react";
 import Link from "next/link";
@@ -11,25 +12,33 @@ type Row = { id: string; user_id: string | null; status: string; total_cents: nu
 type ItemRow = { order_id: string; product_id: string; qty: number; product_name: string };
 
 export default function PendingPage() {
+  const { business } = useTenant();
   const { toast } = useToast();
   const { confirm } = useConfirm();
   const [orders, setOrders] = useState<Row[]>([]);
   const [itemsByOrder, setItemsByOrder] = useState<Record<string, ItemRow[]>>({});
 
   async function load() {
+    if (!business?.id) {
+      setOrders([]);
+      setItemsByOrder({});
+      return;
+    }
     const { data: ord } = await supabaseClient
       .from("orders")
       .select("*")
+      .eq("business_id", business.id)
       .eq("status", "pending")
       .order("created_at", { ascending: false });
     setOrders(ord || []);
     const ids = (ord || []).map(o => o.id);
     if (ids.length === 0) { setItemsByOrder({}); return; }
 
-    // Fetch items
+    // Fetch items strictly scoped to business_id
     const { data: rows } = await supabaseClient
       .from("order_items")
       .select("order_id, product_id, qty, products(name)")
+      .eq("business_id", business.id)
       .in("order_id", ids);
 
     const grouped: Record<string, ItemRow[]> = {};
@@ -40,19 +49,26 @@ export default function PendingPage() {
     setItemsByOrder(grouped);
   }
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, [business?.id]);
 
-  // Realtime
+  // Realtime strictly filtered by business_id
   useEffect(() => {
-    const ch = supabaseClient.channel('pending-live')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => load())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'order_items' }, () => load())
+    if (!business?.id) return;
+    const tenantFilter = `business_id=eq.${business.id}`;
+    const ch = supabaseClient.channel(`pending-live-${business.id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders', filter: tenantFilter }, () => load())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'order_items', filter: tenantFilter }, () => load())
       .subscribe();
     return () => { try { supabaseClient.removeChannel(ch); } catch { } };
-  }, []);
+  }, [business?.id]);
 
   async function delivered(id: string) {
-    const { error } = await supabaseClient.from("orders").update({ status: "delivered" }).eq("id", id);
+    if (!business?.id) return;
+    const { error } = await supabaseClient
+      .from("orders")
+      .update({ status: "delivered" })
+      .eq("id", id)
+      .eq("business_id", business.id);
     if (error) {
       toast({
         title: "Update Failed",

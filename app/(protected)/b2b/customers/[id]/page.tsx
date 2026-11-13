@@ -16,17 +16,15 @@ import {
   formatCafeName,
   capitalizeWords,
   sanitizeBakerStores,
+  getSlipDate,
+  getDateRangeInterval,
+  type CafeCustomer,
 } from "@/lib/utils/bakerUtils";
 import {
   fetchB2BClients,
   B2B_CUSTOMERS_UPDATED_EVENT,
 } from "@/lib/services/b2bClients";
 import { useB2BWorkspace } from "@/lib/hooks/useB2BData";
-import {
-  getSlipDate,
-  getDateRangeInterval,
-  CafeCustomer,
-} from "../page";
 import {
   Building2,
   Phone,
@@ -386,7 +384,7 @@ export default function ClientLedgerDedicatedPage() {
 
     try {
       const pdfData: CombinedLedgerPdfData = {
-        businessName: business?.name || "SeyalPro Wholesale Bakery",
+        businessName: business?.name || "CounterCub Wholesale Bakery",
         businessPhone: business?.phone || undefined,
         businessAddress: business?.address || undefined,
         upiId: business?.upi_id?.trim() || undefined,

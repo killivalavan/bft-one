@@ -184,7 +184,7 @@ export function OfflineBanner() {
             <WifiOff className="w-3.5 h-3.5 text-white" />
           </div>
           <p className="truncate">
-            <span className="font-bold">You are offline.</span> SeyalPro will continue saving your work locally and sync automatically when internet returns.
+            <span className="font-bold">You are offline.</span> CounterCub will continue saving your work locally and sync automatically when internet returns.
             {pendingCount > 0 && (
               <span className="ml-1.5 px-2 py-0.5 rounded-full bg-black/20 text-white font-bold text-xs">
                 {pendingCount} saved {pendingCount === 1 ? "operation" : "operations"}

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { authenticateRequest } from "@/lib/auth/serverAuth";
+import { supabaseAdmin } from "@/lib/supabaseServer";
 
 export const dynamic = "force-dynamic";
 
@@ -14,50 +15,69 @@ export async function DELETE(request: Request) {
     const { userId } = await request.json();
     if (!userId) return NextResponse.json({ error: "userId required" }, { status: 400 });
 
-    // Verify target user belongs to caller's business (unless caller is Super Admin)
+    if (userId === caller.id) {
+      return NextResponse.json({ error: "Cannot delete your own active account." }, { status: 400 });
+    }
+
+    // Verify target user belongs to caller's verified business context (fail closed on null business_id)
     const { data: targetProfile, error: targetErr } = await supa
       .from("profiles")
       .select("id, business_id, is_super_admin")
       .eq("id", userId)
+      .eq("business_id", caller.businessId)
       .maybeSingle();
 
     if (targetErr || !targetProfile) {
-      return NextResponse.json({ error: "Target user not found" }, { status: 404 });
+      return NextResponse.json({ error: "Target user not found in this business" }, { status: 404 });
     }
 
     if (targetProfile.is_super_admin) {
       return NextResponse.json({ error: "Forbidden: Platform Super Admin accounts cannot be deleted." }, { status: 403 });
     }
 
-    if (!caller.isSuperAdmin && (!targetProfile.business_id || targetProfile.business_id !== caller.businessId)) {
+    if (!targetProfile.business_id || targetProfile.business_id !== caller.businessId) {
       return NextResponse.json({ error: "Unauthorized: Cannot delete users belonging to another business." }, { status: 403 });
     }
 
-    // Delete dependent operational rows that reference the profile
-    await supa.from("salary_entries").delete().eq("user_id", userId);
-    await supa.from("leaves").delete().eq("user_id", userId);
+    const targetBizId = caller.businessId;
+
+    // Delete dependent operational rows strictly scoped by both user_id and business_id
+    await supa.from("salary_entries").delete().eq("user_id", userId).eq("business_id", targetBizId);
+    await supa.from("leaves").delete().eq("user_id", userId).eq("business_id", targetBizId);
     
     // CRITICAL (SEC-07): Do NOT delete financial ledger records in daily_sales!
-    // Nullify submitter references instead of destroying historical financial entries.
-    await supa.from("daily_sales").update({ cash_submitted_by: null }).eq("cash_submitted_by", userId);
-    await supa.from("daily_sales").update({ upi_submitted_by: null }).eq("upi_submitted_by", userId);
+    // Nullify submitter references instead of destroying historical financial entries, scoped to business_id.
+    await supa
+      .from("daily_sales")
+      .update({ cash_submitted_by: null })
+      .eq("cash_submitted_by", userId)
+      .eq("business_id", targetBizId);
+    await supa
+      .from("daily_sales")
+      .update({ upi_submitted_by: null })
+      .eq("upi_submitted_by", userId)
+      .eq("business_id", targetBizId);
     
-    await supa.from("timesheets").delete().eq("user_id", userId);
+    await supa.from("timesheets").delete().eq("user_id", userId).eq("business_id", targetBizId);
 
-    // Remove the profile record
-    const { error: profileErr } = await supa.from("profiles").delete().eq("id", userId);
+    // Remove the profile record strictly scoped to business_id
+    const { error: profileErr } = await supa
+      .from("profiles")
+      .delete()
+      .eq("id", userId)
+      .eq("business_id", targetBizId);
     if (profileErr) {
       return NextResponse.json({ error: profileErr.message }, { status: 500 });
     }
 
-    // Best-effort: attempt to delete auth user, but don't fail if it errors
-    try { await supa.auth.admin.deleteUser(userId); } catch (_) { }
+    // Best-effort: delete the underlying Supabase Auth user now that the tenant profile is verified & removed
+    try { await supabaseAdmin().auth.admin.deleteUser(userId); } catch (_) { }
 
     // Log Audit Event
     const { logAuditEvent, extractClientMetadata } = await import("@/lib/services/auditLogger");
     const clientMeta = extractClientMetadata(request);
     await logAuditEvent({
-      businessId: targetProfile.business_id || caller.businessId,
+      businessId: targetBizId,
       actorId: caller.id,
       actorEmail: caller.email,
       action: "USER_DELETED",

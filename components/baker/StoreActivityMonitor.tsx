@@ -181,7 +181,7 @@ export default function StoreActivityMonitor({
               </h2>
               <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200/90 text-blue-700 text-[10.5px] font-extrabold tracking-tight shrink-0 shadow-2xs">
                 <Sparkles size={11} className="text-blue-600 shrink-0" />
-                <span>SeyalPro AI</span>
+                <span>CounterCub AI</span>
               </span>
             </div>
             <p className="text-[11px] sm:text-xs text-[#64748B] mt-0.5">
@@ -203,16 +203,16 @@ export default function StoreActivityMonitor({
         </div>
       </div>
 
-      {/* SeyalPro AI Status Bar */}
+      {/* CounterCub AI Status Bar */}
       <div className="flex items-center justify-between gap-2 px-3 py-2 rounded-xl bg-slate-50/80 border border-slate-200/80 text-[11px] sm:text-xs text-slate-700">
         <div className="flex items-center gap-2 min-w-0 font-medium">
           <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block animate-pulse shrink-0" />
           <span className="text-[11px] sm:text-xs truncate">
             <span className="sm:hidden">
-              SeyalPro AI: <strong className="text-slate-900 font-extrabold">{cadenceSummary.totalStoresCount} stores</strong> active
+              CounterCub AI: <strong className="text-slate-900 font-extrabold">{cadenceSummary.totalStoresCount} stores</strong> active
             </span>
             <span className="hidden sm:inline">
-              SeyalPro AI: Monitoring <strong className="text-slate-900 font-extrabold">{cadenceSummary.totalStoresCount} partner stores</strong> · Real-time cadence tracking
+              CounterCub AI: Monitoring <strong className="text-slate-900 font-extrabold">{cadenceSummary.totalStoresCount} partner stores</strong> · Real-time cadence tracking
             </span>
           </span>
         </div>
@@ -393,7 +393,7 @@ export default function StoreActivityMonitor({
             </h3>
             <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto leading-relaxed">
               {activeTab === "actions_needed"
-                ? "SeyalPro AI verified that all active partner stores are reordering on cadence, and receivables are healthy."
+                ? "CounterCub AI verified that all active partner stores are reordering on cadence, and receivables are healthy."
                 : activeTab === "not_ordering"
                 ? "All active partner stores have dispatched recently within their historical replenishment interval."
                 : activeTab === "reduced_orders"

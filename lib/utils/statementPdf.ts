@@ -50,7 +50,7 @@ export function generateStatementPdf(data: StatementPdfData): void {
   doc.setFillColor(37, 99, 235); // #2563EB
   doc.rect(0, 0, pageWidth, 5, "F");
 
-  // Background Watermark: "SeyalPro" - Prominently & elegantly branded
+  // Background Watermark: "CounterCub" - Prominently & elegantly branded
   const drawBackgroundWatermark = () => {
     try {
       if (typeof (doc as any).saveGraphicsState === "function") {
@@ -59,7 +59,7 @@ export function generateStatementPdf(data: StatementPdfData): void {
       doc.setFont(fontName, "bold");
       doc.setFontSize(48);
       doc.setTextColor(226, 234, 246); // Clean slate-blue tint (#E2EAF6), visible and legible
-      doc.text("SeyalPro", pageWidth / 2, pageHeight / 2 - 2, {
+      doc.text("CounterCub", pageWidth / 2, pageHeight / 2 - 2, {
         align: "center",
         angle: 30,
       });
@@ -338,7 +338,7 @@ export function generateStatementPdf(data: StatementPdfData): void {
   doc.setFontSize(7);
   doc.setTextColor(148, 163, 184);
   doc.text(
-    "Generated electronically via SeyalPro • Confidential Account Statement",
+    "Generated electronically via CounterCub • Confidential Account Statement",
     pageWidth / 2,
     pageHeight - 6,
     { align: "center" }

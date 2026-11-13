@@ -88,7 +88,10 @@ type ManualDailySales = {
   id: string;
   sale_date: string;
   total_cash_cents: number | null;
-  total_upi_cents: number | null;
+  drawer_cash_cents?: number | null;
+  daily_expense_cents?: number | null;
+  upi_amount_cents?: number | null;
+  total_upi_cents?: number | null;
   cash_submitted_by?: string | null;
   upi_submitted_by?: string | null;
 };
@@ -245,20 +248,22 @@ export default function DailySalesPage() {
     }
   }
 
-  // Realtime subscription for live orders placed today
+  // Realtime subscription for live orders placed today (strictly scoped by business_id)
   useEffect(() => {
+    if (!business?.id) return;
+    const tenantFilter = `business_id=eq.${business.id}`;
     const channel = supabaseClient
-      .channel(`daily-sales-live-${dateStr}`)
+      .channel(`daily-sales-live-${business.id}-${dateStr}`)
       .on(
         "postgres_changes",
-        { event: "*", schema: "public", table: "orders" },
+        { event: "*", schema: "public", table: "orders", filter: tenantFilter },
         () => {
           fetchDaySalesData(true);
         }
       )
       .on(
         "postgres_changes",
-        { event: "*", schema: "public", table: "order_items" },
+        { event: "*", schema: "public", table: "order_items", filter: tenantFilter },
         () => {
           fetchDaySalesData(true);
         }
@@ -500,8 +505,15 @@ export default function DailySalesPage() {
     const declaredCash = manualSales?.total_cash_cents !== null && manualSales?.total_cash_cents !== undefined 
       ? manualSales.total_cash_cents / 100 
       : null;
-    const declaredUpi = manualSales?.total_upi_cents !== null && manualSales?.total_upi_cents !== undefined 
-      ? manualSales.total_upi_cents / 100 
+    const drawerCash = manualSales?.drawer_cash_cents !== null && manualSales?.drawer_cash_cents !== undefined
+      ? manualSales.drawer_cash_cents / 100
+      : null;
+    const dailyExpenses = manualSales?.daily_expense_cents !== null && manualSales?.daily_expense_cents !== undefined
+      ? manualSales.daily_expense_cents / 100
+      : null;
+    const upiCentsRaw = manualSales?.upi_amount_cents ?? manualSales?.total_upi_cents;
+    const declaredUpi = upiCentsRaw !== null && upiCentsRaw !== undefined 
+      ? upiCentsRaw / 100 
       : null;
     const declaredTotal = (declaredCash !== null ? declaredCash : 0) + (declaredUpi !== null ? declaredUpi : 0);
 
@@ -515,6 +527,8 @@ export default function DailySalesPage() {
       posUpi,
       posTotal,
       declaredCash,
+      drawerCash,
+      dailyExpenses,
       declaredUpi,
       declaredTotal,
       hasSettlementEntry,
@@ -943,7 +957,14 @@ export default function DailySalesPage() {
               </div>
 
               <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 border border-slate-200/80">
-                <span className="text-slate-600">Staff Declared Closing:</span>
+                <div>
+                  <span className="text-slate-600 block">Settlement Total Accounted:</span>
+                  {reconciliation.dailyExpenses != null && reconciliation.dailyExpenses > 0 && (
+                    <span className="text-[10px] text-amber-700 block font-medium">
+                      Drawer: ₹{(reconciliation.drawerCash ?? (reconciliation.declaredCash! - reconciliation.dailyExpenses)).toFixed(2)} + Exp: ₹{reconciliation.dailyExpenses.toFixed(2)}
+                    </span>
+                  )}
+                </div>
                 <span className="font-bold text-slate-800 font-mono">
                   {reconciliation.hasSettlementEntry ? `₹${reconciliation.declaredTotal.toFixed(2)}` : "Not submitted yet"}
                 </span>

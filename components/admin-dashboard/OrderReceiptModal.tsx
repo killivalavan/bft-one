@@ -43,7 +43,7 @@ export function OrderReceiptModal({
   order,
   isOpen,
   onClose,
-  storeName = "SeyalPro Store",
+  storeName = "CounterCub Store",
   currencySymbol = "₹",
 }: OrderReceiptModalProps) {
   if (!isOpen || !order) return null;

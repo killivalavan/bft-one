@@ -213,7 +213,7 @@ export function NoticeBoardView() {
   };
 
   const handleCopyNotice = (notice: NoticeItem) => {
-    const text = `📢 *${notice.title}*\n\n${notice.message}\n\n— ${business?.name || "SeyalPro"}`;
+    const text = `📢 *${notice.title}*\n\n${notice.message}\n\n— ${business?.name || "CounterCub"}`;
     navigator.clipboard.writeText(text);
     setCopiedId(notice.id);
     setTimeout(() => setCopiedId(null), 2500);
@@ -222,7 +222,7 @@ export function NoticeBoardView() {
 
   const handleShareToWhatsApp = (notice: NoticeItem) => {
     const text = encodeURIComponent(
-      `📢 *${notice.title}*\n\n${notice.message}\n\n— Sent via ${business?.name || "SeyalPro"}`
+      `📢 *${notice.title}*\n\n${notice.message}\n\n— Sent via ${business?.name || "CounterCub"}`
     );
     window.open(`https://api.whatsapp.com/send?text=${text}`, "_blank");
   };
@@ -518,7 +518,7 @@ export function NoticeBoardView() {
                 {/* Store Name & Subtitle Description (Responsive multiline wrapping) */}
                 <div className="text-xs text-[#64748B] mt-1 leading-relaxed">
                   <span className="font-semibold text-slate-800">
-                    {business?.name || "SeyalPro"}
+                    {business?.name || "CounterCub"}
                   </span>
                   <span className="mx-1.5 text-slate-300">•</span>
                   <span className="text-slate-500">

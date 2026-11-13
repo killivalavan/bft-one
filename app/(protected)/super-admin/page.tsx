@@ -17,6 +17,22 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils/cn";
+import {
+  generateStoreReferenceId,
+  getBusinessStoreId,
+  normalizeStorePrefix,
+} from "@/lib/utils/storeIdGenerator";
+import { CURRENCY_OPTIONS } from "@/lib/utils/currencies";
+import {
+  addCalendarMonths,
+  DEFAULT_PLAN_DEFINITIONS,
+  type SubscriptionPlan,
+  type SubscriptionRequest,
+  type TenantSubscription,
+} from "@/lib/subscription/plans";
+import { PlanConfigurationPanel } from "@/components/super-admin/PlanConfigurationPanel";
+import { SubscriptionManagementModal } from "@/components/super-admin/SubscriptionManagementModal";
+import { RenewalRequestsPanel } from "@/components/super-admin/RenewalRequestsPanel";
 
 export interface SupportTicket {
   id: string;
@@ -58,6 +74,9 @@ export interface ClientBusiness {
   order_count?: number;
   open_issues_count?: number;
   total_issues_count?: number;
+  subscription?: TenantSubscription | null;
+  active_products_count?: number;
+  employee_seats_count?: number;
 }
 
 interface PlatformAnalytics {
@@ -70,6 +89,17 @@ interface PlatformAnalytics {
   activeTenants: number;
   totalIssues: number;
   openIssues: number;
+}
+
+interface DeletedBusinessRecord {
+  id: string;
+  name: string;
+  slug: string;
+  store_id?: string;
+  admin_email: string;
+  plan_type: string;
+  deleted_by: string;
+  deleted_at: string;
 }
 
 const MODULE_DEFINITIONS = [
@@ -96,6 +126,7 @@ export default function SuperAdminPage() {
 
   const [viewState, setViewState] = useState<SuperAdminView>(SuperAdminView.Loading);
   const [businesses, setBusinesses] = useState<ClientBusiness[]>([]);
+  const [deletedBusinesses, setDeletedBusinesses] = useState<DeletedBusinessRecord[]>([]);
   const [allTickets, setAllTickets] = useState<SupportTicket[]>([]);
   const [analytics, setAnalytics] = useState<PlatformAnalytics | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -151,6 +182,10 @@ export default function SuperAdminPage() {
   const [confirmDeleteInput, setConfirmDeleteInput] = useState("");
   const [isDeleting, setIsDeleting] = useState(false);
 
+  // Status Toggle Confirmation Modal state (Suspend / Reactivate)
+  const [statusConfirmBiz, setStatusConfirmBiz] = useState<ClientBusiness | null>(null);
+  const [isTogglingStatus, setIsTogglingStatus] = useState(false);
+
   // Support Issues Drawer state
   const [selectedBizForIssues, setSelectedBizForIssues] = useState<ClientBusiness | null>(null);
   const [showAllTicketsModal, setShowAllTicketsModal] = useState(false);
@@ -161,14 +196,33 @@ export default function SuperAdminPage() {
   // Clipboard copy state
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
+  // Plans & Subscriptions state
+  const [superAdminSection, setSuperAdminSection] = useState<"tenants" | "plans">("tenants");
+  const [subscriptionPlans, setSubscriptionPlans] = useState<SubscriptionPlan[]>(() =>
+    DEFAULT_PLAN_DEFINITIONS.map((p, idx) => ({ ...p, id: `default-${idx}` }))
+  );
+  const [subscriptionRequests, setSubscriptionRequests] = useState<SubscriptionRequest[]>([]);
+  const [managingSubBiz, setManagingSubBiz] = useState<ClientBusiness | null>(null);
+
   // New business form state
   const [formData, setFormData] = useState({
     name: "",
     slug: "",
+    storePrefix: "",
+    storeId: "",
     adminEmail: "",
     adminPassword: "",
     planType: "pro",
     maxUsers: 25,
+    billingDurationMonths: 1,
+    monthlyPrice: 299,
+    maxActiveProducts: "250",
+    isUnlimitedProducts: false,
+    supportLevel: "standard" as "standard" | "priority",
+    startDate: new Date().toISOString().slice(0, 10),
+    expiryDate: addCalendarMonths(new Date(), 1).toISOString().slice(0, 10),
+    subscriptionStatus: "active" as "active" | "pending",
+    useCustomConfig: false,
     currencySymbol: "₹",
     timezone: "Asia/Kolkata",
     geofenceLat: "12.8439",
@@ -202,20 +256,283 @@ export default function SuperAdminPage() {
     }
   }
 
-  async function handleSwitchWorkspace(slug: string, name: string) {
-    document.cookie = `tenant_slug=${slug}; path=/; max-age=${60 * 60 * 24 * 30}; SameSite=Lax`;
+  // Audited Support Impersonation Modal State (Section 4)
+  const [impersonatingBiz, setImpersonatingBiz] = useState<ClientBusiness | null>(null);
+  const [impersonationReason, setImpersonationReason] = useState("");
+  const [impersonationDuration, setImpersonationDuration] = useState<number>(15);
+  const [isStartingImpersonation, setIsStartingImpersonation] = useState(false);
+  const [impersonationReauthMode, setImpersonationReauthMode] = useState<"totp" | "password" | null>(null);
+  const [reauthFactorId, setReauthFactorId] = useState<string>("");
+  const [reauthSecretInput, setReauthSecretInput] = useState<string>("");
+  const [isReauthenticating, setIsReauthenticating] = useState(false);
+  const [activeSupportSession, setActiveSupportSession] = useState<{
+    sessionId: string;
+    targetBusinessId: string;
+    targetBusinessSlug?: string | null;
+    reason?: string;
+    expiresAt: string;
+  } | null>(null);
+  const [isEndingActiveSession, setIsEndingActiveSession] = useState(false);
+
+  useEffect(() => {
+    if (!activeSupportSession?.expiresAt) return;
+    const expiresAtMs = Date.parse(activeSupportSession.expiresAt);
+    if (!Number.isFinite(expiresAtMs)) return;
+
+    const checkExpiry = () => {
+      if (Date.now() >= expiresAtMs) {
+        setActiveSupportSession(null);
+      }
+    };
+
+    const delayMs = Math.max(0, expiresAtMs - Date.now());
+    const timer = window.setTimeout(checkExpiry, delayMs);
+    window.addEventListener("focus", checkExpiry);
+    document.addEventListener("visibilitychange", checkExpiry);
+
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener("focus", checkExpiry);
+      document.removeEventListener("visibilitychange", checkExpiry);
+    };
+  }, [activeSupportSession]);
+
+  // Lock background page scroll whenever a modal is open
+  useEffect(() => {
+    const anyModalOpen = Boolean(
+      showAddModal ||
+        editingBiz ||
+        deletingBiz ||
+        statusConfirmBiz ||
+        impersonatingBiz ||
+        selectedBizForIssues ||
+        showAllTicketsModal
+    );
+    if (!anyModalOpen || typeof document === "undefined") return;
+    const prevHtmlOverflow = document.documentElement.style.overflow;
+    const prevBodyOverflow = document.body.style.overflow;
+    document.documentElement.style.overflow = "hidden";
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.documentElement.style.overflow = prevHtmlOverflow;
+      document.body.style.overflow = prevBodyOverflow;
+    };
+  }, [showAddModal, editingBiz, deletingBiz, statusConfirmBiz, impersonatingBiz, selectedBizForIssues, showAllTicketsModal]);
+
+  function handleSwitchWorkspace(slug: string, name: string, bizId?: string) {
+    const matched = businesses.find((b) => (bizId && b.id === bizId) || b.slug === slug);
+    setImpersonatingBiz(
+      matched || {
+        id: bizId || "",
+        name,
+        slug,
+        plan_type: "pro",
+        max_users: 25,
+        is_active: true,
+        enabled_modules: {},
+        created_at: new Date().toISOString(),
+        user_count: 0,
+        admin_email: "",
+      }
+    );
+    setImpersonationReason("");
+    setImpersonationDuration(15);
+    setImpersonationReauthMode(null);
+    setReauthFactorId("");
+    setReauthSecretInput("");
+  }
+
+  async function handleConfirmSupportImpersonation(e: React.FormEvent) {
+    e.preventDefault();
+    if (!impersonatingBiz?.id) {
+      toast({
+        title: "Missing Target Workspace",
+        description: "Could not identify target business ID for support impersonation.",
+        variant: "error",
+      });
+      return;
+    }
+
+    const trimmedReason = impersonationReason.trim();
+    if (trimmedReason.length < 10) {
+      toast({
+        title: "Audit Reason Required",
+        description: "Please provide a specific support reason (at least 10 characters) for the audit log.",
+        variant: "error",
+      });
+      return;
+    }
+
+    setIsStartingImpersonation(true);
     try {
-      const { clearTenantClientState } = await import("@/lib/auth/clientLogout");
-      await clearTenantClientState();
+      const {
+        data: { session },
+      } = await supabaseClient.auth.getSession();
+      const token = session?.access_token;
+
+      const res = await fetch("/api/super-admin/impersonation", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          target_business_id: impersonatingBiz.id,
+          reason: trimmedReason,
+          duration_minutes: impersonationDuration,
+        }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        if (res.status === 403 && (data.reauthRequired || data.mfaRequired)) {
+          try {
+            const { data: factorsData } = await supabaseClient.auth.mfa.listFactors();
+            const verifiedTotp = (factorsData?.totp || []).find(
+              (f: any) => f.status === "verified"
+            );
+            if (verifiedTotp) {
+              setReauthFactorId(verifiedTotp.id);
+              setImpersonationReauthMode("totp");
+            } else {
+              setImpersonationReauthMode("password");
+            }
+          } catch {
+            setImpersonationReauthMode("password");
+          }
+          setReauthSecretInput("");
+          toast({
+            title: "Quick Verification Required",
+            description: "Your session is over 30 minutes old. Please verify below to launch support access.",
+            variant: "info",
+          });
+          return;
+        }
+        throw new Error(data.error || "Failed to authorize support impersonation session.");
+      }
+
+      try {
+        const { clearTenantClientState } = await import("@/lib/auth/clientLogout");
+        await clearTenantClientState();
+      } catch {}
+
+      const targetSlug = impersonatingBiz.slug;
+      const targetName = impersonatingBiz.name;
+      const launchedSessionId: string | undefined = data?.session?.sessionId;
+      setImpersonatingBiz(null);
+
+      toast({
+        title: `Audited Support Session Active`,
+        description: `Opening ${targetName} (${targetSlug}.countercub.com) for ${impersonationDuration} minutes...`,
+        variant: "success",
+      });
+
+      setTimeout(() => {
+        void navigateToTenantWorkspace(targetSlug, launchedSessionId);
+      }, 300);
+    } catch (err: any) {
+      toast({
+        title: "Support Impersonation Denied",
+        description: err.message || "Could not start support impersonation session.",
+        variant: "error",
+      });
+    } finally {
+      setIsStartingImpersonation(false);
+    }
+  }
+
+  async function navigateToTenantWorkspace(targetSlug: string, sessionId?: string) {
+    if (typeof window === "undefined") return;
+    const isLocal =
+      window.location.hostname === "localhost" ||
+      window.location.hostname.endsWith(".localhost") ||
+      window.location.hostname === "127.0.0.1";
+    const port = window.location.port ? `:${window.location.port}` : "";
+    const baseUrl = isLocal
+      ? `http://${targetSlug}.localhost${port}/`
+      : `https://${targetSlug}.countercub.com/`;
+
+    let handoffHash = "";
+    try {
+      const { data: { session } } = await supabaseClient.auth.getSession();
+      if (session?.access_token && session?.refresh_token) {
+        const payload = JSON.stringify({
+          access_token: session.access_token,
+          refresh_token: session.refresh_token,
+          ...(sessionId ? { sessionId } : {}),
+        });
+        handoffHash = `#cc_support_handoff=${encodeURIComponent(btoa(payload))}`;
+      }
     } catch {}
-    toast({
-      title: `Switched to ${name}`,
-      description: `Active workspace is now ${name}. Loading...`,
-      variant: "success",
-    });
-    setTimeout(() => {
-      window.location.href = `/?tenant=${slug}`;
-    }, 400);
+
+    window.location.href = `${baseUrl}${handoffHash}`;
+  }
+
+  async function handleEndActiveSupportSession() {
+    setIsEndingActiveSession(true);
+    try {
+      const { data: sessionData } = await supabaseClient.auth.getSession();
+      const token = sessionData?.session?.access_token;
+      const res = await fetch("/api/super-admin/impersonation", {
+        method: "DELETE",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Failed to end active support session.");
+      }
+      setActiveSupportSession(null);
+      toast({
+        title: "Support Session Ended",
+        description: "The active support impersonation session has been revoked.",
+        variant: "info",
+      });
+    } catch (err: any) {
+      toast({
+        title: "Error",
+        description: err.message || "Could not end support session.",
+        variant: "error",
+      });
+    } finally {
+      setIsEndingActiveSession(false);
+    }
+  }
+
+  async function handleStepUpReauthAndLaunch(e: React.FormEvent) {
+    e.preventDefault();
+    if (!impersonationReauthMode || !reauthSecretInput.trim()) return;
+
+    setIsReauthenticating(true);
+    try {
+      if (impersonationReauthMode === "totp") {
+        const { error: mfaErr } = await supabaseClient.auth.mfa.challengeAndVerify({
+          factorId: reauthFactorId,
+          code: reauthSecretInput.trim(),
+        });
+        if (mfaErr) throw mfaErr;
+      } else {
+        const { data: userData } = await supabaseClient.auth.getUser();
+        const email = userData?.user?.email;
+        if (!email) throw new Error("Unable to determine Super Admin email.");
+        const { error: signErr } = await supabaseClient.auth.signInWithPassword({
+          email,
+          password: reauthSecretInput,
+        });
+        if (signErr) throw signErr;
+      }
+
+      setImpersonationReauthMode(null);
+      setReauthSecretInput("");
+      await handleConfirmSupportImpersonation(e);
+    } catch (err: any) {
+      toast({
+        title: "Verification Failed",
+        description: err?.message || "Invalid verification code or password.",
+        variant: "error",
+      });
+    } finally {
+      setIsReauthenticating(false);
+    }
   }
 
   // Export full platform overview as CSV
@@ -259,7 +576,7 @@ export default function SuperAdminPage() {
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `seyalpro_clients_report_${new Date().toISOString().split("T")[0]}.csv`);
+    link.setAttribute("download", `countercub_clients_report_${new Date().toISOString().split("T")[0]}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -277,23 +594,140 @@ export default function SuperAdminPage() {
     try {
       const { data: { session } } = await supabaseClient.auth.getSession();
       const token = session?.access_token;
-      const userEmail = session?.user?.email || "admin@seyalpro.com";
+      const userEmail = session?.user?.email || "admin@countercub.com";
 
-      // 1. Fetch businesses directly from Supabase client
-      const { data: bizList, error: bizErr } = await supabaseClient
+      // 0. Prefer authoritative server API (/api/super-admin/businesses) which aggregates across all tenants
+      const [apiBizRes, ticketsRes, impersonationRes, plansRes, subsRes] = await Promise.all([
+        fetch("/api/super-admin/businesses", {
+          headers: { Authorization: `Bearer ${token || ""}` },
+          cache: "no-store",
+        })
+          .then((r) => (r.ok ? r.json() : null))
+          .catch(() => null),
+        fetch("/api/support/tickets", {
+          headers: { Authorization: `Bearer ${token || ""}` },
+          cache: "no-store",
+        })
+          .then((r) => r.json())
+          .catch(() => ({ tickets: [] })),
+        fetch("/api/super-admin/impersonation", {
+          headers: { Authorization: `Bearer ${token || ""}` },
+          cache: "no-store",
+        })
+          .then((r) => (r.ok ? r.json() : null))
+          .catch(() => null),
+        fetch("/api/super-admin/plans", {
+          headers: { Authorization: `Bearer ${token || ""}` },
+          cache: "no-store",
+        })
+          .then((r) => (r.ok ? r.json() : null))
+          .catch(() => null),
+        fetch("/api/super-admin/subscriptions", {
+          headers: { Authorization: `Bearer ${token || ""}` },
+          cache: "no-store",
+        })
+          .then((r) => (r.ok ? r.json() : null))
+          .catch(() => null),
+      ]);
+
+      if (plansRes?.plans && Array.isArray(plansRes.plans) && plansRes.plans.length > 0) {
+        setSubscriptionPlans(plansRes.plans);
+      }
+      if (subsRes?.requests && Array.isArray(subsRes.requests)) {
+        setSubscriptionRequests(subsRes.requests);
+      }
+
+      setActiveSupportSession(
+        impersonationRes?.active && impersonationRes?.session
+          ? impersonationRes.session
+          : null
+      );
+
+      // Process tickets per business
+      const openIssuesByBiz: Record<string, number> = {};
+      const totalIssuesByBiz: Record<string, number> = {};
+      let platformTotalIssues = 0;
+      let platformOpenIssues = 0;
+
+      const loadedTickets: SupportTicket[] = ticketsRes?.tickets || [];
+      setAllTickets(loadedTickets);
+
+      loadedTickets.forEach((t) => {
+        const bId = t.business_id;
+        totalIssuesByBiz[bId] = (totalIssuesByBiz[bId] || 0) + 1;
+        platformTotalIssues += 1;
+        if (t.status === "open" || t.status === "in_progress") {
+          openIssuesByBiz[bId] = (openIssuesByBiz[bId] || 0) + 1;
+          platformOpenIssues += 1;
+        }
+      });
+
+      if (apiBizRes && Array.isArray(apiBizRes.deletedBusinesses)) {
+        setDeletedBusinesses(apiBizRes.deletedBusinesses);
+      }
+
+      if (apiBizRes && Array.isArray(apiBizRes.businesses) && apiBizRes.businesses.length > 0) {
+        const enriched: ClientBusiness[] = apiBizRes.businesses.map((b: any) => ({
+          id: b.id,
+          name: b.name || "Client Shop",
+          slug: b.slug || "shop",
+          plan_type: b.plan_type || "pro",
+          max_users: b.max_users || 25,
+          currency_symbol: b.currency_symbol || "₹",
+          timezone: b.timezone || "Asia/Kolkata",
+          geofence_lat: b.geofence_lat !== null ? Number(b.geofence_lat) : null,
+          geofence_lng: b.geofence_lng !== null ? Number(b.geofence_lng) : null,
+          geofence_radius_meters: b.geofence_radius_meters ? Number(b.geofence_radius_meters) : 150,
+          geofence_enabled: b.geofence_enabled !== false,
+          is_active: b.is_active !== false,
+          user_count: Number(b.user_count) || 1,
+          admin_email: b.admin_email && b.admin_email !== "None" ? b.admin_email : userEmail,
+          enabled_modules: b.enabled_modules || {
+            billing: true,
+            invoices: true,
+            sales: true,
+            expenses: true,
+            timesheet: true,
+            stock: true,
+            salary: true,
+            contacts: true,
+          },
+          created_at: b.created_at || new Date().toISOString(),
+          total_sales: Number(b.total_sales) || 0,
+          total_expenses: Number(b.total_expenses) || 0,
+          net_profit: Number(b.net_profit) || 0,
+          order_count: Number(b.order_count) || 0,
+          open_issues_count: openIssuesByBiz[b.id] || 0,
+          total_issues_count: totalIssuesByBiz[b.id] || 0,
+        }));
+
+        setBusinesses(enriched);
+        setAnalytics({
+          totalSales: Number(apiBizRes.analytics?.totalSales) || 0,
+          totalExpenses: Number(apiBizRes.analytics?.totalExpenses) || 0,
+          netProfit: Number(apiBizRes.analytics?.netProfit) || 0,
+          totalOrders: Number(apiBizRes.analytics?.totalOrders) || 0,
+          totalUsers: Number(apiBizRes.analytics?.totalUsers) || enriched.length,
+          totalBusinesses: enriched.length,
+          activeTenants: enriched.filter((b) => b.is_active).length,
+          totalIssues: platformTotalIssues,
+          openIssues: platformOpenIssues,
+        });
+        return;
+      }
+
+      // 1. Fallback: Fetch businesses directly from Supabase client
+      const { data: bizList } = await supabaseClient
         .from("businesses")
         .select("*")
         .order("created_at", { ascending: false });
 
-      // 2. Fetch sales, expenses, profiles, and support tickets in parallel
-      const [salesRes, expensesRes, ordersRes, profilesRes, ticketsRes] = await Promise.all([
+      // 2. Fetch sales, expenses, and profiles in parallel
+      const [salesRes, expensesRes, ordersRes, profilesRes] = await Promise.all([
         supabaseClient.from("daily_sales").select("business_id, total_cash_cents, upi_amount_cents"),
         supabaseClient.from("daily_expenses").select("business_id, price_cents"),
         supabaseClient.from("orders").select("business_id, total_amount, status"),
         supabaseClient.from("profiles").select("id, email, is_admin, business_id"),
-        fetch("/api/support/tickets", {
-          headers: { Authorization: `Bearer ${token || ""}` },
-        }).then((r) => r.json()).catch(() => ({ tickets: [] })),
       ]);
 
       const salesByBiz: Record<string, number> = {};
@@ -331,25 +765,6 @@ export default function SuperAdminPage() {
         platformTotalUsers += 1;
         if (p.is_admin && !countsByBiz[bId].adminEmail) {
           countsByBiz[bId].adminEmail = p.email;
-        }
-      });
-
-      // Process tickets per business
-      const openIssuesByBiz: Record<string, number> = {};
-      const totalIssuesByBiz: Record<string, number> = {};
-      let platformTotalIssues = 0;
-      let platformOpenIssues = 0;
-
-      const loadedTickets: SupportTicket[] = ticketsRes.tickets || [];
-      setAllTickets(loadedTickets);
-
-      loadedTickets.forEach((t) => {
-        const bId = t.business_id;
-        totalIssuesByBiz[bId] = (totalIssuesByBiz[bId] || 0) + 1;
-        platformTotalIssues += 1;
-        if (t.status === "open" || t.status === "in_progress") {
-          openIssuesByBiz[bId] = (openIssuesByBiz[bId] || 0) + 1;
-          platformOpenIssues += 1;
         }
       });
 
@@ -476,18 +891,29 @@ export default function SuperAdminPage() {
           return;
         }
 
-        const emailLower = currentUser.email?.toLowerCase() || "";
+        // Query profiles table via /api/user/me server endpoint (immune to client RLS)
+        const token = session?.access_token;
+        let isSuper = false;
 
-        // Query profiles table
-        const { data: profile } = await supabaseClient
-          .from("profiles")
-          .select("is_super_admin")
-          .eq("id", currentUser.id)
-          .maybeSingle();
+        try {
+          const res = await fetch("/api/user/me", {
+            headers: token ? { Authorization: `Bearer ${token}` } : {},
+            cache: "no-store",
+          });
+          if (res.ok) {
+            const data = await res.json();
+            isSuper = Boolean(data?.flags?.isSuperAdmin);
+          }
+        } catch {}
 
-        const isSuper =
-          !!profile?.is_super_admin ||
-          emailLower === "admin@seyalpro.com";
+        if (!isSuper) {
+          const { data: profile } = await supabaseClient
+            .from("profiles")
+            .select("is_super_admin")
+            .eq("id", currentUser.id)
+            .maybeSingle();
+          isSuper = Boolean(profile?.is_super_admin);
+        }
 
         if (!isSuper) {
           if (isMounted) setViewState(SuperAdminView.Restricted);
@@ -551,14 +977,31 @@ export default function SuperAdminPage() {
     }
   }
 
-  // Auto-generate slug from business name
+  // Auto-generate slug, Store Prefix, and Store Reference ID from business name
   function handleNameChange(name: string) {
     const slug = name
       .toLowerCase()
       .trim()
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/^-+|-+$/g, "");
-    setFormData((prev) => ({ ...prev, name, slug }));
+
+    const { prefix, storeId: freshStoreId } = generateStoreReferenceId(name);
+    setFormData((prev) => {
+      const existingDigits = prev.storeId.replace(/^[A-Z]+/, "");
+      const nextStoreId =
+        name.trim().length > 0
+          ? existingDigits && /^\d{4,5}$/.test(existingDigits)
+            ? `${prefix}${existingDigits}`
+            : freshStoreId
+          : "";
+      return {
+        ...prev,
+        name,
+        slug,
+        storePrefix: name.trim().length > 0 ? prefix : "",
+        storeId: nextStoreId,
+      };
+    });
   }
 
   function generateSecurePassword(isEdit = false) {
@@ -599,10 +1042,25 @@ export default function SuperAdminPage() {
           body: JSON.stringify({
             name: formData.name,
             slug: formData.slug,
+            storeId: formData.storeId,
+            storePrefix: formData.storePrefix,
             adminEmail: formData.adminEmail,
             adminPassword: formData.adminPassword,
             planType: formData.planType,
             maxUsers: Number(formData.maxUsers),
+            billingDurationMonths: formData.planType === "free" ? null : Number(formData.billingDurationMonths),
+            startDate: formData.startDate || undefined,
+            expiryDate: formData.planType === "free" ? null : (formData.expiryDate || null),
+            subscriptionStatus: formData.subscriptionStatus,
+            customOverrides: formData.useCustomConfig
+              ? {
+                  monthly_price: formData.monthlyPrice,
+                  max_active_products: formData.maxActiveProducts,
+                  is_unlimited_products: formData.isUnlimitedProducts,
+                  max_employee_seats: formData.maxUsers,
+                  support_level: formData.supportLevel,
+                }
+              : undefined,
             currencySymbol: formData.currencySymbol,
             timezone: formData.timezone,
             geofenceLat: formData.geofenceLat ? Number(formData.geofenceLat) : null,
@@ -625,7 +1083,7 @@ export default function SuperAdminPage() {
 
       toast({
         title: "Client Onboarded Successfully!",
-        description: `${formData.name} is ready at ${formData.slug}.seyalpro.in`,
+        description: `${formData.name} is ready at ${formData.slug}.countercub.com`,
         variant: "success",
       });
 
@@ -633,10 +1091,21 @@ export default function SuperAdminPage() {
       setFormData({
         name: "",
         slug: "",
+        storePrefix: "",
+        storeId: "",
         adminEmail: "",
         adminPassword: "",
         planType: "pro",
         maxUsers: 25,
+        billingDurationMonths: 1,
+        monthlyPrice: 299,
+        maxActiveProducts: "250",
+        isUnlimitedProducts: false,
+        supportLevel: "standard",
+        startDate: new Date().toISOString().slice(0, 10),
+        expiryDate: addCalendarMonths(new Date(), 1).toISOString().slice(0, 10),
+        subscriptionStatus: "active",
+        useCustomConfig: false,
         currencySymbol: "₹",
         timezone: "Asia/Kolkata",
         geofenceLat: "12.8439",
@@ -780,8 +1249,9 @@ export default function SuperAdminPage() {
     }
   }
 
-  // Toggle active/suspended status
+  // Toggle active/suspended status (executed after confirmation modal)
   async function toggleBusinessStatus(biz: ClientBusiness) {
+    setIsTogglingStatus(true);
     try {
       const nextStatus = !biz.is_active;
       // Optimistic update
@@ -815,10 +1285,13 @@ export default function SuperAdminPage() {
         variant: nextStatus ? "success" : "info",
       });
 
+      setStatusConfirmBiz(null);
       await loadBusinessesData(true);
     } catch (e: any) {
       toast({ title: "Failed to update status", description: e.message, variant: "error" });
       await loadBusinessesData(true);
+    } finally {
+      setIsTogglingStatus(false);
     }
   }
 
@@ -908,6 +1381,19 @@ export default function SuperAdminPage() {
       });
   }, [businesses, searchQuery, planFilter, statusFilter, sortBy]);
 
+  const filteredDeletedBusinesses = useMemo(() => {
+    const query = searchQuery.toLowerCase().trim();
+    return deletedBusinesses.filter((d) => {
+      if (!query) return true;
+      return (
+        d.name.toLowerCase().includes(query) ||
+        d.slug.toLowerCase().includes(query) ||
+        (d.store_id || "").toLowerCase().includes(query) ||
+        d.admin_email.toLowerCase().includes(query)
+      );
+    });
+  }, [deletedBusinesses, searchQuery]);
+
   // Filtered support tickets for the Issues Drawer
   const displayedTickets = useMemo(() => {
     let list = allTickets;
@@ -926,7 +1412,7 @@ export default function SuperAdminPage() {
         <div className="w-12 h-12 rounded-2xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600 shadow-sm">
           <Loader2 className="animate-spin" size={26} />
         </div>
-        <span className="text-sm font-semibold text-zinc-700">Connecting to SeyalPro Command Center...</span>
+        <span className="text-sm font-semibold text-zinc-700">Connecting to CounterCub Command Center...</span>
         <span className="text-xs text-zinc-400">Loading live platform metrics & client workspaces</span>
       </div>
     );
@@ -940,11 +1426,11 @@ export default function SuperAdminPage() {
         </div>
         <h1 className="text-2xl font-bold text-[#0F172A]">Platform Access Restricted</h1>
         <p className="text-[#64748B] max-w-md text-sm">
-          This portal is reserved for SeyalPro Platform Super Administrators. Regular business administrators and staff members cannot access platform infrastructure.
+          This portal is reserved for CounterCub Platform Super Administrators. Regular business administrators and staff members cannot access platform infrastructure.
         </p>
         <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
           <Link
-            href="/super-admin/login"
+            href="/super-admin-login"
             className="inline-flex items-center gap-2 bg-[#2563EB] hover:bg-[#1D4ED8] text-white font-bold text-xs px-4 py-2.5 rounded-xl shadow-md transition-all cursor-pointer"
           >
             <Lock size={14} /> Platform Owner 2FA Login
@@ -969,10 +1455,68 @@ export default function SuperAdminPage() {
   const totalIssues = analytics?.totalIssues || 0;
   const openIssues = analytics?.openIssues || 0;
   const profitMarginPercent = totalSales > 0 ? ((netProfit / totalSales) * 100).toFixed(1) : "0.0";
+  const activeSupportBiz = activeSupportSession
+    ? businesses.find((b) => b.id === activeSupportSession.targetBusinessId) || null
+    : null;
+  const activeSupportLabel =
+    activeSupportBiz?.name ||
+    activeSupportSession?.targetBusinessSlug ||
+    activeSupportSession?.targetBusinessId ||
+    "";
+  const activeSupportSlug =
+    activeSupportSession?.targetBusinessSlug || activeSupportBiz?.slug || null;
 
   return (
     <div className="w-full space-y-6 pb-20 animate-in fade-in duration-300">
-      
+      {activeSupportSession && (
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-5 py-3.5 rounded-2xl bg-amber-50 border border-amber-200 text-amber-900 shadow-sm">
+          <div className="flex items-start sm:items-center gap-3">
+            <ShieldAlert className="w-5 h-5 text-amber-600 shrink-0 mt-0.5 sm:mt-0" />
+            <div className="text-xs sm:text-sm">
+              <span className="font-bold">Active Support Session:</span>{" "}
+              <span>
+                You are currently authorized for{" "}
+                <strong>{activeSupportLabel}</strong>{" "}
+                {activeSupportBiz?.name && activeSupportSlug ? (
+                  <span className="font-mono text-xs text-amber-700">({activeSupportSlug})</span>
+                ) : null}{" "}
+                (expires{" "}
+                {new Date(activeSupportSession.expiresAt).toLocaleTimeString([], {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })}
+                ).
+              </span>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            {activeSupportSlug && (
+              <Button
+                size="sm"
+                onClick={() =>
+                  void navigateToTenantWorkspace(
+                    activeSupportSlug,
+                    activeSupportSession.sessionId
+                  )
+                }
+                className="bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold px-3 py-1.5 rounded-xl"
+              >
+                Return to Store
+              </Button>
+            )}
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={isEndingActiveSession}
+              onClick={handleEndActiveSupportSession}
+              className="border-amber-300 text-amber-800 hover:bg-amber-100 text-xs font-semibold px-3 py-1.5 rounded-xl"
+            >
+              {isEndingActiveSession ? "Ending..." : "End Session"}
+            </Button>
+          </div>
+        </div>
+      )}
+
       {/* Executive SaaS Hero Header Banner */}
       <div className="relative rounded-3xl overflow-hidden bg-gradient-to-br from-[#0F172A] via-[#1E293B] to-[#1E3A8A] text-white shadow-xl border border-slate-700/80 p-6 sm:p-8 lg:p-10">
         {/* Subtle Ambient Mesh Accents */}
@@ -984,7 +1528,7 @@ export default function SuperAdminPage() {
             <div className="flex flex-wrap items-center gap-2.5">
               <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/20 text-blue-200 text-xs font-bold uppercase tracking-wider border border-blue-400/30 backdrop-blur-md">
                 <Globe size={13} className="text-blue-300" />
-                <span>SeyalPro Super Admin Portal</span>
+                <span>CounterCub Super Admin Portal</span>
               </div>
               <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/15 text-emerald-300 text-xs font-semibold border border-emerald-500/30">
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
@@ -1171,7 +1715,54 @@ export default function SuperAdminPage() {
         </Card>
       </div>
 
+      {/* Super Admin Section Tabs */}
+      <div className="flex items-center gap-2 border-b border-[#E2E8F0] pb-3">
+        <button
+          type="button"
+          onClick={() => setSuperAdminSection("tenants")}
+          className={cn(
+            "px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer",
+            superAdminSection === "tenants"
+              ? "bg-[#2563EB] text-white shadow-xs"
+              : "bg-white text-[#64748B] border border-[#E2E8F0] hover:text-[#0F172A]"
+          )}
+        >
+          Stores &amp; Tenants ({businesses.length})
+        </button>
+        <button
+          type="button"
+          onClick={() => setSuperAdminSection("plans")}
+          className={cn(
+            "px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2",
+            superAdminSection === "plans"
+              ? "bg-[#2563EB] text-white shadow-xs"
+              : "bg-white text-[#64748B] border border-[#E2E8F0] hover:text-[#0F172A]"
+          )}
+        >
+          <span>Plans &amp; Subscriptions</span>
+          {subscriptionRequests.filter((r) => r.request_status === "pending").length > 0 && (
+            <span className="px-1.5 py-0.5 rounded-full text-[10px] font-black bg-amber-400 text-amber-950">
+              {subscriptionRequests.filter((r) => r.request_status === "pending").length}
+            </span>
+          )}
+        </button>
+      </div>
+
+      {superAdminSection === "plans" && (
+        <div className="space-y-8">
+          <PlanConfigurationPanel
+            plans={subscriptionPlans}
+            onRefresh={() => loadBusinessesData(true)}
+          />
+          <RenewalRequestsPanel
+            requests={subscriptionRequests}
+            onRefresh={() => loadBusinessesData(true)}
+          />
+        </div>
+      )}
+
       {/* Main Client Table & Cards Section */}
+      {superAdminSection === "tenants" && (
       <Card className="border border-[#E2E8F0] shadow-xs bg-white rounded-2xl overflow-hidden">
         {/* Table Toolbar / Filters */}
         <div className="p-5 sm:p-6 border-b border-[#E2E8F0] space-y-4">
@@ -1247,7 +1838,7 @@ export default function SuperAdminPage() {
 
               {/* Plan Filter */}
               <div className="inline-flex rounded-xl bg-slate-100 p-1 border border-[#E2E8F0] text-xs">
-                {["all", "starter", "pro", "enterprise"].map((plan) => (
+                {["all", "free", "basic", "pro", "business"].map((plan) => (
                   <button
                     key={plan}
                     onClick={() => setPlanFilter(plan)}
@@ -1269,6 +1860,10 @@ export default function SuperAdminPage() {
                   { key: "all", label: "All Status" },
                   { key: "active", label: "Active" },
                   { key: "suspended", label: "Suspended" },
+                  {
+                    key: "deleted",
+                    label: deletedBusinesses.length > 0 ? `Deleted (${deletedBusinesses.length})` : "Deleted",
+                  },
                 ].map((st) => (
                   <button
                     key={st.key}
@@ -1305,8 +1900,70 @@ export default function SuperAdminPage() {
           </div>
         </div>
 
-        {/* VIEW 1: TABLE VIEW */}
-        {viewMode === "table" ? (
+        {/* VIEW 0: DELETED STORES ARCHIVE (READ-ONLY REFERENCE) */}
+        {statusFilter === "deleted" ? (
+          <div className="p-6">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-2xl bg-slate-50 border border-[#E2E8F0] px-4 py-3">
+              <div className="text-xs text-[#475569]">
+                <span className="font-bold text-[#0F172A]">Deleted Stores Archive (Read-Only Reference):</span>{" "}
+                Historical log of offboarded stores. Subdomain slugs &amp; emails remain free to re-register anytime.
+              </div>
+              <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-slate-200/80 text-slate-700">
+                {filteredDeletedBusinesses.length} {filteredDeletedBusinesses.length === 1 ? "record" : "records"}
+              </span>
+            </div>
+
+            {filteredDeletedBusinesses.length === 0 ? (
+              <div className="py-12 text-center text-[#64748B] text-sm">
+                No deleted stores found in archive.
+              </div>
+            ) : (
+              <div className="table-scroll-container">
+                <table className="w-full text-left border-collapse min-w-[780px]">
+                  <thead>
+                    <tr className="bg-slate-100 text-slate-600 text-[11px] uppercase tracking-wider font-bold border-b border-[#E2E8F0]">
+                      <th className="py-3 px-4">Store Name &amp; ID</th>
+                      <th className="py-3 px-4">Former Subdomain</th>
+                      <th className="py-3 px-4">Admin Email</th>
+                      <th className="py-3 px-4">Plan</th>
+                      <th className="py-3 px-4">Deleted By</th>
+                      <th className="py-3 px-4">Deleted At</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#E2E8F0] text-sm">
+                    {filteredDeletedBusinesses.map((d) => (
+                      <tr key={d.id} className="hover:bg-slate-50/80">
+                        <td className="py-3.5 px-4 font-bold text-[#0F172A]">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span>{d.name}</span>
+                            {d.store_id && (
+                              <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-slate-100 text-slate-700 border border-slate-200">
+                                ID: {d.store_id}
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="py-3.5 px-4 font-mono text-xs text-slate-600">
+                          {d.slug ? `${d.slug}.countercub.com` : "—"}
+                        </td>
+                        <td className="py-3.5 px-4 text-xs text-slate-700">{d.admin_email}</td>
+                        <td className="py-3.5 px-4">
+                          <span className="px-2 py-0.5 rounded text-[10px] font-extrabold uppercase bg-slate-100 text-slate-700">
+                            {d.plan_type}
+                          </span>
+                        </td>
+                        <td className="py-3.5 px-4 text-xs text-slate-600">{d.deleted_by}</td>
+                        <td className="py-3.5 px-4 text-xs text-slate-500">
+                          {d.deleted_at ? new Date(d.deleted_at).toLocaleString() : "—"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        ) : viewMode === "table" ? (
           <div className="table-scroll-container">
             <table className="w-full text-left border-collapse min-w-[920px]">
               <thead>
@@ -1344,8 +2001,11 @@ export default function SuperAdminPage() {
                             {biz.name[0]?.toUpperCase() || "S"}
                           </div>
                           <div>
-                            <div className="font-extrabold text-[#0F172A] flex items-center gap-1.5">
+                            <div className="font-extrabold text-[#0F172A] flex items-center gap-1.5 flex-wrap">
                               <span>{biz.name}</span>
+                              <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-extrabold bg-blue-50 text-blue-700 border border-blue-200">
+                                ID: {getBusinessStoreId(biz).storeId}
+                              </span>
                               {isProtectedRoot && (
                                 <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-[#FFFBEB] text-[#B45309] border border-[#FDE68A]">
                                   Default Root
@@ -1353,9 +2013,9 @@ export default function SuperAdminPage() {
                               )}
                             </div>
                             <div className="flex items-center gap-1 text-xs text-[#64748B] mt-0.5 font-mono">
-                              <span>{biz.slug}.seyalpro.in</span>
+                              <span>{biz.slug}.countercub.com</span>
                               <button
-                                onClick={() => copyToClipboard(`${biz.slug}.seyalpro.in`, `sub_${biz.id}`, "Subdomain")}
+                                onClick={() => copyToClipboard(`${biz.slug}.countercub.com`, `sub_${biz.id}`, "Subdomain")}
                                 className="hover:text-[#0F172A] p-0.5 cursor-pointer"
                                 title="Copy Subdomain"
                               >
@@ -1470,7 +2130,7 @@ export default function SuperAdminPage() {
                       {/* Status Toggle */}
                       <td className="py-4 px-4 text-center">
                         <button
-                          onClick={() => toggleBusinessStatus(biz)}
+                          onClick={() => setStatusConfirmBiz(biz)}
                           className={cn(
                             "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold transition-all cursor-pointer",
                             biz.is_active
@@ -1487,14 +2147,24 @@ export default function SuperAdminPage() {
                       {/* Action Buttons */}
                       <td className="py-4 px-6 text-right">
                         <div className="flex items-center justify-end gap-1.5">
-                          {/* Workspace Switcher */}
+                          {/* Manage Subscription */}
                           <button
-                            onClick={() => handleSwitchWorkspace(biz.slug, biz.name)}
+                            onClick={() => setManagingSubBiz(biz)}
+                            className="p-2 rounded-xl text-[#0F172A] hover:bg-blue-50 hover:text-[#2563EB] border border-[#E2E8F0] transition-all text-xs font-semibold flex items-center gap-1 cursor-pointer"
+                            title="Manage Plan, Expiry & Subscription History"
+                          >
+                            <Wallet size={14} />
+                            <span className="hidden xl:inline">Subscription</span>
+                          </button>
+
+                          {/* Audited Support Impersonation Launcher */}
+                          <button
+                            onClick={() => handleSwitchWorkspace(biz.slug, biz.name, biz.id)}
                             className="p-2 rounded-xl text-[#2563EB] hover:bg-[#EFF6FF] border border-transparent hover:border-[#DBEAFE] transition-all font-bold text-xs flex items-center gap-1 cursor-pointer"
-                            title={`Switch into ${biz.name}`}
+                            title={`Start audited support session for ${biz.name}`}
                           >
                             <ArrowRightLeft size={14} />
-                            <span className="hidden xl:inline">Switch</span>
+                            <span className="hidden xl:inline">Support Access</span>
                           </button>
 
                           {/* Configure / Edit */}
@@ -1547,18 +2217,21 @@ export default function SuperAdminPage() {
                         {biz.name[0]?.toUpperCase() || "S"}
                       </div>
                       <div>
-                        <h3 className="font-extrabold text-base text-[#0F172A] flex items-center gap-1.5">
+                        <h3 className="font-extrabold text-base text-[#0F172A] flex items-center gap-1.5 flex-wrap">
                           <span>{biz.name}</span>
+                          <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-extrabold bg-blue-50 text-blue-700 border border-blue-200">
+                            ID: {getBusinessStoreId(biz).storeId}
+                          </span>
                           {isProtectedRoot && (
                             <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-[#FFFBEB] text-[#B45309] border border-[#FDE68A]">Root</span>
                           )}
                         </h3>
-                        <p className="text-xs text-[#64748B] font-mono">{biz.slug}.seyalpro.in</p>
+                        <p className="text-xs text-[#64748B] font-mono">{biz.slug}.countercub.com</p>
                       </div>
                     </div>
 
                     <button
-                      onClick={() => toggleBusinessStatus(biz)}
+                      onClick={() => setStatusConfirmBiz(biz)}
                       className={cn(
                         "px-2.5 py-1 rounded-full text-xs font-bold transition-all flex items-center gap-1 cursor-pointer border",
                         biz.is_active ? "bg-[#F0FDF4] text-[#15803D] border-[#BBF7D0]" : "bg-[#FFF1F2] text-[#BE123C] border-[#FECDD3]"
@@ -1612,11 +2285,11 @@ export default function SuperAdminPage() {
                   {/* Action Bar */}
                   <div className="pt-3 border-t border-[#E2E8F0] flex items-center justify-between gap-2">
                     <Button
-                      onClick={() => handleSwitchWorkspace(biz.slug, biz.name)}
+                      onClick={() => handleSwitchWorkspace(biz.slug, biz.name, biz.id)}
                       className="h-9 bg-[#2563EB] hover:bg-[#1D4ED8] text-white font-bold text-xs rounded-xl flex-1 flex items-center justify-center gap-1.5 cursor-pointer shadow-xs"
                     >
                       <ArrowRightLeft size={14} />
-                      <span>Launch Store</span>
+                      <span>Support Access</span>
                     </Button>
 
                     <Button
@@ -1646,6 +2319,16 @@ export default function SuperAdminPage() {
           </div>
         )}
       </Card>
+      )}
+
+      {managingSubBiz && (
+        <SubscriptionManagementModal
+          business={managingSubBiz}
+          plans={subscriptionPlans}
+          onClose={() => setManagingSubBiz(null)}
+          onUpdated={() => loadBusinessesData(true)}
+        />
+      )}
 
       {/* ========================================================================= */}
       {/* DRAWER / MODAL: CLIENT SUPPORT TICKETS & BUG REPORTS                      */}
@@ -1856,13 +2539,13 @@ export default function SuperAdminPage() {
       {/* MODAL 1: ONBOARD NEW CLIENT BUSINESS                                      */}
       {/* ========================================================================= */}
       {showAddModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto animate-in fade-in duration-200">
-          <div className="bg-white rounded-3xl max-w-xl w-full p-6 sm:p-8 shadow-2xl border border-[#E2E8F0] space-y-6 animate-in zoom-in-95 duration-200 my-8">
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6 overflow-hidden animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl sm:rounded-3xl max-w-3xl w-full max-h-[92vh] flex flex-col shadow-2xl border border-[#E2E8F0] overflow-hidden animate-in zoom-in-95 duration-200">
             
-            <div className="flex items-start justify-between border-b border-[#E2E8F0] pb-4">
-              <div className="space-y-1">
-                <h2 className="text-xl font-extrabold text-[#0F172A] flex items-center gap-2">
-                  <Sparkles size={20} className="text-[#2563EB]" />
+            <div className="flex items-start justify-between border-b border-[#E2E8F0] px-5 sm:px-8 pt-5 pb-4 shrink-0 bg-white">
+              <div className="space-y-1 pr-4">
+                <h2 className="text-lg sm:text-xl font-extrabold text-[#0F172A] flex items-center gap-2">
+                  <Sparkles size={20} className="text-[#2563EB] shrink-0" />
                   <span>Onboard New Client Business</span>
                 </h2>
                 <p className="text-xs text-[#64748B]">
@@ -1870,14 +2553,16 @@ export default function SuperAdminPage() {
                 </p>
               </div>
               <button
+                type="button"
                 onClick={() => setShowAddModal(false)}
-                className="text-[#64748B] hover:text-[#0F172A] text-lg font-bold p-1 cursor-pointer"
+                className="text-[#64748B] hover:text-[#0F172A] text-lg font-bold p-1 cursor-pointer shrink-0"
               >
                 ✕
               </button>
             </div>
 
-            <form onSubmit={handleCreateBusiness} className="space-y-4">
+            <form onSubmit={handleCreateBusiness} className="flex flex-col flex-1 min-h-0">
+              <div className="flex-1 overflow-y-auto px-5 sm:px-8 py-5 space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1.5">
                   <label className="text-xs font-bold text-[#0F172A]">Business Name *</label>
@@ -1901,7 +2586,7 @@ export default function SuperAdminPage() {
                       className="h-10 bg-white border-[#E2E8F0] text-[#0F172A] focus:border-[#2563EB] rounded-r-none font-mono text-xs"
                     />
                     <span className="h-10 px-3 bg-slate-50 border border-l-0 border-[#E2E8F0] text-[#64748B] text-xs font-mono font-medium rounded-r-xl flex items-center">
-                      .seyalpro.in
+                      .countercub.com
                     </span>
                   </div>
                 </div>
@@ -1909,10 +2594,70 @@ export default function SuperAdminPage() {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-[#0F172A]">Store Admin Email *</label>
+                  <label className="text-xs font-bold text-[#0F172A]">Store Prefix (Employee ID Prefix)</label>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      placeholder="e.g. BFT or CK"
+                      value={formData.storePrefix}
+                      maxLength={5}
+                      onChange={(e) => {
+                        const nextPrefix = normalizeStorePrefix(e.target.value);
+                        const digits = formData.storeId.replace(/^[A-Z0-9]+?(?=\d+$)/, "") || String(Math.floor(10000 + Math.random() * 90000));
+                        setFormData((prev) => ({
+                          ...prev,
+                          storePrefix: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ""),
+                          storeId: `${nextPrefix}${digits.replace(/\D/g, "") || "10001"}`,
+                        }));
+                      }}
+                      className="h-10 bg-white border-[#E2E8F0] text-[#0F172A] focus:border-[#2563EB] font-mono text-xs uppercase font-bold"
+                    />
+                    <span className="text-[11px] text-[#64748B] whitespace-nowrap font-mono bg-slate-50 px-2.5 py-2 rounded-lg border border-[#E2E8F0]">
+                      e.g. {(formData.storePrefix || "ck").toLowerCase()}10121997
+                    </span>
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-[#0F172A]">Store Reference ID</label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const { prefix, storeId } = generateStoreReferenceId(
+                          formData.name || "Store",
+                          formData.storePrefix || undefined
+                        );
+                        setFormData((prev) => ({
+                          ...prev,
+                          storePrefix: prefix,
+                          storeId,
+                        }));
+                      }}
+                      className="text-[11px] font-bold text-[#2563EB] hover:underline flex items-center gap-1 cursor-pointer"
+                    >
+                      <RefreshCw size={11} /> Regenerate ID
+                    </button>
+                  </div>
                   <Input
-                    type="email"
-                    placeholder="owner@royalchai.com"
+                    placeholder="e.g. BFT32523 or CK2342"
+                    value={formData.storeId}
+                    onChange={(e) =>
+                      setFormData((prev) => ({
+                        ...prev,
+                        storeId: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ""),
+                      }))
+                    }
+                    className="h-10 bg-slate-50 border-[#E2E8F0] text-[#0F172A] focus:border-[#2563EB] font-mono text-xs font-extrabold tracking-wider"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-[#0F172A]">Store Admin Email or ID *</label>
+                  <Input
+                    type="text"
+                    placeholder="owner@royalchai.com or ckadmin"
                     value={formData.adminEmail}
                     onChange={(e) => setFormData((prev) => ({ ...prev, adminEmail: e.target.value }))}
                     required
@@ -1951,40 +2696,238 @@ export default function SuperAdminPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-[#0F172A]">Subscription Tier</label>
-                  <select
-                    value={formData.planType}
-                    onChange={(e) => setFormData((prev) => ({ ...prev, planType: e.target.value }))}
-                    className="w-full h-10 px-3 bg-white border border-[#E2E8F0] rounded-xl text-xs font-bold text-[#0F172A] focus:border-[#2563EB] cursor-pointer"
-                  >
-                    <option value="starter">Starter Plan (5 Seats)</option>
-                    <option value="pro">Pro Plan (25 Seats)</option>
-                    <option value="enterprise">Enterprise Plan (Unlimited)</option>
-                  </select>
+              <div className="space-y-3 pt-1 p-3.5 rounded-2xl border border-[#E2E8F0] bg-slate-50/60">
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <span className="text-xs font-bold text-[#0F172A] uppercase tracking-wider">
+                    Subscription &amp; Plan Configuration
+                  </span>
+                  <label className="flex items-center gap-1.5 text-[11px] font-bold text-[#2563EB] cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={formData.useCustomConfig}
+                      onChange={(e) =>
+                        setFormData((prev) => ({ ...prev, useCustomConfig: e.target.checked }))
+                      }
+                      className="rounded text-[#2563EB]"
+                    />
+                    Custom Plan Configuration
+                  </label>
                 </div>
 
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-[#0F172A]">Max Staff Seats</label>
-                  <Input
-                    type="number"
-                    min={1}
-                    max={500}
-                    value={formData.maxUsers}
-                    onChange={(e) => setFormData((prev) => ({ ...prev, maxUsers: Number(e.target.value) }))}
-                    className="h-10 bg-white border-[#E2E8F0] text-[#0F172A] focus:border-[#2563EB] text-xs"
-                  />
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-[#0F172A]">Subscription Tier</label>
+                    <select
+                      value={formData.planType}
+                      onChange={(e) => {
+                        const nextKey = e.target.value;
+                        const matched = subscriptionPlans.find((p) => p.plan_key === nextKey);
+                        const startDt = formData.startDate ? new Date(formData.startDate) : new Date();
+                        const dur = nextKey === "free" ? 0 : (formData.billingDurationMonths || 1);
+                        const nextExp =
+                          nextKey === "free"
+                            ? ""
+                            : addCalendarMonths(startDt, dur).toISOString().slice(0, 10);
+                        setFormData((prev) => ({
+                          ...prev,
+                          planType: nextKey,
+                          monthlyPrice: matched ? Number(matched.monthly_price) : prev.monthlyPrice,
+                          maxActiveProducts:
+                            matched && matched.max_active_products !== null
+                              ? String(matched.max_active_products)
+                              : "",
+                          isUnlimitedProducts: matched ? matched.max_active_products === null : false,
+                          maxUsers: matched ? Number(matched.max_employee_seats) : (nextKey === "free" ? 0 : prev.maxUsers),
+                          supportLevel: matched?.support_level || "standard",
+                          expiryDate: nextExp,
+                        }));
+                      }}
+                      className="w-full h-10 px-3 bg-white border border-[#E2E8F0] rounded-xl text-xs font-bold text-[#0F172A] focus:border-[#2563EB] cursor-pointer"
+                    >
+                      {subscriptionPlans
+                        .filter((p) => p.is_active)
+                        .map((p) => (
+                          <option key={p.id} value={p.plan_key}>
+                            {p.plan_name} (₹{p.monthly_price}/mo — {p.max_employee_seats} Seats)
+                          </option>
+                        ))}
+                    </select>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-[#0F172A]">Max Staff Seats</label>
+                    <Input
+                      type="number"
+                      min={0}
+                      max={500}
+                      disabled={!formData.useCustomConfig && formData.planType === "free"}
+                      value={formData.maxUsers}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, maxUsers: Number(e.target.value) }))}
+                      className="h-10 bg-white border-[#E2E8F0] text-[#0F172A] focus:border-[#2563EB] text-xs"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-[#0F172A]">Currency *</label>
+                    <select
+                      value={formData.currencySymbol}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, currencySymbol: e.target.value }))}
+                      className="w-full h-10 px-3 bg-white border border-[#E2E8F0] rounded-xl text-xs font-bold text-[#0F172A] focus:border-[#2563EB] cursor-pointer"
+                    >
+                      {CURRENCY_OPTIONS.map((c) => (
+                        <option key={`${c.code}-${c.country}`} value={c.symbol}>
+                          {c.country} — {c.code} ({c.symbol})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
 
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-[#0F172A]">Currency Symbol</label>
-                  <Input
-                    value={formData.currencySymbol}
-                    onChange={(e) => setFormData((prev) => ({ ...prev, currencySymbol: e.target.value }))}
-                    placeholder="₹, $, €, £"
-                    className="h-10 bg-white border-[#E2E8F0] text-[#0F172A] focus:border-[#2563EB] text-xs font-bold"
-                  />
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-[#0F172A]">Monthly Price (₹)</label>
+                    <Input
+                      type="number"
+                      min={0}
+                      disabled={!formData.useCustomConfig}
+                      value={formData.monthlyPrice}
+                      onChange={(e) =>
+                        setFormData((prev) => ({ ...prev, monthlyPrice: Number(e.target.value) }))
+                      }
+                      className="h-9 bg-white border-[#E2E8F0] text-xs"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-bold text-[#0F172A]">Max Active Products</label>
+                      {formData.useCustomConfig && (
+                        <label className="flex items-center gap-1 text-[10px] font-semibold text-[#2563EB] cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={formData.isUnlimitedProducts}
+                            onChange={(e) =>
+                              setFormData((prev) => ({
+                                ...prev,
+                                isUnlimitedProducts: e.target.checked,
+                              }))
+                            }
+                          />
+                          Unlim.
+                        </label>
+                      )}
+                    </div>
+                    <Input
+                      type={formData.isUnlimitedProducts ? "text" : "number"}
+                      min={0}
+                      disabled={!formData.useCustomConfig || formData.isUnlimitedProducts}
+                      value={formData.isUnlimitedProducts ? "Unlimited" : formData.maxActiveProducts}
+                      onChange={(e) =>
+                        setFormData((prev) => ({ ...prev, maxActiveProducts: e.target.value }))
+                      }
+                      className="h-9 bg-white border-[#E2E8F0] text-xs"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-[#0F172A]">Support Level</label>
+                    <select
+                      disabled={!formData.useCustomConfig}
+                      value={formData.supportLevel}
+                      onChange={(e) =>
+                        setFormData((prev) => ({
+                          ...prev,
+                          supportLevel: e.target.value === "priority" ? "priority" : "standard",
+                        }))
+                      }
+                      className="w-full h-9 px-3 bg-white border border-[#E2E8F0] rounded-xl text-xs font-semibold text-[#0F172A]"
+                    >
+                      <option value="standard">Standard</option>
+                      <option value="priority">Priority</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-[#0F172A]">Billing Duration</label>
+                    <select
+                      disabled={formData.planType === "free"}
+                      value={formData.planType === "free" ? "none" : formData.billingDurationMonths}
+                      onChange={(e) => {
+                        const months = Number(e.target.value) || 1;
+                        const startDt = formData.startDate ? new Date(formData.startDate) : new Date();
+                        setFormData((prev) => ({
+                          ...prev,
+                          billingDurationMonths: months,
+                          expiryDate: addCalendarMonths(startDt, months).toISOString().slice(0, 10),
+                        }));
+                      }}
+                      className="w-full h-9 px-2.5 bg-white border border-[#E2E8F0] rounded-xl text-xs font-semibold text-[#0F172A]"
+                    >
+                      {formData.planType === "free" ? (
+                        <option value="none">No Expiry (Free)</option>
+                      ) : (
+                        <>
+                          <option value={1}>1 Month</option>
+                          <option value={3}>3 Months</option>
+                          <option value={6}>6 Months</option>
+                          <option value={12}>12 Months</option>
+                        </>
+                      )}
+                    </select>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-[#0F172A]">Start Date</label>
+                    <Input
+                      type="date"
+                      value={formData.startDate}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        const startDt = val ? new Date(val) : new Date();
+                        setFormData((prev) => ({
+                          ...prev,
+                          startDate: val,
+                          expiryDate:
+                            prev.planType === "free"
+                              ? ""
+                              : addCalendarMonths(startDt, prev.billingDurationMonths || 1)
+                                  .toISOString()
+                                  .slice(0, 10),
+                        }));
+                      }}
+                      className="h-9 bg-white border-[#E2E8F0] text-xs"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-[#0F172A]">Expiry Date</label>
+                    <Input
+                      type="date"
+                      disabled={formData.planType === "free" && !formData.useCustomConfig}
+                      value={formData.expiryDate}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, expiryDate: e.target.value }))}
+                      className="h-9 bg-white border-[#E2E8F0] text-xs"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-[#0F172A]">Status</label>
+                    <select
+                      value={formData.subscriptionStatus}
+                      onChange={(e) =>
+                        setFormData((prev) => ({
+                          ...prev,
+                          subscriptionStatus: e.target.value === "pending" ? "pending" : "active",
+                        }))
+                      }
+                      className="w-full h-9 px-2.5 bg-white border border-[#E2E8F0] rounded-xl text-xs font-semibold text-[#0F172A]"
+                    >
+                      <option value="active">Active</option>
+                      <option value="pending">Pending</option>
+                    </select>
+                  </div>
                 </div>
               </div>
 
@@ -2027,20 +2970,21 @@ export default function SuperAdminPage() {
                   })}
                 </div>
               </div>
+              </div>
 
-              <div className="flex items-center justify-end gap-3 pt-4 border-t border-[#E2E8F0]">
+              <div className="flex flex-col-reverse sm:flex-row sm:items-center justify-end gap-2.5 sm:gap-3 px-5 sm:px-8 py-4 border-t border-[#E2E8F0] bg-slate-50/70 shrink-0">
                 <Button
                   type="button"
                   variant="outline"
                   onClick={() => setShowAddModal(false)}
-                  className="rounded-xl border-[#E2E8F0] text-[#0F172A] hover:bg-slate-50 cursor-pointer"
+                  className="rounded-xl border-[#E2E8F0] text-[#0F172A] hover:bg-slate-100 cursor-pointer w-full sm:w-auto"
                 >
                   Cancel
                 </Button>
                 <Button
                   type="submit"
                   disabled={isSubmitting}
-                  className="bg-[#2563EB] hover:bg-[#1D4ED8] text-white font-bold rounded-xl px-6 shadow-md shadow-blue-500/20 cursor-pointer"
+                  className="bg-[#2563EB] hover:bg-[#1D4ED8] text-white font-bold rounded-xl px-6 shadow-md shadow-blue-500/20 cursor-pointer w-full sm:w-auto"
                 >
                   {isSubmitting ? <Loader2 className="animate-spin" /> : "Provision Client Workspace"}
                 </Button>
@@ -2162,13 +3106,18 @@ export default function SuperAdminPage() {
                     </div>
 
                     <div className="space-y-1.5">
-                      <label className="text-xs font-bold text-[#0F172A]">Currency Symbol</label>
-                      <Input
+                      <label className="text-xs font-bold text-[#0F172A]">Currency *</label>
+                      <select
                         value={editFormData.currency_symbol}
                         onChange={(e) => setEditFormData((prev) => ({ ...prev, currency_symbol: e.target.value }))}
-                        placeholder="₹"
-                        className="h-10 bg-white border-[#E2E8F0] text-[#0F172A] focus:border-[#2563EB] text-xs font-bold"
-                      />
+                        className="w-full h-10 px-3 bg-white border border-[#E2E8F0] rounded-xl text-xs font-bold text-[#0F172A] focus:border-[#2563EB] cursor-pointer"
+                      >
+                        {CURRENCY_OPTIONS.map((c) => (
+                          <option key={`edit-${c.code}-${c.country}`} value={c.symbol}>
+                            {c.country} — {c.code} ({c.symbol})
+                          </option>
+                        ))}
+                      </select>
                     </div>
                   </div>
                 </div>
@@ -2362,7 +3311,7 @@ export default function SuperAdminPage() {
                 This action is <span className="font-bold text-rose-600">irreversible</span>. It will permanently purge all sales records, expenses, timesheets, inventory, and staff login accounts for:
               </p>
               <div className="p-3 rounded-xl bg-slate-50 font-extrabold text-sm text-[#0F172A] border border-[#E2E8F0]">
-                {deletingBiz.name} ({deletingBiz.slug}.seyalpro.in)
+                {deletingBiz.name} ({deletingBiz.slug}.countercub.com)
               </div>
             </div>
 
@@ -2403,6 +3352,237 @@ export default function SuperAdminPage() {
             </div>
 
           </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL 4: SUSPEND / REACTIVATE STORE CONFIRMATION                          */}
+      {/* ========================================================================= */}
+      {statusConfirmBiz && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-hidden animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 sm:p-8 shadow-2xl border border-[#E2E8F0] space-y-5 animate-in zoom-in-95 duration-200">
+            <div className="text-center space-y-3">
+              <div
+                className={cn(
+                  "w-14 h-14 rounded-2xl flex items-center justify-center mx-auto border",
+                  statusConfirmBiz.is_active
+                    ? "bg-amber-50 text-amber-600 border-amber-200"
+                    : "bg-emerald-50 text-emerald-600 border-emerald-200"
+                )}
+              >
+                {statusConfirmBiz.is_active ? <AlertTriangle size={28} /> : <CheckCircle size={28} />}
+              </div>
+              <h3 className="text-xl font-extrabold text-[#0F172A]">
+                {statusConfirmBiz.is_active ? "Suspend Store Workspace?" : "Reactivate Store Workspace?"}
+              </h3>
+              <p className="text-xs text-[#64748B] leading-relaxed">
+                {statusConfirmBiz.is_active
+                  ? "Suspending this store will immediately block all staff and store admin logins until you reactivate it. No store data will be deleted."
+                  : "Reactivating this store will restore full portal and POS access for the store admin and all staff members."}
+              </p>
+              <div className="p-3 rounded-xl bg-slate-50 font-extrabold text-sm text-[#0F172A] border border-[#E2E8F0]">
+                {statusConfirmBiz.name} ({statusConfirmBiz.slug}.countercub.com)
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3 pt-2">
+              <Button
+                type="button"
+                variant="outline"
+                disabled={isTogglingStatus}
+                onClick={() => setStatusConfirmBiz(null)}
+                className="flex-1 rounded-xl border-[#E2E8F0] text-[#0F172A] hover:bg-slate-50 cursor-pointer"
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                disabled={isTogglingStatus}
+                onClick={() => toggleBusinessStatus(statusConfirmBiz)}
+                className={cn(
+                  "flex-1 text-white font-bold rounded-xl shadow-md cursor-pointer",
+                  statusConfirmBiz.is_active
+                    ? "bg-amber-600 hover:bg-amber-700 shadow-amber-500/20"
+                    : "bg-emerald-600 hover:bg-emerald-700 shadow-emerald-500/20"
+                )}
+              >
+                {isTogglingStatus ? (
+                  <Loader2 className="animate-spin" />
+                ) : statusConfirmBiz.is_active ? (
+                  "Suspend Store"
+                ) : (
+                  "Reactivate Store"
+                )}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL 5: AUDITED SUPPORT IMPERSONATION GRANT (ZERO-TRUST SECTION 4)      */}
+      {/* ========================================================================= */}
+      {impersonatingBiz && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-hidden animate-in fade-in duration-200">
+          {impersonationReauthMode ? (
+            <form
+              onSubmit={handleStepUpReauthAndLaunch}
+              className="bg-white rounded-3xl max-w-md w-full p-6 sm:p-8 shadow-2xl border border-amber-200 space-y-5 animate-in zoom-in-95 duration-200"
+            >
+              <div className="text-center space-y-2">
+                <div className="w-14 h-14 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center mx-auto border border-amber-200">
+                  <KeyRound size={26} />
+                </div>
+                <span className="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider bg-amber-100 text-amber-800 border border-amber-200">
+                  30-Minute Security Re-Verification
+                </span>
+                <h3 className="text-lg font-extrabold text-[#0F172A]">
+                  Verify Identity to Launch
+                </h3>
+                <p className="text-xs text-[#64748B] leading-relaxed">
+                  {impersonationReauthMode === "totp"
+                    ? "Enter the 6-digit code from your Authenticator app to confirm support access."
+                    : "Re-enter your Super Admin password to confirm support access."}
+                </p>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-[#0F172A] block">
+                  {impersonationReauthMode === "totp" ? "6-Digit Authenticator Code *" : "Super Admin Password *"}
+                </label>
+                <Input
+                  type={impersonationReauthMode === "totp" ? "text" : "password"}
+                  inputMode={impersonationReauthMode === "totp" ? "numeric" : "text"}
+                  maxLength={impersonationReauthMode === "totp" ? 6 : 128}
+                  required
+                  autoFocus
+                  placeholder={impersonationReauthMode === "totp" ? "123456" : "Enter your password"}
+                  value={reauthSecretInput}
+                  onChange={(e) => setReauthSecretInput(e.target.value)}
+                  className="h-10 text-sm bg-white border-[#E2E8F0] text-[#0F172A] font-mono text-center tracking-widest"
+                />
+              </div>
+
+              <div className="flex items-center gap-3 pt-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setImpersonationReauthMode(null);
+                    setReauthSecretInput("");
+                  }}
+                  className="flex-1 rounded-xl border-[#E2E8F0] text-[#0F172A] hover:bg-slate-50 cursor-pointer"
+                >
+                  Back
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={isReauthenticating || !reauthSecretInput.trim()}
+                  className="flex-1 bg-[#2563EB] hover:bg-[#1D4ED8] text-white font-bold rounded-xl shadow-md cursor-pointer"
+                >
+                  {isReauthenticating ? (
+                    <Loader2 className="animate-spin" size={16} />
+                  ) : (
+                    "Verify & Launch"
+                  )}
+                </Button>
+              </div>
+            </form>
+          ) : (
+          <form
+            onSubmit={handleConfirmSupportImpersonation}
+            className="bg-white rounded-3xl max-w-md w-full p-6 sm:p-8 shadow-2xl border border-amber-200 space-y-5 animate-in zoom-in-95 duration-200"
+          >
+            <div className="text-center space-y-2">
+              <div className="w-14 h-14 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center mx-auto border border-amber-200">
+                <Shield size={28} />
+              </div>
+              <span className="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider bg-amber-100 text-amber-800 border border-amber-200">
+                Zero-Trust Audited Support Access
+              </span>
+              <h3 className="text-lg font-extrabold text-[#0F172A]">
+                Enter {impersonatingBiz.name}
+              </h3>
+              <p className="text-xs text-[#64748B] font-mono">
+                {impersonatingBiz.slug}.countercub.com
+              </p>
+            </div>
+
+            <div className="p-3.5 rounded-2xl bg-slate-50 border border-[#E2E8F0] text-xs text-[#475569] leading-relaxed">
+              Cross-tenant support access requires an explicit reason, is recorded in the immutable security audit log, displays a visible banner inside the workspace, and automatically expires.
+            </div>
+            {activeSupportSession && activeSupportSession.targetBusinessId !== impersonatingBiz.id && (
+              <div className="p-3 rounded-2xl bg-amber-50 border border-amber-200 text-xs text-amber-800 leading-relaxed flex items-start gap-2">
+                <ShieldAlert className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                <span>
+                  Note: Launching access for this store will automatically end your active session for{" "}
+                  <strong>{activeSupportLabel}</strong>.
+                </span>
+              </div>
+            )}
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-[#0F172A] block">
+                Support Access Reason (min 10 chars) *
+              </label>
+              <Input
+                type="text"
+                required
+                minLength={10}
+                maxLength={500}
+                placeholder="e.g., Investigating support ticket #1042 for billing printer setup"
+                value={impersonationReason}
+                onChange={(e) => setImpersonationReason(e.target.value)}
+                className="h-10 text-xs bg-white border-[#E2E8F0] text-[#0F172A]"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-[#0F172A] block">
+                Session Duration *
+              </label>
+              <div className="grid grid-cols-3 gap-2">
+                {[10, 15, 30].map((mins) => (
+                  <button
+                    key={mins}
+                    type="button"
+                    onClick={() => setImpersonationDuration(mins)}
+                    className={cn(
+                      "py-2 rounded-xl text-xs font-bold border transition cursor-pointer",
+                      impersonationDuration === mins
+                        ? "bg-[#2563EB] text-white border-[#2563EB]"
+                        : "bg-slate-50 text-[#0F172A] border-[#E2E8F0] hover:bg-slate-100"
+                    )}
+                  >
+                    {mins} mins
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3 pt-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setImpersonatingBiz(null)}
+                className="flex-1 rounded-xl border-[#E2E8F0] text-[#0F172A] hover:bg-slate-50 cursor-pointer"
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                disabled={isStartingImpersonation || impersonationReason.trim().length < 10}
+                className="flex-1 bg-[#2563EB] hover:bg-[#1D4ED8] text-white font-bold rounded-xl shadow-md cursor-pointer"
+              >
+                {isStartingImpersonation ? (
+                  <Loader2 className="animate-spin" size={16} />
+                ) : (
+                  "Authorize & Launch"
+                )}
+              </Button>
+            </div>
+          </form>
+          )}
         </div>
       )}
 

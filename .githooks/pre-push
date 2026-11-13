@@ -25,7 +25,7 @@ if [ $EXIT_CODE -ne 0 ]; then
 fi
 
 echo ""
-echo " [SUCCESS] All 97 tests passed cleanly. Proceeding with push."
+echo " [SUCCESS] All typechecks, architectural rules, and test suites passed cleanly. Proceeding with push."
 echo "========================================================"
 echo ""
 exit 0

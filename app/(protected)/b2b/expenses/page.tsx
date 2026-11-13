@@ -12,24 +12,7 @@ import {
   PieChart, Search, ArrowRight, ShoppingBag
 } from "lucide-react";
 import { useB2BExpenses, useRecordExpenseMutation } from "@/lib/hooks/useB2BData";
-
-export interface BakerExpense {
-  id: string;
-  name: string;
-  amount: number;
-  category: "Raw Materials & Supplies" | "Packaging & Boxes" | "Utilities & Energy" | "Logistics & Delivery" | "Maintenance & Repairs" | "Other Operating Costs" | string;
-  date: string;
-  notes?: string;
-}
-
-export const EXPENSE_CATEGORIES = [
-  "Raw Materials & Supplies",
-  "Packaging & Boxes",
-  "Utilities & Energy",
-  "Logistics & Delivery",
-  "Maintenance & Repairs",
-  "Other Operating Costs",
-] as const;
+import { type BakerExpense, EXPENSE_CATEGORIES } from "@/lib/utils/bakerUtils";
 
 export default function BakerExpensesPage() {
   const { business } = useTenant();

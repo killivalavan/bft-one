@@ -58,7 +58,7 @@ export function ExpenseAIAgent({
 
     const efficiencyColor = liveScore >= 80 ? "text-emerald-600 bg-emerald-50 border-emerald-200"
         : liveScore >= 60 ? "text-amber-600 bg-amber-50 border-amber-200"
-        : "text-rose-600 bg-rose-50 border-rose-200";
+            : "text-rose-600 bg-rose-50 border-rose-200";
 
     // Chart Data: Current vs AI Optimized Spend for top items
     const comparisonChartData = audit.topCutOpportunities.slice(0, 6).map(item => {
@@ -87,7 +87,7 @@ export function ExpenseAIAgent({
                 <div className="bg-white rounded-2xl p-5 border border-zinc-100 shadow-sm flex flex-col justify-between relative overflow-hidden">
                     <div className="flex items-center justify-between">
                         <span className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Spend Health Score</span>
-                        <Sparkles className="w-5 h-5 text-cyan-600" />
+                        <Sparkles className="w-5 h-5 text-[#2563EB]" />
                     </div>
                     <div className="my-2 flex items-baseline gap-2">
                         <span className="text-3xl font-bold text-zinc-900">{liveScore}</span>
@@ -152,7 +152,7 @@ export function ExpenseAIAgent({
                 <div className="bg-white rounded-2xl border border-zinc-100 p-5 shadow-sm space-y-4">
                     <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
-                            <BarChart2 className="w-5 h-5 text-cyan-600" />
+                            <BarChart2 className="w-5 h-5 text-[#2563EB]" />
                             <div>
                                 <h3 className="font-bold text-zinc-900 text-sm sm:text-base">Current vs. AI-Optimized Spend</h3>
                                 <p className="text-xs text-zinc-400">Shows how much you save on top expense items</p>
@@ -192,13 +192,13 @@ export function ExpenseAIAgent({
                     <div>
                         <div className="flex items-center justify-between pb-3 border-b border-zinc-100">
                             <div className="flex items-center gap-2">
-                                <Sliders className="w-5 h-5 text-indigo-600" />
+                                <Sliders className="w-5 h-5 text-[#2563EB]" />
                                 <div>
                                     <h3 className="font-bold text-zinc-900 text-sm sm:text-base">Interactive Budget Simulator</h3>
                                     <p className="text-xs text-zinc-400">Simulate target reduction and project annual ROI</p>
                                 </div>
                             </div>
-                            <span className="text-xs bg-indigo-50 text-indigo-700 font-bold px-2.5 py-1 rounded-full border border-indigo-200">
+                            <span className="text-xs bg-blue-50 text-blue-700 font-bold px-2.5 py-1 rounded-full border border-blue-200">
                                 {targetCutPercent}% Target
                             </span>
                         </div>
@@ -211,11 +211,10 @@ export function ExpenseAIAgent({
                                     <button
                                         key={pct}
                                         onClick={() => setTargetCutPercent(pct)}
-                                        className={`px-3 py-1 rounded-lg text-xs font-semibold border transition-all ${
-                                            targetCutPercent === pct
-                                                ? "bg-indigo-600 text-white border-indigo-600 shadow-sm"
+                                        className={`px-3 py-1 rounded-lg text-xs font-semibold border transition-all ${targetCutPercent === pct
+                                                ? "bg-[#2563EB] text-white border-[#2563EB] shadow-sm"
                                                 : "bg-neutral-50 text-zinc-600 border-zinc-200 hover:bg-zinc-100"
-                                        }`}
+                                            }`}
                                     >
                                         {pct}% Cut
                                     </button>
@@ -226,7 +225,7 @@ export function ExpenseAIAgent({
                             <div className="space-y-1.5">
                                 <div className="flex justify-between text-xs text-zinc-500">
                                     <span>Conservative (5%)</span>
-                                    <span className="font-bold text-indigo-600">{targetCutPercent}% Reduction</span>
+                                    <span className="font-bold text-[#2563EB]">{targetCutPercent}% Reduction</span>
                                     <span>Aggressive (30%)</span>
                                 </div>
                                 <input
@@ -236,7 +235,7 @@ export function ExpenseAIAgent({
                                     step="1"
                                     value={targetCutPercent}
                                     onChange={(e) => setTargetCutPercent(Number(e.target.value))}
-                                    className="w-full accent-indigo-600 cursor-pointer h-2 bg-zinc-200 rounded-lg"
+                                    className="w-full accent-blue-600 cursor-pointer h-2 bg-zinc-200 rounded-lg"
                                 />
                             </div>
                         </div>
@@ -252,9 +251,9 @@ export function ExpenseAIAgent({
                             <span className="text-[11px] text-emerald-700 uppercase font-semibold">Monthly Saved</span>
                             <p className="text-base font-bold text-emerald-700 mt-1">₹{simulatedMonthlySavingsRupees.toLocaleString("en-IN")}</p>
                         </div>
-                        <div className="p-3 bg-indigo-50 border border-indigo-100 rounded-xl text-center">
-                            <span className="text-[11px] text-indigo-700 uppercase font-semibold">Annual Profit Boost</span>
-                            <p className="text-base font-bold text-indigo-700 mt-1">₹{simulatedAnnualSavingsRupees.toLocaleString("en-IN")}</p>
+                        <div className="p-3 bg-blue-50 border border-blue-100 rounded-xl text-center">
+                            <span className="text-[11px] text-blue-700 uppercase font-semibold">Annual Profit Boost</span>
+                            <p className="text-base font-bold text-blue-700 mt-1">₹{simulatedAnnualSavingsRupees.toLocaleString("en-IN")}</p>
                         </div>
                     </div>
                 </div>
@@ -265,13 +264,13 @@ export function ExpenseAIAgent({
                 <div className="bg-white rounded-2xl border border-zinc-100 p-5 shadow-sm space-y-4">
                     <div className="flex items-center justify-between pb-3 border-b border-zinc-100">
                         <div className="flex items-center gap-2">
-                            <Building2 className="w-5 h-5 text-violet-600" />
+                            <Building2 className="w-5 h-5 text-[#2563EB]" />
                             <div>
                                 <h3 className="font-bold text-zinc-900 text-sm sm:text-base">Monthly Fixed Overheads & Utilities</h3>
                                 <p className="text-xs text-zinc-400">Recurring fixed expenses: Rent, Staff Salary, EB electricity, Internet, etc.</p>
                             </div>
                         </div>
-                        <span className="text-xs font-bold text-violet-700 bg-violet-50 border border-violet-200 px-3 py-1 rounded-full">
+                        <span className="text-xs font-bold text-blue-700 bg-blue-50 border border-blue-200 px-3 py-1 rounded-full">
                             Total: ₹{(audit.monthlyFixedSpendCents / 100).toFixed(2)}
                         </span>
                     </div>
@@ -282,14 +281,14 @@ export function ExpenseAIAgent({
                                 ? Math.round((item.amountCents / audit.monthlyFixedSpendCents) * 100)
                                 : 0;
                             return (
-                                <div key={idx} className="p-3.5 rounded-xl bg-violet-50/40 border border-violet-100/80 space-y-1.5">
+                                <div key={idx} className="p-3.5 rounded-xl bg-blue-50/40 border border-blue-100 space-y-1.5">
                                     <div className="flex items-center justify-between">
                                         <span className="font-bold text-xs text-zinc-900 truncate">{item.category}</span>
-                                        <span className="text-[10px] font-bold text-violet-600 bg-white px-1.5 py-0.5 rounded shadow-2xs border border-violet-100">
+                                        <span className="text-[10px] font-bold text-blue-700 bg-white px-1.5 py-0.5 rounded shadow-2xs border border-blue-100">
                                             {pct}%
                                         </span>
                                     </div>
-                                    <p className="text-base font-bold text-violet-950">₹{(item.amountCents / 100).toFixed(0)}</p>
+                                    <p className="text-base font-bold text-slate-900">₹{(item.amountCents / 100).toFixed(0)}</p>
                                     <p className="text-[10px] text-zinc-400">{item.count} {item.count === 1 ? "entry" : "entries"}</p>
                                 </div>
                             );
@@ -300,14 +299,14 @@ export function ExpenseAIAgent({
 
             {/* AI-Calculated Recurring Daily Demand (e.g. daily 10 water cans -> projected monthly) */}
             {audit.dailyRecurringProjections && audit.dailyRecurringProjections.items.length > 0 && (
-                <div className="bg-white rounded-2xl border border-cyan-100 p-5 shadow-sm space-y-4">
+                <div className="bg-white rounded-2xl border border-blue-100 p-5 shadow-sm space-y-4">
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-zinc-100">
                         <div className="flex items-center gap-2">
-                            <Bot className="w-5 h-5 text-cyan-600" />
+                            <Bot className="w-5 h-5 text-[#2563EB]" />
                             <div>
                                 <h3 className="font-bold text-zinc-900 text-sm sm:text-base flex items-center gap-2">
                                     AI Daily Consumption Velocity &amp; Monthly Projections
-                                    <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-cyan-50 text-cyan-700 border border-cyan-200">
+                                    <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 border border-blue-200">
                                         30-Day Run Rate
                                     </span>
                                 </h3>
@@ -316,20 +315,19 @@ export function ExpenseAIAgent({
                                 </p>
                             </div>
                         </div>
-                        <span className="text-xs font-bold text-cyan-800 bg-cyan-50 border border-cyan-200 px-3 py-1 rounded-full shrink-0 w-fit">
+                        <span className="text-xs font-bold text-blue-800 bg-blue-50 border border-blue-200 px-3 py-1 rounded-full shrink-0 w-fit">
                             Total Projected: ₹{(audit.dailyRecurringProjections.totalProjectedMonthlyCents / 100).toLocaleString("en-IN", { maximumFractionDigits: 0 })} / mo
                         </span>
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                         {audit.dailyRecurringProjections.items.map((item, idx) => (
-                            <div key={idx} className="p-4 rounded-xl bg-cyan-50/30 border border-cyan-100 space-y-2.5">
+                            <div key={idx} className="p-4 rounded-xl bg-blue-50/30 border border-blue-100 space-y-2.5">
                                 <div className="flex items-start justify-between gap-2">
                                     <div className="min-w-0 flex-1">
                                         <div className="flex items-center gap-1.5 flex-wrap">
-                                            <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded ${
-                                                item.recurrenceLevel === "daily" ? "bg-emerald-100 text-emerald-800" : "bg-blue-100 text-blue-800"
-                                            }`}>
+                                            <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded ${item.recurrenceLevel === "daily" ? "bg-emerald-100 text-emerald-800" : "bg-blue-100 text-blue-800"
+                                                }`}>
                                                 {item.recurrenceLevel === "daily" ? "Daily Need" : "Frequent"}
                                             </span>
                                             <span className="text-[10px] text-zinc-500 bg-white px-1.5 py-0.5 rounded border border-zinc-200">
@@ -361,7 +359,7 @@ export function ExpenseAIAgent({
                 <div className="bg-white rounded-2xl border border-zinc-100 p-5 shadow-sm space-y-4">
                     <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
-                            <CheckSquare className="w-5 h-5 text-cyan-600" />
+                            <CheckSquare className="w-5 h-5 text-[#2563EB]" />
                             <div>
                                 <h3 className="font-bold text-zinc-900 text-sm sm:text-base">Store Cost-Reduction Action Plan</h3>
                                 <p className="text-xs text-zinc-400">Complete items to boost your store efficiency score</p>
@@ -384,17 +382,16 @@ export function ExpenseAIAgent({
                                     <div
                                         key={idx}
                                         onClick={() => toggleAction(item.itemName)}
-                                        className={`p-3.5 rounded-xl border transition-all cursor-pointer flex items-start gap-3 ${
-                                            isDone
+                                        className={`p-3.5 rounded-xl border transition-all cursor-pointer flex items-start gap-3 ${isDone
                                                 ? "bg-emerald-50/50 border-emerald-200 text-zinc-500 line-through opacity-80"
                                                 : "bg-neutral-50/60 hover:bg-neutral-50 border-zinc-100 text-zinc-800"
-                                        }`}
+                                            }`}
                                     >
                                         <div className="mt-0.5 shrink-0">
                                             {isDone ? (
                                                 <CheckCircle2 className="w-5 h-5 text-emerald-600" />
                                             ) : (
-                                                <div className="w-5 h-5 rounded-md border-2 border-zinc-300 hover:border-cyan-600" />
+                                                <div className="w-5 h-5 rounded-md border-2 border-zinc-300 hover:border-blue-600" />
                                             )}
                                         </div>
                                         <div className="flex-1 min-w-0">
@@ -402,12 +399,11 @@ export function ExpenseAIAgent({
                                                 <span className={`font-semibold text-xs sm:text-sm ${isDone ? "text-zinc-500" : "text-zinc-900"}`}>
                                                     {item.itemName}
                                                 </span>
-                                                <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded-md shrink-0 ${
-                                                    item.recommendationType === "negotiate" ? "bg-amber-100 text-amber-800"
-                                                    : item.recommendationType === "bulk_order" ? "bg-blue-100 text-blue-800"
-                                                    : item.recommendationType === "fixed_price_lock" ? "bg-rose-100 text-rose-800"
-                                                    : "bg-emerald-100 text-emerald-800"
-                                                }`}>
+                                                <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded-md shrink-0 ${item.recommendationType === "negotiate" ? "bg-amber-100 text-amber-800"
+                                                        : item.recommendationType === "bulk_order" ? "bg-blue-100 text-blue-800"
+                                                            : item.recommendationType === "fixed_price_lock" ? "bg-rose-100 text-rose-800"
+                                                                : "bg-emerald-100 text-emerald-800"
+                                                    }`}>
                                                     {item.recommendationType.replace("_", " ")}
                                                 </span>
                                             </div>

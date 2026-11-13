@@ -6,6 +6,43 @@ import { User } from '@supabase/supabase-js';
 // Eliminates loading flickers and full-layout unmounts during client-side navigation
 let cachedUser: User | null = null;
 let hasResolvedInitialAuth = false;
+let handoffPromise: Promise<void> | null = null;
+
+async function consumeSupportHandoffHashOnce(): Promise<void> {
+    if (typeof window === 'undefined') return;
+    const hash = window.location.hash || '';
+    const match = hash.match(/cc_support_handoff=([^&]+)/);
+    if (!match?.[1]) return;
+
+    // Strip the hash immediately so tokens never remain in the address bar or browser history
+    window.history.replaceState(null, '', window.location.pathname + window.location.search);
+
+    try {
+        const decoded = JSON.parse(atob(decodeURIComponent(match[1])));
+        const accessToken = typeof decoded?.access_token === 'string' ? decoded.access_token : '';
+        const refreshToken = typeof decoded?.refresh_token === 'string' ? decoded.refresh_token : '';
+        const sessionId = typeof decoded?.sessionId === 'string' ? decoded.sessionId : '';
+
+        if (accessToken && refreshToken) {
+            await supabaseClient.auth.setSession({
+                access_token: accessToken,
+                refresh_token: refreshToken,
+            });
+            if (sessionId) {
+                await fetch('/api/super-admin/impersonation', {
+                    method: 'PATCH',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        Authorization: `Bearer ${accessToken}`,
+                    },
+                    body: JSON.stringify({ session_id: sessionId }),
+                }).catch(() => {});
+            }
+        }
+    } catch {
+        // Ignore malformed handoff payload; normal auth check will handle redirect
+    }
+}
 
 export function resetUserCache() {
     cachedUser = null;
@@ -25,6 +62,17 @@ export function useUser() {
         // 1. Initial Fetch with timeout safeguard
         async function getUser() {
             try {
+                if (typeof window !== 'undefined' && window.location.hash.includes('cc_support_handoff=')) {
+                    if (!handoffPromise) {
+                        handoffPromise = consumeSupportHandoffHashOnce().finally(() => {
+                            handoffPromise = null;
+                        });
+                    }
+                    await handoffPromise;
+                } else if (handoffPromise) {
+                    await handoffPromise;
+                }
+
                 const sessionPromise = supabaseClient.auth.getSession();
                 const timeoutPromise = new Promise<{ data: { session: null }; error: Error }>((resolve) =>
                     setTimeout(() => resolve({ data: { session: null }, error: new Error('Auth session timeout') }), 5000)

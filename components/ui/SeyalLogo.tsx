@@ -13,6 +13,8 @@ export interface SeyalLogoProps {
   onClick?: () => void;
 }
 
+export type CounterCubLogoProps = SeyalLogoProps;
+
 const SIZE_MAP: Record<string, number> = {
   xs: 24,
   sm: 30,
@@ -21,7 +23,7 @@ const SIZE_MAP: Record<string, number> = {
   xl: 56,
 };
 
-// Flag to control SeyalPro logo icon visibility (temporarily disabled)
+// Flag to control CounterCub logo icon visibility
 const SHOW_LOGO_ICON = false;
 
 export function SeyalLogo({
@@ -39,7 +41,7 @@ export function SeyalLogo({
 
   const reactId = useId();
   // Safe ID without colons for SVG defs
-  const id = `seyal-${reactId.replace(/[^a-zA-Z0-9_-]/g, "")}`;
+  const id = `countercub-${reactId.replace(/[^a-zA-Z0-9_-]/g, "")}`;
 
   const pxSize = typeof size === "number" ? size : SIZE_MAP[size] || 36;
 
@@ -51,7 +53,7 @@ export function SeyalLogo({
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
       className={cn("shrink-0 select-none", className)}
-      aria-label="SeyalPro Logo"
+      aria-label="CounterCub Logo"
     >
       <defs>
         {/* Background Primary Royal to Cyan Gradient */}
@@ -115,7 +117,7 @@ export function SeyalLogo({
         </>
       )}
 
-      {/* S Upper Kinetic Ribbon Arc (Top-Right -> Top Crest -> Left Arch -> Center Drive) */}
+      {/* Upper Kinetic Ribbon Arc */}
       <path
         d="M 28 12 C 28 8.8 24.8 7 20 7 C 14 7 10.5 10.5 10.5 15.2 C 10.5 19.5 14.2 21.8 19.2 23.4 L 23.5 24.8 C 26 25.6 28 26.8 28 29"
         stroke={`url(#${id}-ribbon-top)`}
@@ -124,7 +126,7 @@ export function SeyalLogo({
         strokeLinejoin="round"
       />
 
-      {/* S Lower Kinetic Ribbon Arc (Bottom-Left -> Bottom Base -> Right Arch -> Center Drive) */}
+      {/* Lower Kinetic Ribbon Arc */}
       <path
         d="M 12 28 C 12 31.2 15.2 33 20 33 C 26 33 29.5 29.5 29.5 24.8 C 29.5 20.5 25.8 18.2 20.8 16.6 L 16.5 15.2 C 14 14.4 12 13.2 12 11"
         stroke={`url(#${id}-ribbon-bot)`}
@@ -133,7 +135,7 @@ export function SeyalLogo({
         strokeLinejoin="round"
       />
 
-      {/* Central Action Nexus (Electric Cyan Halo + Crisp White Spark) */}
+      {/* Central Action Nexus */}
       <circle cx="20" cy="20" r="3" fill="#38BDF8" opacity="0.35" />
       <path
         d="M 20 17.5 L 20.8 19.2 L 22.5 20 L 20.8 20.8 L 20 22.5 L 19.2 20.8 L 17.5 20 L 19.2 19.2 Z"
@@ -151,7 +153,7 @@ export function SeyalLogo({
       ? "text-[#0F172A]"
       : theme === "dark"
       ? "text-white"
-      : "text-white"; // default for dark sidebar
+      : "text-white";
 
   return (
     <div
@@ -164,10 +166,11 @@ export function SeyalLogo({
     >
       {markSvg}
       <h2 className={cn("font-extrabold tracking-tight truncate leading-none text-base", textColorClass)}>
-        Seyal<span className="text-blue-400 font-black">Pro</span>
+        Counter<span className="text-blue-400 font-black">Cub</span>
       </h2>
     </div>
   );
 }
 
+export const CounterCubLogo = SeyalLogo;
 export default SeyalLogo;

@@ -10,20 +10,32 @@ import { QueryProvider } from "@/components/providers/QueryProvider";
 import { AppShell } from "@/components/layout/AppShell";
 
 export const metadata: Metadata = {
-  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || "https://seyalpro.in"),
+  metadataBase: new URL(
+    process.env.NEXT_PUBLIC_APP_URL || "https://www.countercub.com"
+  ),
   title: {
-    default: "SeyalPro — Business Operating System",
-    template: "%s | SeyalPro",
+    default: "CounterCub — Business Operating System",
+    template: "%s | CounterCub",
   },
-  description: "Enterprise multi-tenant retail point-of-sale, inventory intelligence, timesheet tracking, billing, and automated staff payroll platform.",
-  applicationName: "SeyalPro",
-  authors: [{ name: "SeyalPro" }],
-  keywords: ["POS", "Point of Sale", "Billing", "Inventory", "Retail Management", "Timesheet", "Payroll", "SeyalPro"],
+  description:
+    "Enterprise multi-tenant retail point-of-sale, inventory intelligence, timesheet tracking, billing, and automated staff payroll platform.",
+  applicationName: "CounterCub",
+  authors: [{ name: "CounterCub" }],
+  keywords: [
+    "POS",
+    "Point of Sale",
+    "Billing",
+    "Inventory",
+    "Retail Management",
+    "Timesheet",
+    "Payroll",
+    "CounterCub",
+  ],
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "SeyalPro",
+    title: "CounterCub",
   },
   formatDetection: {
     telephone: false,
@@ -31,15 +43,17 @@ export const metadata: Metadata = {
   openGraph: {
     type: "website",
     locale: "en_IN",
-    url: "https://seyalpro.in",
-    siteName: "SeyalPro",
-    title: "SeyalPro — Business Operating System",
-    description: "Enterprise multi-tenant retail point-of-sale, inventory intelligence, timesheet tracking, billing, and automated staff payroll platform.",
+    url: "https://www.countercub.com",
+    siteName: "CounterCub",
+    title: "CounterCub — Business Operating System",
+    description:
+      "Enterprise multi-tenant retail point-of-sale, inventory intelligence, timesheet tracking, billing, and automated staff payroll platform.",
   },
   twitter: {
     card: "summary_large_image",
-    title: "SeyalPro — Business Operating System",
-    description: "Enterprise multi-tenant retail point-of-sale, inventory intelligence, timesheet tracking, billing, and automated staff payroll platform.",
+    title: "CounterCub — Business Operating System",
+    description:
+      "Enterprise multi-tenant retail point-of-sale, inventory intelligence, timesheet tracking, billing, and automated staff payroll platform.",
   },
 };
 

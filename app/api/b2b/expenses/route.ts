@@ -14,16 +14,14 @@ export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);
     const requestedBizId = searchParams.get("business_id");
 
-    const businessId = requestedBizId && requestedBizId !== "default"
-      ? requestedBizId
-      : caller.businessId;
-
-    if (!caller.isSuperAdmin && businessId !== caller.businessId) {
+    if (requestedBizId && requestedBizId !== "default" && requestedBizId !== caller.businessId) {
       return NextResponse.json(
         { error: "Forbidden: Cannot access expenses of another business." },
         { status: 403 }
       );
     }
+
+    const businessId = caller.businessId;
 
     // 1. Try relational table
     const { data: tableData, error: tableError } = await supa
@@ -83,18 +81,14 @@ export async function POST(req: Request) {
     const { user: caller, supa } = auth;
     const body = await req.json().catch(() => ({}));
 
-    const targetBizId = body.business_id && body.business_id !== "default"
-      ? body.business_id
-      : caller.businessId;
-
-    if (!caller.isSuperAdmin && targetBizId !== caller.businessId) {
+    if (body.business_id && body.business_id !== "default" && body.business_id !== caller.businessId) {
       return NextResponse.json(
         { error: "Forbidden: Cannot record expenses for another business." },
         { status: 403 }
       );
     }
 
-    const businessId = targetBizId;
+    const businessId = caller.businessId;
     const id = body.id || `exp-${Date.now()}`;
     const expensePayload = {
       id,

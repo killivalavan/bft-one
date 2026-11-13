@@ -429,9 +429,9 @@
     height: 100%;
     overflow: hidden;
     /* Full-resolution original; navy fallback while it loads. Anchored left so the
-       SeyalPro headline & feature row are always visible. */
+       CounterCub headline & feature row are always visible. */
     background-color: #0a1d45;
-    background-image: url("/images/seyalpro-login-hero.png");
+    background-image: url("/images/countercub-login-hero.jpg");
     background-size: cover;
     background-position: left center;
     background-repeat: no-repeat;

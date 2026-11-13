@@ -5,6 +5,7 @@ import { useRouter, usePathname } from "next/navigation";
 import { useUser } from "@/lib/hooks/useUser";
 import { useProfile } from "@/lib/hooks/useProfile";
 import { useTenant } from "@/lib/context/TenantContext";
+import { resolveCanonicalHostname } from "@/lib/tenant/hostnameResolver";
 import { Loader2, ShieldAlert } from "lucide-react";
 import Link from "next/link";
 
@@ -20,17 +21,32 @@ export default function ProtectedLayout({ children }: { children: React.ReactNod
   useEffect(() => {
     if (isLoading) return;
 
-    // 1. Unauthenticated redirect to login
+    const hostKind =
+      typeof window !== "undefined"
+        ? resolveCanonicalHostname(window.location.host)?.kind
+        : null;
+    const isPlatformAdminHost = hostKind === "platform_admin";
+
+    // 1. Unauthenticated redirect to appropriate login
     if (!user) {
-      const redirectUrl = pathname ? `/login?redirect=${encodeURIComponent(pathname)}` : "/login";
+      if (isPlatformAdminHost || pathname?.startsWith("/super-admin")) {
+        const redirectUrl =
+          pathname && pathname !== "/" && pathname !== "/super-admin"
+            ? `/super-admin-login?redirect=${encodeURIComponent(pathname)}`
+            : "/super-admin-login";
+        router.replace(redirectUrl);
+        return;
+      }
+      const redirectUrl = pathname && pathname !== "/" ? `/login?redirect=${encodeURIComponent(pathname)}` : "/login";
       router.replace(redirectUrl);
       return;
     }
 
     // 2. Super Admin route protection
-    if (pathname.startsWith("/super-admin") && pathname !== "/super-admin/login") {
-      if (!flags?.isSuperAdmin) {
-        router.replace("/");
+    // Only verify flags after profileLoading has finished and flags object is populated
+    if (isPlatformAdminHost || (pathname?.startsWith("/super-admin") && pathname !== "/super-admin-login")) {
+      if (!profileLoading && flags && !flags.isSuperAdmin) {
+        router.replace("/super-admin-login?error=not_super_admin");
         return;
       }
     }
@@ -52,7 +68,7 @@ export default function ProtectedLayout({ children }: { children: React.ReactNod
   }
 
   // 3. Store Admin route protection: Strictly block non-admins with Restricted Area screen
-  const isVisitingAdmin = pathname.startsWith("/admin");
+  const isVisitingAdmin = pathname?.startsWith("/admin");
   const isUserAdmin = Boolean(flags?.isAdmin || flags?.isSuperAdmin);
 
   if (isVisitingAdmin && !isUserAdmin) {

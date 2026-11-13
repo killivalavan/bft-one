@@ -12,8 +12,12 @@ import {
   Calendar, ArrowRight, Search, Download, CheckCircle2,
   PieChart, DollarSign, ChevronLeft, ChevronRight
 } from "lucide-react";
-import { INITIAL_BAKER_PRODUCTS, BakerProduct, capitalizeWords } from "../products/page";
-import { formatCafeName } from "@/lib/utils/bakerUtils";
+import {
+  INITIAL_BAKER_PRODUCTS,
+  type BakerProduct,
+  capitalizeWords,
+  formatCafeName,
+} from "@/lib/utils/bakerUtils";
 import { useB2BWorkspace } from "@/lib/hooks/useB2BData";
 
 export default function BakerReportsPage() {
@@ -96,12 +100,13 @@ export default function BakerReportsPage() {
 
   // Product Map for quick cost lookup
   const productCostMap = useMemo(() => {
-    const map: Record<string, { selling_price: number; making_cost: number; unit_profit: number }> = {};
+    const map: Record<string, { selling_price: number; making_cost: number; unit_profit: number; has_verified_cost?: boolean }> = {};
     products.forEach((p) => {
       const cleanKey = (p.name || "").trim().toLowerCase();
       const rawPrice = Number(p.selling_price !== undefined && p.selling_price !== null ? p.selling_price : (p.rate ?? p.price ?? 0));
       const sPrice = Number.isFinite(rawPrice) ? Math.max(0, rawPrice) : 0;
-      const rawCost = Number(p.making_cost !== undefined && p.making_cost !== null ? p.making_cost : (sPrice > 0 ? Math.round(sPrice * 0.42) : 0));
+      const isExplicitlyUnverified = (p as any).has_verified_cost === false;
+      const rawCost = isExplicitlyUnverified ? Number(p.making_cost ?? 0) : Number(p.making_cost !== undefined && p.making_cost !== null ? p.making_cost : (sPrice > 0 ? Math.round(sPrice * 0.42) : 0));
       const mCost = Number.isFinite(rawCost) ? Math.max(0, rawCost) : 0;
       const rawProfit = Number(p.unit_profit !== undefined && p.unit_profit !== null ? p.unit_profit : (sPrice - mCost));
       const uProfit = Number.isFinite(rawProfit) ? rawProfit : sPrice - mCost;
@@ -109,6 +114,7 @@ export default function BakerReportsPage() {
         selling_price: sPrice,
         making_cost: mCost,
         unit_profit: uProfit,
+        has_verified_cost: !isExplicitlyUnverified && mCost > 0,
       };
     });
     return map;
@@ -210,7 +216,8 @@ export default function BakerReportsPage() {
         const qty = Number(it.qty) || 0;
         const itName = (it.name || "").trim().toLowerCase();
         const pInfo = productCostMap[itName];
-        const unitCost = pInfo ? pInfo.making_cost : (Number(it.rate) || 0) * 0.4;
+        const isUnverifiedImportItem = it.has_verified_cost === false || (pInfo && pInfo.has_verified_cost === false);
+        const unitCost = isUnverifiedImportItem ? Number(it.making_cost ?? pInfo?.making_cost ?? 0) : (pInfo ? pInfo.making_cost : (Number(it.rate) || 0) * 0.4);
         slipCost += qty * unitCost;
       });
 
@@ -254,7 +261,8 @@ export default function BakerReportsPage() {
         const amount = Number.isFinite(rawAmount) ? rawAmount : qty * rate;
 
         const pInfo = productCostMap[cleanKey];
-        const unitCost = pInfo ? pInfo.making_cost : Math.round(rate * 0.42);
+        const isUnverifiedImportItem = it.has_verified_cost === false || (pInfo && pInfo.has_verified_cost === false);
+        const unitCost = isUnverifiedImportItem ? Number(it.making_cost ?? pInfo?.making_cost ?? 0) : (pInfo ? pInfo.making_cost : Math.round(rate * 0.42));
         const totalCost = qty * unitCost;
         const profit = amount - totalCost;
 
@@ -302,6 +310,20 @@ export default function BakerReportsPage() {
     periodTotalRevenue > 0 ? Math.round((periodTotalProfit / periodTotalRevenue) * 100) : 0;
   const isProfitPositive = periodTotalProfit >= 0;
   const isMarginPositive = periodMarginPct >= 0;
+
+  const unverifiedCostItemsCount = useMemo(() => {
+    let count = 0;
+    filteredInvoices.forEach((inv) => {
+      (inv.items || []).forEach((it: any) => {
+        const cleanKey = (it.name || "").trim().toLowerCase();
+        const pInfo = productCostMap[cleanKey];
+        if (it.has_verified_cost === false || (pInfo && pInfo.has_verified_cost === false)) {
+          count += 1;
+        }
+      });
+    });
+    return count;
+  }, [filteredInvoices, productCostMap]);
 
   // Filtered views based on search query
   const filteredCafes = useMemo(() => {
@@ -737,6 +759,20 @@ export default function BakerReportsPage() {
         </div>
 
         {/* ==================================================== */}
+        {unverifiedCostItemsCount > 0 && (
+          <div className="p-3.5 sm:p-4 rounded-2xl bg-amber-50 border border-amber-200/90 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+            <div className="text-xs text-amber-900">
+              <span className="font-extrabold">Historical Cost Notice:</span>{" "}
+              {unverifiedCostItemsCount} imported line item{unverifiedCostItemsCount === 1 ? "" : "s"} in this period did not include verified making/unit cost data during Smart Import. Gross Sales is exact, while Production Cost reflects only verified costs.
+            </div>
+            <Link
+              href="/b2b/products"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white border border-amber-300 text-amber-900 text-xs font-bold hover:bg-amber-100/60 transition shrink-0"
+            >
+              Update Product Costs <ArrowRight size={13} />
+            </Link>
+          </div>
+        )}
         {/* VIEW SELECTOR: CAFÉ-WISE vs PRODUCT-WISE BREAKDOWN   */}
         {/* ==================================================== */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-3 sm:p-3.5 rounded-3xl border border-[#E2E8F0] shadow-xs">

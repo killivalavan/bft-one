@@ -19,8 +19,7 @@ import {
   ROYAL_BAKER_BIZ_ID,
 } from "@/lib/data/royalBakerDemoData";
 import { useB2BWorkspace } from "@/lib/hooks/useB2BData";
-import { formatCafeName } from "@/lib/utils/bakerUtils";
-import { capitalizeWords } from "./products/page";
+import { formatCafeName, capitalizeWords } from "@/lib/utils/bakerUtils";
 import { fetchB2BClients, B2B_CUSTOMERS_UPDATED_EVENT } from "@/lib/services/b2bClients";
 import StoreActivityMonitor, { MonitorStoreRecord } from "@/components/baker/StoreActivityMonitor";
 import DispatchClientIntelligence from "@/components/baker/DispatchClientIntelligence";

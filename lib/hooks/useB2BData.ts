@@ -181,6 +181,38 @@ export function useSaveProductMutation(bizId: string | undefined) {
   });
 }
 
+export function useDeleteProductMutation(bizId: string | undefined) {
+  const queryClient = useQueryClient();
+  const isValidBizId = Boolean(bizId && bizId !== "default" && bizId.trim() !== "");
+
+  return useMutation({
+    mutationFn: async (productId: string) => {
+      if (!isValidBizId) {
+        throw new Error("Cannot delete product: valid business context required");
+      }
+      const headers = await getAuthHeaders();
+      const res = await fetch(
+        `/api/b2b/products?id=${encodeURIComponent(productId)}&business_id=${encodeURIComponent(bizId!)}`,
+        {
+          method: "DELETE",
+          headers,
+        }
+      );
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || "Failed to delete product");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      if (bizId) {
+        queryClient.invalidateQueries({ queryKey: ["b2b", bizId, "products"] });
+        queryClient.invalidateQueries({ queryKey: ["b2b", bizId, "workspace"] });
+      }
+    },
+  });
+}
+
 export function useB2BPayments(bizId: string | undefined) {
   const isValidBizId = Boolean(bizId && bizId !== "default" && bizId.trim() !== "");
 

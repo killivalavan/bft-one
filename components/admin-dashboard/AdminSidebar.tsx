@@ -8,11 +8,16 @@ import { useProfile } from "@/lib/hooks/useProfile";
 import { useTenant } from "@/lib/context/TenantContext";
 import { supabaseClient } from "@/lib/supabaseClient";
 import { cn } from "@/lib/utils/cn";
+import {
+  getBusinessStoreId,
+  formatDisplayUserIdentifier,
+} from "@/lib/utils/storeIdGenerator";
 import { SeyalLogo } from "@/components/ui/SeyalLogo";
 import {
   PanelLeftClose,
   PanelLeftOpen,
   LayoutDashboard,
+  BarChart3,
   Coffee,
   TrendingUp,
   FileText,
@@ -77,7 +82,7 @@ export function AdminSidebar({
   isCollapsed,
   onToggleCollapse,
   onItemClick,
-  storeName = "SeyalPro Store",
+  storeName = "CounterCub Store",
   onSelectInternalView,
   isGridViewActive = false,
   onToggleGridView,
@@ -251,6 +256,8 @@ export function AdminSidebar({
 
   const displayName = userEmail ? userEmail.split("@")[0] : null;
   const initial = displayName ? displayName[0].toUpperCase() : (isAdmin ? "A" : "S");
+  const { storeId: storeReferenceId } = getBusinessStoreId(business);
+  const displayUserIdentifier = formatDisplayUserIdentifier(userEmail);
 
   async function handleLogout() {
     setProfileMenuOpen(false);
@@ -406,6 +413,16 @@ export function AdminSidebar({
       colorScheme: "cyan",
     },
     {
+      id: "admin-sales",
+      label: "Cash & UPI Analytics",
+      href: "/admin/sales",
+      icon: BarChart3,
+      category: "FINANCE",
+      adminOnly: true,
+      badge: "Chart",
+      colorScheme: "emerald",
+    },
+    {
       id: "expenses",
       label: "Daily Expenses",
       href: "/expenses",
@@ -434,11 +451,29 @@ export function AdminSidebar({
         ]
       : []),
     {
+      id: "smart-import",
+      label: "Smart Import",
+      href: "/smart-import",
+      icon: Sparkles,
+      category: "ADMIN",
+      badge: "AI",
+      colorScheme: "blue",
+    },
+    {
       id: "admin-store",
       label: "Business Profile",
       href: "/admin/store",
       icon: Store,
       category: "ADMIN",
+      colorScheme: "blue",
+    },
+    {
+      id: "admin-subscription",
+      label: "My Subscription",
+      href: "/admin/subscription",
+      icon: CreditCard,
+      category: "ADMIN",
+      adminOnly: true,
       colorScheme: "blue",
     },
     {
@@ -507,6 +542,15 @@ export function AdminSidebar({
       colorScheme: "emerald",
     },
     {
+      id: "baker-sales-analytics",
+      label: "Cash & UPI Analytics",
+      href: "/admin/sales",
+      icon: BarChart3,
+      category: "FINANCE",
+      badge: "Chart",
+      colorScheme: "emerald",
+    },
+    {
       id: "baker-reports",
       label: "Profit & Analytics",
       href: "/b2b/reports",
@@ -560,7 +604,16 @@ export function AdminSidebar({
       href: "/b2b/broadcasts",
       icon: Radio,
       category: "MANAGEMENT",
-      badge: "SeyalPro",
+      badge: "CounterCub",
+      colorScheme: "blue",
+    },
+    {
+      id: "baker-smart-import",
+      label: "Smart Import",
+      href: "/b2b/smart-import",
+      icon: Sparkles,
+      category: "MANAGEMENT",
+      badge: "AI",
       colorScheme: "blue",
     },
     {
@@ -570,6 +623,15 @@ export function AdminSidebar({
       icon: Store,
       category: "MANAGEMENT",
       colorScheme: "slate",
+    },
+    {
+      id: "baker-subscription",
+      label: "My Subscription",
+      href: "/admin/subscription",
+      icon: CreditCard,
+      category: "MANAGEMENT",
+      adminOnly: true,
+      colorScheme: "blue",
     },
     {
       id: "baker-support",
@@ -588,11 +650,13 @@ export function AdminSidebar({
   const isItemActive = (item: NavItemConfig) => {
     if (item.isLocked) return false;
     if (item.id === "dashboard" && pathname === "/") return true;
+    if ((item.id === "admin-sales" || item.id === "baker-sales-analytics") && pathname === "/admin/sales") return true;
     if (item.id === "baker-dashboard" && (pathname === "/b2b" || pathname === "/baker")) return true;
     if ((item.id === "admin-users" || item.id === "baker-users") && (pathname === "/admin/users" || pathname === "/b2b/users" || pathname === "/admin")) return true;
     if ((item.id === "admin-store" || item.id === "baker-profile") && (pathname === "/admin/store" || pathname === "/b2b/store")) return true;
     if ((item.id === "fill-timesheet" || item.id === "baker-fill-timesheet") && pathname === "/admin/fill-timesheet") return true;
     if ((item.id === "timesheet" || item.id === "baker-timesheet") && pathname === "/timesheet") return true;
+    if ((item.id === "smart-import" || item.id === "baker-smart-import") && (pathname.startsWith("/smart-import") || pathname.startsWith("/b2b/smart-import") || pathname.startsWith("/baker/smart-import"))) return true;
     if (item.id === "baker-support" && (pathname === "/b2b/support" || pathname === "/baker/support" || pathname === "/admin/support")) return true;
     return pathname === item.href;
   };
@@ -671,7 +735,7 @@ export function AdminSidebar({
                 </p>
               </div>
               <span className="text-[9.5px] font-semibold text-slate-400 uppercase tracking-wider block mt-0.5">
-                {isBakerActive ? "B2B Supply & Wholesale" : "Connected Store"}
+                {storeReferenceId ? `ID: ${storeReferenceId}` : (isBakerActive ? "B2B Supply & Wholesale" : "Connected Store")}
               </span>
             </div>
           </div>
@@ -828,7 +892,7 @@ export function AdminSidebar({
                 )}
               </div>
               <p className="text-[10px] text-slate-400 truncate leading-tight mt-0.5">
-                {userEmail || (flags?.isAdmin ? "admin@seyalpro.com" : "staff@seyalpro.com")}
+                {displayUserIdentifier || (flags?.isAdmin ? "admin@countercub.com" : "staff@countercub.com")}
               </p>
             </div>
           </div>
@@ -900,6 +964,11 @@ export function AdminSidebar({
                   {storeName}
                 </p>
               </div>
+              {storeReferenceId && (
+                <span className="text-[10px] font-mono font-bold text-blue-300/90 tracking-wider block mt-0.5 truncate">
+                  ID: {storeReferenceId}
+                </span>
+              )}
             </div>
           </div>
 
@@ -947,7 +1016,7 @@ export function AdminSidebar({
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 absolute top-1 right-1" />
             <div className="absolute left-full top-1/2 -translate-y-1/2 ml-2.5 px-2.5 py-1.5 bg-slate-900 text-white text-xs rounded-lg shadow-xl border border-slate-700 whitespace-nowrap z-50 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity">
               <span className="font-bold">{storeName}</span>
-              <span className="text-[10px] text-slate-400 block">{isBakerActive ? "B2B Supply & Wholesale" : "Connected Store"}</span>
+              <span className="text-[10px] text-slate-400 block">{storeReferenceId ? `ID: ${storeReferenceId}` : (isBakerActive ? "B2B Supply & Wholesale" : "Connected Store")}</span>
             </div>
           </div>
 
@@ -1215,7 +1284,7 @@ export function AdminSidebar({
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className="text-xs font-bold text-white capitalize truncate">{displayName || userRoleTitle}</p>
-                  <p className="text-[10px] text-slate-400 truncate">{userEmail}</p>
+                  <p className="text-[10px] text-slate-400 truncate">{displayUserIdentifier}</p>
                 </div>
               </div>
               <div className="mt-2 flex items-center justify-between">
@@ -1341,7 +1410,7 @@ export function AdminSidebar({
                   )}
                 </div>
                 <p className="text-[10px] text-slate-400 truncate leading-tight mt-0.5" title={userEmail}>
-                  {userEmail || (flags?.isAdmin ? "admin@seyalpro.com" : "staff@seyalpro.com")}
+                  {displayUserIdentifier || (flags?.isAdmin ? "admin@countercub.com" : "staff@countercub.com")}
                 </p>
               </div>
             </div>
@@ -1428,7 +1497,7 @@ export function AdminSidebar({
           <div className="flex items-start gap-2.5 p-3 rounded-2xl bg-blue-50/80 border border-blue-100 text-xs text-blue-900 font-medium">
             <Shield size={16} className="text-blue-600 shrink-0 mt-0.5" />
             <p className="leading-snug">
-              Need access to both modules? Contact your Super Administrator from the SeyalPro Command Center to enable dual-mode access.
+              Need access to both modules? Contact your Super Administrator from the CounterCub Command Center to enable dual-mode access.
             </p>
           </div>
 

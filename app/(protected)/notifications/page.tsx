@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { useEffect, useState, useMemo } from "react";
 import { supabaseClient } from "@/lib/supabaseClient";
-import { Bell, CheckCheck, Radio, Box, Filter, Sparkles, Trash2 } from "lucide-react";
+import { Bell, CheckCheck, Radio, Box, Trash2 } from "lucide-react";
 import { NotificationList } from "@/components/notifications/NotificationList";
 import { Notification } from "@/components/notifications/NotificationItem";
 import { useTenant } from "@/lib/context/TenantContext";
@@ -128,26 +128,33 @@ export default function NotificationsPage() {
   };
 
   useEffect(() => {
+    if (!business?.id) {
+      setItems([]);
+      setLoading(false);
+      return;
+    }
+    const activeBizId = business.id;
     (async () => {
       setLoading(true);
-      const query = supabaseClient
+      const { data } = await supabaseClient
         .from('notifications')
         .select('id,message,kind,created_at,product_id,meta')
+        .eq('business_id', activeBizId)
         .order('created_at', { ascending: false });
-      if (business?.id) {
-        query.eq('business_id', business.id);
-      }
-      const { data } = await query;
       setItems((data as Notification[]) || []);
       setLoading(false);
     })();
     const ch = supabaseClient
-      .channel('notif-live')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications' }, (payload: any) => {
-        if (!business?.id || payload.new?.business_id === business.id) {
-          setItems(prev => [payload.new as Notification, ...prev]);
+      .channel(`notif-live-${activeBizId}`)
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'notifications', filter: `business_id=eq.${activeBizId}` },
+        (payload: any) => {
+          if (payload.new?.business_id === activeBizId) {
+            setItems(prev => [payload.new as Notification, ...prev]);
+          }
         }
-      })
+      )
       .subscribe();
     return () => { try { supabaseClient.removeChannel(ch); } catch { } };
   }, [business?.id]);

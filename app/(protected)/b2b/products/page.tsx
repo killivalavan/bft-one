@@ -10,89 +10,13 @@ import {
   Boxes, Plus, Trash2, Edit3, TrendingUp, Sparkles,
   ArrowRight, Search, Check, RefreshCw, DollarSign, Package
 } from "lucide-react";
-import { useB2BProducts, useSaveProductMutation } from "@/lib/hooks/useB2BData";
-
-export interface BakerProduct {
-  id: string;
-  name: string;
-  selling_price: number;
-  rate?: number;
-  price?: number;
-  making_cost: number;
-  unit_profit: number;
-  profit_margin_pct: number;
-  unit: string;
-  is_active: boolean;
-  category?: string;
-  min_order_qty?: number;
-  stock_available?: number;
-}
-
-export function capitalizeWords(str: string): string {
-  if (!str) return "";
-  return str
-    .trim()
-    .replace(/\s+/g, " ")
-    .split(" ")
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-    .join(" ");
-}
-
-export function normalizeBakerProduct(p: any): BakerProduct {
-  if (!p) {
-    return {
-      id: `bp-${Date.now()}`,
-      name: "Product Item",
-      selling_price: 0,
-      rate: 0,
-      making_cost: 0,
-      unit_profit: 0,
-      profit_margin_pct: 0,
-      unit: "Pcs",
-      is_active: true,
-    };
-  }
-
-  const rawPrice = Number(p.selling_price !== undefined && p.selling_price !== null ? p.selling_price : (p.rate ?? p.price ?? 0));
-  const validPrice = Number.isFinite(rawPrice) ? Math.max(0, rawPrice) : 0;
-
-  const rawCost = Number(p.making_cost !== undefined && p.making_cost !== null ? p.making_cost : (validPrice > 0 ? Math.round(validPrice * 0.42) : 0));
-  const validCost = Number.isFinite(rawCost) ? Math.max(0, rawCost) : 0;
-
-  const rawProfit = Number(p.unit_profit !== undefined && p.unit_profit !== null ? p.unit_profit : (validPrice - validCost));
-  const validProfit = Number.isFinite(rawProfit) ? rawProfit : validPrice - validCost;
-
-  const rawMargin = Number(
-    p.profit_margin_pct !== undefined && p.profit_margin_pct !== null
-      ? p.profit_margin_pct
-      : (validPrice > 0 ? Math.round(((validProfit / validPrice) * 100) * 10) / 10 : 0)
-  );
-  const validMargin = Number.isFinite(rawMargin) ? rawMargin : 0;
-
-  return {
-    id: String(p.id || `bp-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`),
-    name: capitalizeWords(String(p.name || "Bakery Item")),
-    selling_price: validPrice,
-    rate: validPrice,
-    making_cost: validCost,
-    unit_profit: validProfit,
-    profit_margin_pct: validMargin,
-    unit: String(p.unit || "Pcs"),
-    is_active: p.is_active !== undefined ? Boolean(p.is_active) : true,
-    category: p.category || "General",
-    min_order_qty: Number(p.min_order_qty || 1),
-    stock_available: Number(p.stock_available || 0),
-  };
-}
-
-export const INITIAL_BAKER_PRODUCTS: BakerProduct[] = [
-  { id: "bp-1", name: "Choco Walnut Brownie", selling_price: 45, making_cost: 20, unit_profit: 25, profit_margin_pct: 55.6, unit: "Pcs", is_active: true },
-  { id: "bp-2", name: "Classic Tea Cake", selling_price: 30, making_cost: 12, unit_profit: 18, profit_margin_pct: 60.0, unit: "Pcs", is_active: true },
-  { id: "bp-3", name: "Rich Jam Cake", selling_price: 35, making_cost: 14, unit_profit: 21, profit_margin_pct: 60.0, unit: "Pcs", is_active: true },
-  { id: "bp-4", name: "Banana Walnut Bread", selling_price: 50, making_cost: 22, unit_profit: 28, profit_margin_pct: 56.0, unit: "Pcs", is_active: true },
-  { id: "bp-5", name: "Choco Chip Cookies (Box)", selling_price: 60, making_cost: 25, unit_profit: 35, profit_margin_pct: 58.3, unit: "Box", is_active: true },
-  { id: "bp-6", name: "Vanilla Cupcake", selling_price: 30, making_cost: 11, unit_profit: 19, profit_margin_pct: 63.3, unit: "Pcs", is_active: true },
-];
+import { useB2BProducts, useSaveProductMutation, useDeleteProductMutation } from "@/lib/hooks/useB2BData";
+import {
+  type BakerProduct,
+  capitalizeWords,
+  normalizeBakerProduct,
+  INITIAL_BAKER_PRODUCTS,
+} from "@/lib/utils/bakerUtils";
 
 export default function BakerProductsPage() {
   const { business } = useTenant();
@@ -114,14 +38,15 @@ export default function BakerProductsPage() {
   // Authoritative cloud products via TanStack Query
   const { data: cloudProducts } = useB2BProducts(bizId);
   const saveProductMutation = useSaveProductMutation(bizId);
+  const deleteProductMutation = useDeleteProductMutation(bizId);
 
   // Load from local storage cache initially
   useEffect(() => {
     try {
       const stored = localStorage.getItem(`bftone_baker_products_${bizId}`);
-      if (stored) {
+      if (stored !== null) {
         const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed) && parsed.length > 0) {
+        if (Array.isArray(parsed)) {
           setProducts(parsed.map(normalizeBakerProduct));
           return;
         }
@@ -134,7 +59,7 @@ export default function BakerProductsPage() {
 
   // Synchronize cloud products from TanStack Query
   useEffect(() => {
-    if (cloudProducts && Array.isArray(cloudProducts) && cloudProducts.length > 0) {
+    if (Array.isArray(cloudProducts)) {
       const normalized = cloudProducts.map(normalizeBakerProduct);
       setProducts(normalized);
       try {
@@ -143,29 +68,28 @@ export default function BakerProductsPage() {
     }
   }, [cloudProducts, bizId]);
 
-  const saveProductsToStorage = (updated: BakerProduct[]) => {
+  const persistLocalProducts = (updated: BakerProduct[]) => {
     const normalizedList = updated.map(normalizeBakerProduct);
     setProducts(normalizedList);
     try {
       localStorage.setItem(`bftone_baker_products_${bizId}`, JSON.stringify(normalizedList));
     } catch {}
+  };
 
-    // Asynchronously push to Supabase via TanStack mutation
-    if (normalizedList.length > 0) {
-      const lastModified = normalizedList[0];
-      saveProductMutation.mutateAsync({
-        id: lastModified.id,
-        name: lastModified.name,
-        selling_price: lastModified.selling_price,
-        rate: lastModified.selling_price,
-        making_cost: lastModified.making_cost,
-        unit_profit: lastModified.unit_profit,
-        profit_margin_pct: lastModified.profit_margin_pct,
-        unit: lastModified.unit,
-        is_active: lastModified.is_active,
-        category: lastModified.category,
-      }).catch((e) => console.warn("Cloud product note:", e));
-    }
+  const syncProductToCloud = async (targetProduct: BakerProduct) => {
+    const toSync = normalizeBakerProduct(targetProduct);
+    await saveProductMutation.mutateAsync({
+      id: toSync.id,
+      name: toSync.name,
+      selling_price: toSync.selling_price,
+      rate: toSync.selling_price,
+      making_cost: toSync.making_cost,
+      unit_profit: toSync.unit_profit,
+      profit_margin_pct: toSync.profit_margin_pct,
+      unit: toSync.unit,
+      is_active: toSync.is_active,
+      category: toSync.category,
+    });
   };
 
   const handleOpenAddModal = () => {
@@ -186,7 +110,7 @@ export default function BakerProductsPage() {
     setIsModalOpen(true);
   };
 
-  const handleSaveProduct = (e: React.FormEvent) => {
+  const handleSaveProduct = async (e: React.FormEvent) => {
     e.preventDefault();
     const sPrice = parseFloat(sellingPrice);
     const mCost = parseFloat(makingCost) || 0;
@@ -204,39 +128,46 @@ export default function BakerProductsPage() {
     const marginPct = sPrice > 0 ? parseFloat(((uProfit / sPrice) * 100).toFixed(1)) : 0;
     const cleanName = capitalizeWords(name);
 
-    if (editingProduct) {
-      const updated = products.map((p) =>
-        p.id === editingProduct.id
-          ? {
-              ...p,
-              name: cleanName,
-              selling_price: sPrice,
-              making_cost: mCost,
-              unit_profit: uProfit,
-              profit_margin_pct: marginPct,
-              unit,
-            }
-          : p
-      );
-      saveProductsToStorage(updated);
-      toast({ title: "Product Updated! 📦", description: `${cleanName} updated with ₹${uProfit} unit profit.` });
-    } else {
-      const newProd: BakerProduct = {
-        id: `bp-${Date.now()}`,
-        name: cleanName,
-        selling_price: sPrice,
-        making_cost: mCost,
-        unit_profit: uProfit,
-        profit_margin_pct: marginPct,
-        unit,
-        is_active: true,
-      };
-      const updated = [newProd, ...products];
-      saveProductsToStorage(updated);
-      toast({ title: "Product Created! 📦", description: `${cleanName} added with ₹${uProfit} unit profit.` });
-    }
+    try {
+      if (editingProduct) {
+        const editedProd: BakerProduct = {
+          ...editingProduct,
+          name: cleanName,
+          selling_price: sPrice,
+          making_cost: mCost,
+          unit_profit: uProfit,
+          profit_margin_pct: marginPct,
+          unit,
+        };
+        await syncProductToCloud(editedProd);
+        const updated = products.map((p) => (p.id === editingProduct.id ? editedProd : p));
+        persistLocalProducts(updated);
+        toast({ title: "Product Updated! 📦", description: `${cleanName} updated with ₹${uProfit} unit profit.` });
+      } else {
+        const newProd: BakerProduct = {
+          id: `bp-${Date.now()}`,
+          name: cleanName,
+          selling_price: sPrice,
+          making_cost: mCost,
+          unit_profit: uProfit,
+          profit_margin_pct: marginPct,
+          unit,
+          is_active: true,
+        };
+        await syncProductToCloud(newProd);
+        const updated = [newProd, ...products];
+        persistLocalProducts(updated);
+        toast({ title: "Product Created! 📦", description: `${cleanName} added with ₹${uProfit} unit profit.` });
+      }
 
-    setIsModalOpen(false);
+      setIsModalOpen(false);
+    } catch (err: any) {
+      toast({
+        title: "Cannot Save Product",
+        description: err?.message || "Product limit reached or server rejected the request.",
+        variant: "error",
+      });
+    }
   };
 
   const handleDeleteProduct = async (id: string, prodName: string) => {
@@ -248,13 +179,42 @@ export default function BakerProductsPage() {
     });
     if (!ok) return;
     const updated = products.filter((p) => p.id !== id);
-    saveProductsToStorage(updated);
-    toast({ title: "Product Removed", description: `${prodName} deleted from catalog.` });
+    persistLocalProducts(updated);
+    try {
+      const wasInCloud = Array.isArray(cloudProducts) && cloudProducts.some((p: any) => p.id === id);
+      if (!wasInCloud && Array.isArray(cloudProducts) && cloudProducts.length === 0 && updated.length > 0) {
+        // Persist remaining initial demo products to cloud so they don't disappear on refetch
+        for (const item of updated) {
+          await syncProductToCloud(item);
+        }
+      } else {
+        await deleteProductMutation.mutateAsync(id);
+      }
+      toast({ title: "Product Removed", description: `${prodName} deleted from catalog.` });
+    } catch (e: any) {
+      toast({
+        title: "Cloud Delete Failed",
+        description: e?.message || "Could not remove product from server.",
+        variant: "error",
+      });
+    }
   };
 
-  const handleToggleActive = (id: string) => {
-    const updated = products.map((p) => (p.id === id ? { ...p, is_active: !p.is_active } : p));
-    saveProductsToStorage(updated);
+  const handleToggleActive = async (id: string) => {
+    const target = products.find((p) => p.id === id);
+    if (!target) return;
+    const toggledProd: BakerProduct = { ...target, is_active: !target.is_active };
+    try {
+      await syncProductToCloud(toggledProd);
+      const updated = products.map((p) => (p.id === id ? toggledProd : p));
+      persistLocalProducts(updated);
+    } catch (err: any) {
+      toast({
+        title: "Cannot Update Product Status",
+        description: err?.message || "Active product limit reached for your plan.",
+        variant: "error",
+      });
+    }
   };
 
   // Metrics

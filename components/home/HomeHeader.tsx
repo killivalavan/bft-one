@@ -60,7 +60,7 @@ export function HomeHeader({ name }: HomeHeaderProps) {
                     </div>
                     <div>
                         <div className="text-xs font-bold text-[#0F172A] flex items-center gap-1.5">
-                            SeyalPro Core
+                            CounterCub Core
                             <span className="px-1.5 py-0.2 rounded bg-[#EFF6FF] text-[#1E40AF] border border-[#BFDBFE] text-[10px] font-extrabold uppercase">v2.4</span>
                         </div>
                         <div className="text-[11px] text-[#64748B] font-medium">All services connected & synced</div>

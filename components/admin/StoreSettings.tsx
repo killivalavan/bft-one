@@ -20,12 +20,15 @@ import { saveShopGeofence, parseCoordinatesInput, metersBetween } from "@/lib/ge
 import { useProfile } from "@/lib/hooks/useProfile";
 import { formatCafeName } from "@/lib/utils/bakerUtils";
 import { cn } from "@/lib/utils/cn";
+import { getBusinessStoreId } from "@/lib/utils/storeIdGenerator";
+import { Copy } from "lucide-react";
 
 export function StoreSettings() {
   const { business, refreshBusiness, isModuleEnabled } = useTenant();
   const { toast } = useToast();
   const { flags } = useProfile();
   const isSuperAdmin = !!flags?.isSuperAdmin;
+  const { storeId: storeReferenceId, employeePrefix } = getBusinessStoreId(business);
   const isTimesheetInitial = isModuleEnabled("timesheet");
   const [timesheetEnabled, setTimesheetEnabled] = useState<boolean>(isTimesheetInitial);
 
@@ -771,7 +774,7 @@ export function StoreSettings() {
                           });
 
                           await refreshBusiness();
-                          toast({ title: "Reset to Default Logo", description: "Default SeyalPro logo restored.", variant: "info" });
+                          toast({ title: "Reset to Default Logo", description: "Default CounterCub logo restored.", variant: "info" });
                         } catch {}
                       }
                     }}
@@ -884,6 +887,34 @@ export function StoreSettings() {
                 <span>Store &amp; Billing Information</span>
                 <span className="text-[10px] font-semibold text-zinc-400 normal-case whitespace-nowrap">(Billed by)</span>
               </h4>
+              {storeReferenceId && (
+                <div className="p-3.5 rounded-xl bg-blue-50/70 border border-blue-200/80 flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="px-2.5 py-1.5 rounded-lg bg-blue-600 text-white font-mono text-xs font-extrabold tracking-wider shadow-2xs shrink-0">
+                      {storeReferenceId}
+                    </div>
+                    <div className="min-w-0">
+                      <div className="text-xs font-bold text-slate-900">Store Reference ID</div>
+                      <div className="text-[11px] text-slate-600">
+                        Employee Login IDs for this store start with{" "}
+                        <span className="font-mono font-bold text-blue-700 bg-blue-100/80 px-1.5 py-0.5 rounded">{employeePrefix}</span>{" "}
+                        (e.g. <span className="font-mono">{employeePrefix}10121997</span>)
+                      </div>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard.writeText(storeReferenceId);
+                      toast({ title: "Store ID Copied", description: `${storeReferenceId} copied to clipboard.`, variant: "success" });
+                    }}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white hover:bg-blue-50 text-blue-700 border border-blue-200 text-xs font-bold shadow-2xs transition-colors cursor-pointer shrink-0"
+                  >
+                    <Copy size={13} />
+                    <span>Copy ID</span>
+                  </button>
+                </div>
+              )}
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1.5">
@@ -915,7 +946,7 @@ export function StoreSettings() {
                   />
                   {!isSuperAdmin && (
                     <p className="text-[11px] text-slate-500 font-medium">
-                      Store identity is locked to your licensed SeyalPro ID. To update your registered store name, contact SeyalPro Super Admin.
+                      Store identity is locked to your licensed CounterCub ID. To update your registered store name, contact CounterCub Super Admin.
                     </p>
                   )}
                 </div>

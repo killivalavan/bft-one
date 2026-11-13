@@ -16,6 +16,14 @@ import { ConfirmDialog, useConfirm } from "@/components/ui/ConfirmDialog";
 import { useToast } from "@/components/ui/Toast";
 import { cn } from "@/lib/utils/cn";
 import { validatePasswordPolicy, validateEmailFormat } from "@/lib/utils/passwordPolicy";
+import { useTenant } from "@/lib/context/TenantContext";
+import {
+  getBusinessStoreId,
+  formatEmployeeLoginId,
+  formatDobDigits,
+  formatDisplayUserIdentifier,
+  isValidEmployeeLoginId,
+} from "@/lib/utils/storeIdGenerator";
 import { EmployeeAchievementsModal } from "./EmployeeAchievementsModal";
 
 export type Profile = {
@@ -158,7 +166,7 @@ function AdminUserCard({
               </span>
             </div>
             <div className="text-xs text-zinc-500 truncate mt-0.5" title={user.email}>
-              {user.email}
+              {formatDisplayUserIdentifier(user.email, user.employee_id)}
             </div>
           </div>
         </div>
@@ -738,7 +746,7 @@ function UserAccordionRow({
             </div>
 
             <div className="text-xs text-zinc-500 truncate" title={user.email}>
-              {user.email}
+              {formatDisplayUserIdentifier(user.email, user.employee_id)}
             </div>
           </div>
         </div>
@@ -1641,8 +1649,12 @@ export function UserList({
   onDownloadPayslip,
 }: UserListProps) {
   const { toast } = useToast();
+  const { business } = useTenant();
+  const { storeId: storeReferenceId, employeePrefix } = getBusinessStoreId(business);
   // New User Form State
+  const [loginMode, setLoginMode] = useState<"employee_id" | "email">("employee_id");
   const [email, setEmail] = useState("");
+  const [dobInput, setDobInput] = useState("");
   const [password, setPassword] = useState("");
   const [isAdminRole, setIsAdminRole] = useState(false);
   const [sendInvite, setSendInvite] = useState(false);
@@ -1757,13 +1769,28 @@ export function UserList({
   }, [primaryAdmin, staffMembers]);
 
   async function handleAddUser() {
-    if (!validateEmailFormat(email)) {
-      toast({
-        title: "Invalid Email",
-        description: "Please enter a valid email address.",
-        variant: "warning",
-      });
-      return;
+    const useEmailMode = loginMode === "email" || sendInvite;
+    let resolvedIdentifier = email.trim();
+
+    if (useEmailMode) {
+      if (!validateEmailFormat(resolvedIdentifier)) {
+        toast({
+          title: "Invalid Email",
+          description: "Please enter a valid email address.",
+          variant: "warning",
+        });
+        return;
+      }
+    } else {
+      resolvedIdentifier = formatEmployeeLoginId(employeePrefix, resolvedIdentifier);
+      if (!isValidEmployeeLoginId(resolvedIdentifier)) {
+        toast({
+          title: "Invalid Employee Login ID",
+          description: `Please enter a valid ID suffix (e.g. ${employeePrefix}10121997 or ${employeePrefix}sathish).`,
+          variant: "warning",
+        });
+        return;
+      }
     }
 
     if (!sendInvite && !policy.valid) {
@@ -1777,8 +1804,9 @@ export function UserList({
 
     setIsSubmitting(true);
     try {
-      await onAddUser(email, password, isAdminRole, sendInvite);
+      await onAddUser(resolvedIdentifier, password, isAdminRole, sendInvite);
       setEmail("");
+      setDobInput("");
       setPassword("");
       setIsAdminRole(false);
       setSendInvite(false);
@@ -1839,12 +1867,45 @@ export function UserList({
                   <UserPlus size={14} className="text-blue-600" /> New Member Details
                 </div>
 
-                <div className="flex items-center gap-4">
+                <div className="flex flex-wrap items-center gap-3">
+                  <div className="inline-flex rounded-lg bg-white border border-blue-200 p-0.5 shadow-2xs">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setLoginMode("employee_id");
+                        setSendInvite(false);
+                      }}
+                      className={cn(
+                        "px-2.5 py-1 rounded-md text-[11px] font-bold transition-colors cursor-pointer",
+                        loginMode === "employee_id" && !sendInvite
+                          ? "bg-blue-600 text-white"
+                          : "text-zinc-600 hover:text-zinc-900"
+                      )}
+                    >
+                      Store ID ({employeePrefix}...)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setLoginMode("email")}
+                      className={cn(
+                        "px-2.5 py-1 rounded-md text-[11px] font-bold transition-colors cursor-pointer",
+                        loginMode === "email" || sendInvite
+                          ? "bg-blue-600 text-white"
+                          : "text-zinc-600 hover:text-zinc-900"
+                      )}
+                    >
+                      Email Address
+                    </button>
+                  </div>
+
                   <label className="flex items-center gap-2 text-xs text-zinc-700 font-medium cursor-pointer">
                     <input
                       type="checkbox"
                       checked={sendInvite}
-                      onChange={(e) => setSendInvite(e.target.checked)}
+                      onChange={(e) => {
+                        setSendInvite(e.target.checked);
+                        if (e.target.checked) setLoginMode("email");
+                      }}
                       className="rounded text-blue-600 focus:ring-blue-500"
                     />
                     <Mail size={13} className="text-blue-600" />
@@ -1865,15 +1926,49 @@ export function UserList({
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-center">
-                <div className={sendInvite ? "sm:col-span-9" : "sm:col-span-6"}>
-                  <Input
-                    type="email"
-                    placeholder="staff@example.com"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    className="bg-white h-10 text-sm border-zinc-200 focus:border-blue-500"
-                  />
-                </div>
+                {loginMode === "employee_id" && !sendInvite ? (
+                  <>
+                    <div className="sm:col-span-4 flex items-center">
+                      <span className="h-10 px-3 bg-blue-100/90 border border-r-0 border-blue-200 text-blue-800 text-xs font-mono font-extrabold rounded-l-lg flex items-center select-none">
+                        {employeePrefix}
+                      </span>
+                      <Input
+                        type="text"
+                        placeholder="10121997 or sathish"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value.replace(/\s+/g, ""))}
+                        className="bg-white h-10 text-sm border-zinc-200 focus:border-blue-500 rounded-l-none font-mono"
+                      />
+                    </div>
+                    <div className="sm:col-span-2">
+                      <Input
+                        type="date"
+                        title="Pick DOB to auto-fill Employee ID (DDMMYYYY)"
+                        value={dobInput}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setDobInput(val);
+                          const dobDigits = formatDobDigits(val);
+                          if (dobDigits) {
+                            setEmail(dobDigits);
+                            if (!password) setPassword(dobDigits);
+                          }
+                        }}
+                        className="bg-white h-10 text-xs border-zinc-200 focus:border-blue-500"
+                      />
+                    </div>
+                  </>
+                ) : (
+                  <div className={sendInvite ? "sm:col-span-9" : "sm:col-span-6"}>
+                    <Input
+                      type="email"
+                      placeholder="staff@example.com"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      className="bg-white h-10 text-sm border-zinc-200 focus:border-blue-500"
+                    />
+                  </div>
+                )}
 
                 {!sendInvite && (
                   <div className="sm:col-span-3">
@@ -1899,13 +1994,23 @@ export function UserList({
                 </div>
               </div>
 
-              <p className="text-[11px] text-zinc-500 flex items-center gap-1.5">
+              <p className="text-[11px] text-zinc-500 flex items-center gap-1.5 flex-wrap">
                 <AlertCircle size={12} className="text-blue-500 shrink-0" />
-                {sendInvite
-                  ? "An onboarding invitation email with a secure setup link will be sent to the employee."
-                  : isAdminRole
-                  ? "Store Admins require at least 8 characters with uppercase and number/symbol."
-                  : "Staff passwords can be flexible (e.g. DOB 12092026 or PIN), editable anytime in their profile."}
+                {sendInvite ? (
+                  "An onboarding invitation email with a secure setup link will be sent to the employee."
+                ) : loginMode === "employee_id" ? (
+                  <span>
+                    Store ID: <strong className="font-mono text-zinc-700">{storeReferenceId}</strong> &bull; Employee will sign in with{" "}
+                    <strong className="font-mono text-blue-700 bg-blue-100/70 px-1.5 py-0.5 rounded">
+                      {email ? formatEmployeeLoginId(employeePrefix, email) : `${employeePrefix}10121997`}
+                    </strong>{" "}
+                    (no email needed).
+                  </span>
+                ) : isAdminRole ? (
+                  "Store Admins require at least 8 characters with uppercase and number/symbol."
+                ) : (
+                  "Staff passwords can be flexible (e.g. DOB 12092026 or PIN), editable anytime in their profile."
+                )}
               </p>
             </div>
           </div>

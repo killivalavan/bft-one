@@ -7,8 +7,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "node --test tests/**/*.test.mjs && node scripts/test-phase1-remediation.mjs && node scripts/test-tenant-isolation.mjs && node scripts/test-super-admin-security.mjs",
-    "test:unit": "node --test tests/**/*.test.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "tsc --noEmit && node --test tests/**/*.test.mjs && node scripts/test-phase1-remediation.mjs && node scripts/test-tenant-isolation.mjs && node scripts/test-super-admin-security.mjs",
+    "test:unit": "tsc --noEmit && node --test tests/**/*.test.mjs",
     "test:security": "node scripts/test-tenant-isolation.mjs && node scripts/test-phase1-remediation.mjs && node scripts/test-super-admin-security.mjs",
     "test:db": "node scripts/verify-supabase-deploy.mjs",
     "prepare": "git config core.hooksPath .githooks"

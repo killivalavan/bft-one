@@ -28,14 +28,13 @@ export async function POST(request: Request) {
       geofence_enabled,
     } = body;
 
-    const targetBizId = businessId || caller.businessId;
-    if (!targetBizId) {
-      return NextResponse.json({ error: "businessId required" }, { status: 400 });
+    if (businessId && businessId !== "default" && businessId !== caller.businessId) {
+      return NextResponse.json({ error: "Unauthorized for this business" }, { status: 403 });
     }
 
-    // Verify caller has permission for this business
-    if (!caller.isSuperAdmin && targetBizId !== caller.businessId) {
-      return NextResponse.json({ error: "Unauthorized for this business" }, { status: 403 });
+    const targetBizId = caller.businessId;
+    if (!targetBizId) {
+      return NextResponse.json({ error: "businessId required" }, { status: 400 });
     }
 
     // Prepare update payloads - ONLY use columns that exist in public.businesses table

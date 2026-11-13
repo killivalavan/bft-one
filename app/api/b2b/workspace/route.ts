@@ -14,16 +14,14 @@ export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);
     const requestedBizId = searchParams.get("business_id");
 
-    const businessId = requestedBizId && requestedBizId !== "default"
-      ? requestedBizId
-      : caller.businessId;
-
-    if (!caller.isSuperAdmin && businessId !== caller.businessId) {
+    if (requestedBizId && requestedBizId !== "default" && requestedBizId !== caller.businessId) {
       return NextResponse.json(
         { error: "Forbidden: Cannot access B2B workspace belonging to another business." },
         { status: 403 }
       );
     }
+
+    const businessId = caller.businessId;
 
     function normalizeProduct(p: any) {
       const rawPrice = Number(p.selling_price !== undefined && p.selling_price !== null ? p.selling_price : (p.rate ?? p.price ?? 0));
@@ -175,11 +173,23 @@ export async function GET(req: Request) {
         }
       }
 
+      let products = productsRes.data || [];
+      if (products.length === 0) {
+        const { data: bizForProds } = await supa
+          .from("businesses")
+          .select("enabled_modules")
+          .eq("id", businessId)
+          .maybeSingle();
+        if (Array.isArray(bizForProds?.enabled_modules?._b2b_data?.products)) {
+          products = bizForProds.enabled_modules._b2b_data.products;
+        }
+      }
+
       return NextResponse.json({
         ok: true,
         source: "relational_tables",
         invoices: (dispatchesRes.data || []).map(sanitizeInvoice),
-        products: (productsRes.data || []).map(normalizeProduct),
+        products: products.map(normalizeProduct),
         payments: paymentsRes.data || [],
         expenses,
         broadcasts: broadcastsRes.data || [],

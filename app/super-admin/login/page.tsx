@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { supabaseClient } from "@/lib/supabaseClient";
+import { resetProfileCache, setVerifiedProfileCache } from "@/lib/hooks/useProfile";
 import { Card, CardContent, CardHeader } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
@@ -30,14 +31,87 @@ export default function SuperAdminLoginPage() {
 
   const otpInputsRef = useRef<(HTMLInputElement | null)[]>([]);
 
-  // Auto-focus first OTP input when reaching 2FA step
+  // Check existing session on mount: auto-redirect if already Super Admin with valid session
   useEffect(() => {
-    if (step === "mfa_challenge" || step === "mfa_enroll") {
-      setTimeout(() => {
-        otpInputsRef.current[0]?.focus();
-      }, 100);
-    }
-  }, [step]);
+    let isMounted = true;
+    (async () => {
+      try {
+        if (typeof window !== "undefined") {
+          const params = new URLSearchParams(window.location.search);
+          if (params.get("error") === "not_super_admin") {
+            setError(
+              "Access Denied: This account is not a CounterCub Platform Super Administrator."
+            );
+            // Strip ?error=not_super_admin from the address bar so refreshing doesn't re-trigger it
+            window.history.replaceState({}, "", window.location.pathname);
+            resetProfileCache();
+            await supabaseClient.auth.signOut().catch(() => {});
+            return;
+          }
+        }
+
+        const {
+          data: { session },
+        } = await supabaseClient.auth.getSession();
+        if (!session?.user || !isMounted) return;
+
+        const token = session?.access_token;
+        let isSuper = false;
+
+        try {
+          const res = await fetch("/api/user/me", {
+            headers: token ? { Authorization: `Bearer ${token}` } : {},
+            cache: "no-store",
+          });
+          if (res.ok) {
+            const data = await res.json();
+            isSuper = Boolean(data?.flags?.isSuperAdmin);
+          }
+        } catch {}
+
+        if (!isSuper) {
+          const { data: prof } = await supabaseClient
+            .from("profiles")
+            .select("is_super_admin")
+            .eq("id", session.user.id)
+            .maybeSingle();
+          isSuper = Boolean(prof?.is_super_admin);
+        }
+
+        if (!isSuper) return;
+
+        // Check MFA assurance level
+        const aalRes = await supabaseClient.auth.mfa.getAuthenticatorAssuranceLevel();
+        const currentAal = aalRes.data?.currentLevel;
+
+        const { data: factorsData } = await supabaseClient.auth.mfa.listFactors();
+        const totpFactors = factorsData?.totp || [];
+        const verifiedFactor = totpFactors.find((f) => f.status === "verified");
+
+        if (!verifiedFactor) {
+          // If no TOTP enrolled yet, user can stay or proceed
+          window.location.href = "/";
+          return;
+        }
+
+        if (currentAal === "aal2") {
+          // Already logged in with full 2FA: go straight to dashboard
+          window.location.href = "/";
+          return;
+        }
+
+        // Has verified factor but at aal1: jump straight to TOTP challenge
+        setFactorId(verifiedFactor.id);
+        setStep("mfa_challenge");
+      } catch (e) {
+        console.warn("Session check error on super-admin-login:", e);
+      }
+    })();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   // Handle standard Email + Password submission
   async function handleCredentialsLogin(e: React.FormEvent) {
@@ -59,23 +133,44 @@ export default function SuperAdminLoginPage() {
       }
 
       // 2. Strict Super Admin Role Verification: Authoritative Database Flag Only
-      const { data: profile } = await supabaseClient
-        .from("profiles")
-        .select("is_super_admin")
-        .eq("id", authData.user.id)
-        .maybeSingle();
+      const token = authData.session?.access_token;
+      let isSuper = false;
 
-      const isSuper = !!profile?.is_super_admin;
+      try {
+        const res = await fetch("/api/user/me", {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+          cache: "no-store",
+        });
+        if (res.ok) {
+          const data = await res.json();
+          isSuper = Boolean(data?.flags?.isSuperAdmin);
+        }
+      } catch {}
+
+      if (!isSuper) {
+        const { data: profile } = await supabaseClient
+          .from("profiles")
+          .select("is_super_admin")
+          .eq("id", authData.user.id)
+          .maybeSingle();
+        isSuper = Boolean(profile?.is_super_admin);
+      }
 
       if (!isSuper) {
         // Block client admins & staff from using this portal
         await supabaseClient.auth.signOut();
         throw new Error(
-          "Access Denied: This portal is exclusively reserved for SeyalPro Platform Owners. Store accounts must use the shop login."
+          "Access Denied: This portal is exclusively reserved for CounterCub Platform Owners. Store accounts must use the shop login."
         );
       }
 
-      // Persist email identifier for active session
+      // Persist verified Super Admin profile cache & email identifier for active session
+      setVerifiedProfileCache(authData.user.id, {
+        isAdmin: true,
+        isStockManager: false,
+        isSuperAdmin: true,
+        businessId: null,
+      });
       try {
         localStorage.setItem("bftone_display_email", normalizedEmail);
       } catch {}
@@ -98,7 +193,7 @@ export default function SuperAdminLoginPage() {
         // First time 2FA setup -> Enroll new TOTP factor & present QR Code
         const { data: enrollData, error: enrollErr } = await supabaseClient.auth.mfa.enroll({
           factorType: "totp",
-          friendlyName: "SeyalPro Command Authenticator",
+          friendlyName: "CounterCub Command Authenticator",
         });
 
         if (enrollErr || !enrollData) {
@@ -203,8 +298,8 @@ export default function SuperAdminLoginPage() {
       // Ensure session is refreshed with the AAL2 access token
       await supabaseClient.auth.refreshSession().catch(() => {});
 
-      // Success: Redirect to Super Admin Hub
-      window.location.href = "/super-admin";
+      // Success: Redirect to Super Admin Hub at root /
+      window.location.href = "/";
     } catch (err: any) {
       setError(err.message || "2FA verification failed.");
       setLoading(false);
@@ -236,7 +331,7 @@ export default function SuperAdminLoginPage() {
           <div className="flex items-center justify-center gap-2">
             <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#2563EB]/20 text-[#60A5FA] text-xs font-bold uppercase tracking-wider border border-[#2563EB]/30 backdrop-blur-md">
               <Shield size={12} className="text-[#60A5FA]" />
-              <span>SeyalPro Command Center</span>
+              <span>CounterCub Command Center</span>
             </div>
             <div className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-slate-800 text-slate-300 text-xs font-semibold border border-slate-700">
               <span className="w-1.5 h-1.5 rounded-full bg-[#2563EB] animate-ping" />
@@ -276,11 +371,11 @@ export default function SuperAdminLoginPage() {
                 <div className="space-y-2">
                   <label className="text-xs font-bold text-slate-300 ml-1 uppercase tracking-wider flex items-center justify-between">
                     <span>Master Admin Email</span>
-                    <span className="text-[11px] text-[#60A5FA] normal-case font-medium">admin@seyalpro.com</span>
+                    <span className="text-[11px] text-[#60A5FA] normal-case font-medium">admin@countercub.com</span>
                   </label>
                   <Input
                     type="email"
-                    placeholder="admin@seyalpro.com"
+                    placeholder="admin@countercub.com"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     required

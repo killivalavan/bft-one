@@ -544,7 +544,7 @@ function RetailBillingView() {
       .map(it => `• ${it.qty}x ${it.name} - ₹${((it.price_cents * it.qty) / 100).toFixed(2)}`)
       .join("\n");
 
-    const businessTitle = (business?.name || "SeyalPro POS").toUpperCase();
+    const businessTitle = (business?.name || "CounterCub POS").toUpperCase();
 
     return `🧾 *${businessTitle}*
 ━━━━━━━━━━━━━━━━━━━━
@@ -778,7 +778,7 @@ ${order.taxCents > 0 ? `🏛️ *GST (5%):* ₹${(order.taxCents / 100).toFixed(
             <div className="min-w-0">
               <div className="flex items-center gap-2">
                 <h1 className="text-sm sm:text-base font-bold text-slate-900 leading-tight truncate">
-                  {business?.name || "SeyalPro POS Terminal"}
+                  {business?.name || "CounterCub POS Terminal"}
                 </h1>
                 <SyncStatusBadge />
               </div>
@@ -1619,7 +1619,7 @@ ${order.taxCents > 0 ? `🏛️ *GST (5%):* ₹${(order.taxCents / 100).toFixed(
             <div className="p-4 bg-emerald-50 rounded-2xl border border-emerald-100 inline-block mb-3">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
-                src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=upi://pay?pa=bftone.pos@upi%26pn=SeyalPro%26am=${(finalTotalCents / 100).toFixed(2)}%26cu=INR`}
+                src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=upi://pay?pa=countercub.pos@upi%26pn=CounterCub%26am=${(finalTotalCents / 100).toFixed(2)}%26cu=INR`}
                 alt="UPI QR Code"
                 className="w-44 h-44 rounded-lg mix-blend-multiply mx-auto"
               />
@@ -1962,7 +1962,7 @@ function LockedCafePosView() {
         <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/80 text-left text-xs text-slate-600 flex items-start gap-2.5">
           <Shield size={16} className="text-blue-600 shrink-0 mt-0.5" />
           <p className="leading-snug">
-            To activate retail counter billing alongside B2B wholesale, contact your Super Administrator from the SeyalPro Command Center.
+            To activate retail counter billing alongside B2B wholesale, contact your Super Administrator from the CounterCub Command Center.
           </p>
         </div>
 

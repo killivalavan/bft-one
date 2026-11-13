@@ -1,19 +1,24 @@
 import { NextResponse } from "next/server";
 import { authenticateRequest } from "@/lib/auth/serverAuth";
-import { supabaseAdmin } from "@/lib/supabaseServer";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
   try {
-    const auth = await authenticateRequest(request, { requireAdmin: true });
+    const { searchParams } = new URL(request.url);
+    const requestedBusinessId = searchParams.get("businessId");
+
+    // If a platform-wide or specific businessId query is requested on the Super Admin portal,
+    // require verified Super Admin access; otherwise use user-scoped RLS for the tenant admin.
+    const auth = await authenticateRequest(
+      request,
+      requestedBusinessId ? { requireSuperAdmin: true } : { requireAdmin: true }
+    );
     if ("errorResponse" in auth) {
       return auth.errorResponse;
     }
 
-    const caller = auth.user;
-    const supa = supabaseAdmin();
-    const { searchParams } = new URL(request.url);
+    const { user: caller, supa } = auth;
     const limit = Math.min(Number(searchParams.get("limit")) || 50, 200);
 
     let query = supa
@@ -22,11 +27,10 @@ export async function GET(request: Request) {
       .order("created_at", { ascending: false })
       .limit(limit);
 
-    // If Store Admin (not Super Admin), filter strictly to their business
-    if (!caller.isSuperAdmin) {
+    if (requestedBusinessId && caller.isSuperAdmin) {
+      query = query.eq("business_id", requestedBusinessId);
+    } else {
       query = query.eq("business_id", caller.businessId);
-    } else if (searchParams.get("businessId")) {
-      query = query.eq("business_id", searchParams.get("businessId")!);
     }
 
     const { data: logs, error } = await query;

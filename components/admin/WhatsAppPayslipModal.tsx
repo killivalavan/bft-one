@@ -130,7 +130,7 @@ export function WhatsAppPayslipModal({
 📥 *View & Download Payslip PDF:*
 ${publicPdfUrl}
 ━━━━━━━━━━━━━━━━━━━━
-_Generated via SeyalPro Portal._`
+_Generated via CounterCub Portal._`
         : `📄 *Official Payslip — ${monthLabel.toUpperCase()}*
 👤 *Employee:* ${cleanEmpName}
 (Payslip PDF document downloaded to device)`;

@@ -84,11 +84,11 @@ export async function generateCombinedLedgerPdf(data: CombinedLedgerPdfData): Pr
   const fontName = "helvetica";
   const sym = "Rs. ";
 
-  // 1. TOP ACCENT BAR - SeyalPro Royal Blue
+  // 1. TOP ACCENT BAR - CounterCub Royal Blue
   doc.setFillColor(37, 99, 235); // #2563EB
   doc.rect(0, 0, pageWidth, 4.5, "F");
 
-  // Background Watermark: "SeyalPro" - Prominently & elegantly branded
+  // Background Watermark: "CounterCub" - Prominently & elegantly branded
   const drawBackgroundWatermark = () => {
     try {
       if (typeof (doc as any).saveGraphicsState === "function") {
@@ -97,7 +97,7 @@ export async function generateCombinedLedgerPdf(data: CombinedLedgerPdfData): Pr
       doc.setFont(fontName, "bold");
       doc.setFontSize(48);
       doc.setTextColor(226, 234, 246); // Clean slate-blue tint (#E2EAF6), visible and legible
-      doc.text("SeyalPro", pageWidth / 2, pageHeight / 2 - 2, {
+      doc.text("CounterCub", pageWidth / 2, pageHeight / 2 - 2, {
         align: "center",
         angle: 30,
       });
@@ -126,7 +126,7 @@ export async function generateCombinedLedgerPdf(data: CombinedLedgerPdfData): Pr
   doc.setFont(fontName, "bold");
   doc.setFontSize(15);
   doc.setTextColor(15, 23, 42); // #0F172A
-  doc.text(formatCafeName(data.businessName || "SeyalPro Dispatch"), leftMargin, currentY);
+  doc.text(formatCafeName(data.businessName || "CounterCub Dispatch"), leftMargin, currentY);
 
   doc.setFont(fontName, "normal");
   doc.setFontSize(8);
@@ -418,7 +418,7 @@ export async function generateCombinedLedgerPdf(data: CombinedLedgerPdfData): Pr
     ? `Bank / UPI Payments: Settle outstanding dues to UPI ID: ${data.upiId} or registered bank account.`
     : `Please confirm ledger adjustments with ${data.businessName}.`;
   doc.text(upiLine, leftMargin + 3.5, afterTableY + 8.5);
-  doc.text("Generated via SeyalPro App • Instant B2B Store Stock Inward & Settlement Tracking.", leftMargin + 3.5, afterTableY + 12);
+  doc.text("Generated via CounterCub App • Instant B2B Store Stock Inward & Settlement Tracking.", leftMargin + 3.5, afterTableY + 12);
 
   // 6. MULTI-PAGE PAGE NUMBERING FOOTER
   const pageCount = (doc as any).internal.getNumberOfPages();
@@ -427,7 +427,7 @@ export async function generateCombinedLedgerPdf(data: CombinedLedgerPdfData): Pr
     doc.setFontSize(6.5);
     doc.setTextColor(148, 163, 184);
     doc.text(
-      `Page ${i} of ${pageCount}   •   Powered by SeyalPro App (seyalpro.com)   •   B2B Store & Dispatch Intelligence`,
+      `Page ${i} of ${pageCount}   •   Powered by CounterCub App (countercub.com)   •   B2B Store & Dispatch Intelligence`,
       pageWidth / 2,
       pageHeight - 5,
       { align: "center" }

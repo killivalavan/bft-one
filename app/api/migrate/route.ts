@@ -13,19 +13,23 @@ export async function POST(req: Request) {
     const { user: caller, supa } = auth;
     const body = await req.json().catch(() => ({}));
 
-    const targetBizId = body.business_id && body.business_id !== "default"
-      ? body.business_id
-      : caller.businessId;
-
-    if (!targetBizId) {
-      return NextResponse.json({ error: "Missing tenant business identifier" }, { status: 400 });
+    if (process.env.NODE_ENV === "production" && !caller.isSuperAdmin) {
+      return NextResponse.json(
+        { error: "Forbidden: Legacy data migration endpoint is restricted in production." },
+        { status: 403 }
+      );
     }
 
-    if (!caller.isSuperAdmin && targetBizId !== caller.businessId) {
+    if (body.business_id && body.business_id !== "default" && body.business_id !== caller.businessId) {
       return NextResponse.json(
         { error: "Forbidden: Cannot migrate data into another business." },
         { status: 403 }
       );
+    }
+
+    const targetBizId = caller.businessId;
+    if (!targetBizId) {
+      return NextResponse.json({ error: "Missing tenant business identifier" }, { status: 400 });
     }
 
     const businessId = targetBizId;

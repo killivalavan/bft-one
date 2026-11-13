@@ -19,18 +19,19 @@ export async function POST(req: Request) {
     const order_id = body.order_id?.trim();
     if (!order_id) return NextResponse.json({ error: "order_id required" }, { status: 400 });
 
-    // Fetch order to ensure it exists and belongs to caller's business
+    // Fetch order to ensure it exists and belongs to caller's verified business context
     const { data: ord, error: ordErr } = await supa
       .from("orders")
       .select("id, status, business_id")
       .eq("id", order_id)
+      .eq("business_id", callerBusinessId)
       .maybeSingle();
 
     if (ordErr) return NextResponse.json({ error: ordErr.message }, { status: 500 });
     if (!ord) return NextResponse.json({ error: "Order not found" }, { status: 404 });
 
     // Strict Tenant Boundary Check: fail closed if business_id is missing or belongs to another business
-    if (!isSuperAdmin && (!ord.business_id || ord.business_id !== callerBusinessId)) {
+    if (!ord.business_id || ord.business_id !== callerBusinessId) {
       return NextResponse.json({ error: "Unauthorized: Cannot cancel order of another business" }, { status: 403 });
     }
 
@@ -39,13 +40,14 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: true, message: "Order is already canceled", restocked: 0 });
     }
 
-    const targetBizId = ord.business_id || callerBusinessId;
+    const targetBizId = callerBusinessId;
 
-    // Fetch items
+    // Fetch items strictly scoped to business_id
     const { data: items, error: itemsErr } = await supa
       .from("order_items")
       .select("product_id, qty")
-      .eq("order_id", order_id);
+      .eq("order_id", order_id)
+      .eq("business_id", targetBizId);
     if (itemsErr) return NextResponse.json({ error: itemsErr.message }, { status: 500 });
 
     // Restock each item
@@ -71,8 +73,12 @@ export async function POST(req: Request) {
       if (upErr) return NextResponse.json({ error: upErr.message }, { status: 500 });
     }
 
-    // Mark order canceled
-    const { error: updErr } = await supa.from("orders").update({ status: "canceled" }).eq("id", order_id);
+    // Mark order canceled strictly scoped to business_id
+    const { error: updErr } = await supa
+      .from("orders")
+      .update({ status: "canceled" })
+      .eq("id", order_id)
+      .eq("business_id", targetBizId);
     if (updErr) return NextResponse.json({ error: updErr.message }, { status: 500 });
 
     return NextResponse.json({ ok: true, restocked: updates.length });

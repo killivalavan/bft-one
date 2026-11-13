@@ -16,8 +16,15 @@ import {
 } from "lucide-react";
 import { generateBillPdf, BillPdfData } from "@/lib/utils/billPdf";
 import { putItem, STORES, LocalInvoice } from "@/lib/offline/db";
-import { BakerProduct, INITIAL_BAKER_PRODUCTS, capitalizeWords, normalizeBakerProduct } from "../products/page";
-import { formatCafeName, DEFAULT_BAKER_SAMPLE_STORES, sanitizeBakerStores } from "@/lib/utils/bakerUtils";
+import {
+  type BakerProduct,
+  INITIAL_BAKER_PRODUCTS,
+  capitalizeWords,
+  normalizeBakerProduct,
+  formatCafeName,
+  DEFAULT_BAKER_SAMPLE_STORES,
+  sanitizeBakerStores,
+} from "@/lib/utils/bakerUtils";
 import { fetchB2BClients, saveB2BClient, B2B_CUSTOMERS_UPDATED_EVENT } from "@/lib/services/b2bClients";
 import { generateWhatsAppSlipMessage } from "@/lib/utils/b2bSlipWhatsapp";
 import { useB2BWorkspace, useCreateDispatchMutation } from "@/lib/hooks/useB2BData";
@@ -106,9 +113,9 @@ export default function BakerDispatchPage() {
     try {
       // 1. Products
       const storedProds = localStorage.getItem(`bftone_baker_products_${bizId}`);
-      if (storedProds) {
+      if (storedProds !== null) {
         const parsed = JSON.parse(storedProds);
-        if (Array.isArray(parsed) && parsed.length > 0) {
+        if (Array.isArray(parsed)) {
           setProducts(parsed.map(normalizeBakerProduct).filter((p: BakerProduct) => p.is_active));
         } else {
           setProducts(INITIAL_BAKER_PRODUCTS.map(normalizeBakerProduct));
@@ -132,14 +139,14 @@ export default function BakerDispatchPage() {
       if (storedInvs) {
         setSavedInvoices(JSON.parse(storedInvs));
       }
-    } catch {}
+    } catch { }
 
     // Synchronize cloud data from TanStack Query
     if (cloudWorkspace) {
       if (Array.isArray(cloudWorkspace.invoices) && cloudWorkspace.invoices.length > 0) {
         setSavedInvoices(cloudWorkspace.invoices);
       }
-      if (Array.isArray(cloudWorkspace.products) && cloudWorkspace.products.length > 0) {
+      if (Array.isArray(cloudWorkspace.products)) {
         setProducts(cloudWorkspace.products.map(normalizeBakerProduct).filter((p: any) => p.is_active));
       }
       if (Array.isArray(cloudWorkspace.stores) && cloudWorkspace.stores.length > 0) {
@@ -169,7 +176,7 @@ export default function BakerDispatchPage() {
       if (Array.isArray(cloudWorkspace.invoices) && cloudWorkspace.invoices.length > 0) {
         setSavedInvoices(cloudWorkspace.invoices);
       }
-      if (Array.isArray(cloudWorkspace.products) && cloudWorkspace.products.length > 0) {
+      if (Array.isArray(cloudWorkspace.products)) {
         setProducts(cloudWorkspace.products.map(normalizeBakerProduct).filter((p: any) => p.is_active));
       }
       if (Array.isArray(cloudWorkspace.stores) && cloudWorkspace.stores.length > 0) {
@@ -475,7 +482,7 @@ export default function BakerDispatchPage() {
     try {
       localStorage.setItem(`bftone_b2b_dispatches_${bizId}`, JSON.stringify(updatedList));
       localStorage.setItem(`bftone_invoices_${bizId}`, JSON.stringify(updatedList));
-    } catch {}
+    } catch { }
 
     // Asynchronously persist to Supabase via TanStack mutation
     createDispatchMutation.mutateAsync(newInvoice).catch((e) => {
@@ -503,7 +510,7 @@ export default function BakerDispatchPage() {
       status: "unpaid",
       payment_mode: isReturnMode ? "Account Credit" : "UPI",
       created_at: newInvoice.createdAt,
-    }).catch(() => {});
+    }).catch(() => { });
 
     // Save to Supabase if connected
     if (business?.id) {
@@ -518,7 +525,7 @@ export default function BakerDispatchPage() {
         total_cents: Math.round(newInvoice.totalAmount * 100),
         status: "unpaid",
         payment_mode: isReturnMode ? "Account Credit" : "UPI",
-      }).then(() => {});
+      }).then(() => { });
     }
 
     setIsSaving(false);
@@ -559,7 +566,7 @@ export default function BakerDispatchPage() {
     });
 
     if (typeof navigator !== "undefined" && navigator.clipboard) {
-      navigator.clipboard.writeText(message).catch(() => {});
+      navigator.clipboard.writeText(message).catch(() => { });
     }
 
     window.open(waUrl, "_blank");
@@ -1031,7 +1038,7 @@ export default function BakerDispatchPage() {
                                   </h3>
                                   {st.business_id && (
                                     <span className="px-1.5 py-0.2 rounded-md text-[8.5px] font-black uppercase tracking-wider bg-blue-100 text-blue-900 border border-blue-200">
-                                      ⚡ SeyalPro
+                                      ⚡ CounterCub
                                     </span>
                                   )}
                                 </div>
@@ -1124,7 +1131,7 @@ export default function BakerDispatchPage() {
                           )}
                           {selectedStore.business_id ? (
                             <span className="inline-flex items-center gap-1 text-[9px] font-black px-1.5 py-0.2 rounded-md bg-blue-100 text-blue-800 border border-blue-200">
-                              ⚡ SeyalPro App
+                              ⚡ CounterCub App
                             </span>
                           ) : (
                             <span className="inline-flex items-center gap-1 text-[9px] font-semibold px-1.5 py-0.2 rounded-md bg-white/90 text-slate-600 border border-slate-200">

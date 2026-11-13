@@ -10,7 +10,14 @@ import { format } from "date-fns";
 import type { CombinedLedgerPdfData, CombinedLedgerTransaction } from "@/lib/utils/combinedLedgerPdf";
 import type { BillPdfData } from "@/lib/utils/billPdf";
 import { getAuthHeaders } from "@/lib/auth/clientAuth";
-import { formatCafeName, capitalizeWords, sanitizeBakerStores, getSlipDate } from "@/lib/utils/bakerUtils";
+import {
+  formatCafeName,
+  capitalizeWords,
+  sanitizeBakerStores,
+  getSlipDate,
+  getDateRangeInterval,
+  type CafeCustomer,
+} from "@/lib/utils/bakerUtils";
 import { generateWhatsAppSlipMessage } from "@/lib/utils/b2bSlipWhatsapp";
 import {
   fetchB2BClients,
@@ -30,67 +37,12 @@ import {
 } from "lucide-react";
 import { SelectDropdown } from "@/components/ui/SelectDropdown";
 
-export interface CafeCustomer {
-  id: string;
-  name: string;
-  phone?: string;
-  address?: string;
-  business_id?: string;
-  totalBilled: number;
-  totalPaid: number;
-  unpaidDues: number;
-  slipsCount: number;
-  deliverySlipsCount: number;
-  returnSlipsCount: number;
-  lastTransactionDate?: string;
-}
-
 interface SeyalProPartner {
   id: string;
   name: string;
   slug: string;
   phone: string;
   address: string;
-}
-
-// Helper to reliably get Date object from any slip format (delegates to bakerUtils)
-export { getSlipDate };
-
-// Date preset helper
-export function getDateRangeInterval(
-  preset: "today" | "week" | "month" | "custom" | "all",
-  customStart?: string,
-  customEnd?: string
-): { start: Date; end: Date; label: string } {
-  const now = new Date();
-  if (preset === "today") {
-    const s = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
-    const e = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
-    return { start: s, end: e, label: `Today (${format(now, "MMM dd, yyyy")})` };
-  }
-  if (preset === "week") {
-    const s = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-    s.setHours(0, 0, 0, 0);
-    const e = new Date();
-    e.setHours(23, 59, 59, 999);
-    return { start: s, end: e, label: `Last 7 Days (${format(s, "MMM dd")} – ${format(e, "MMM dd, yyyy")})` };
-  }
-  if (preset === "month") {
-    const s = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-    s.setHours(0, 0, 0, 0);
-    const e = new Date();
-    e.setHours(23, 59, 59, 999);
-    return { start: s, end: e, label: `Last 30 Days (${format(s, "MMM dd")} – ${format(e, "MMM dd, yyyy")})` };
-  }
-  if (preset === "custom" && customStart && customEnd) {
-    const s = new Date(customStart);
-    s.setHours(0, 0, 0, 0);
-    const e = new Date(customEnd);
-    e.setHours(23, 59, 59, 999);
-    return { start: s, end: e, label: `${format(s, "MMM dd, yyyy")} – ${format(e, "MMM dd, yyyy")}` };
-  }
-  // All Time
-  return { start: new Date(2000, 0, 1), end: new Date(2100, 0, 1), label: "All Recorded Slips (Lifetime)" };
 }
 
 export default function BakerCustomersPage() {
@@ -647,7 +599,7 @@ export default function BakerCustomersPage() {
     );
 
     const pdfData: CombinedLedgerPdfData = {
-      businessName: business?.name || "SeyalPro Dispatch",
+      businessName: business?.name || "CounterCub Dispatch",
       businessPhone: business?.phone || "+91 98765 43210",
       businessAddress: business?.address || "OMR, Chennai",
       upiId: business?.upi_id?.trim() || "",
@@ -937,7 +889,7 @@ export default function BakerCustomersPage() {
                           </h4>
                           {c.business_id && (
                             <span className="px-1.5 py-0.2 rounded-md text-[9px] font-black uppercase tracking-wider bg-blue-50 text-blue-700 border border-blue-200">
-                              ⚡ SeyalPro App
+                              ⚡ CounterCub App
                             </span>
                           )}
                         </div>
@@ -2109,7 +2061,7 @@ export default function BakerCustomersPage() {
                 <div className="flex items-center justify-between">
                   <label className="text-xs font-bold text-[#0F172A] flex items-center gap-1.5">
                     <span className="w-2 h-2 rounded-full bg-blue-600 animate-pulse" />
-                    <span>⚡ Link SeyalPro Client</span>
+                    <span>⚡ Link CounterCub Client</span>
                   </label>
                   {editLinkedBusinessId && (
                     <button
@@ -2126,7 +2078,7 @@ export default function BakerCustomersPage() {
                   <div className="p-2.5 bg-blue-50 border border-blue-200 rounded-xl flex items-center justify-between gap-2 text-xs">
                     <div className="min-w-0">
                       <p className="font-bold text-blue-900 truncate">Partner Detected: {editDetectedPartner.name}</p>
-                      <p className="text-[10px] text-blue-600">On SeyalPro app</p>
+                      <p className="text-[10px] text-blue-600">On CounterCub app</p>
                     </div>
                     <button
                       type="button"
@@ -2290,7 +2242,7 @@ export default function BakerCustomersPage() {
                 <div className="flex items-center justify-between">
                   <label className="text-xs font-bold text-[#0F172A] flex items-center gap-1.5">
                     <span className="w-2 h-2 rounded-full bg-blue-600 animate-pulse" />
-                    <span>⚡ Link SeyalPro Client</span>
+                    <span>⚡ Link CounterCub Client</span>
                   </label>
                   {linkedBusinessId && (
                     <button
@@ -2307,7 +2259,7 @@ export default function BakerCustomersPage() {
                   <div className="p-2.5 bg-blue-50 border border-blue-200 rounded-xl flex items-center justify-between gap-2 text-xs">
                     <div className="min-w-0">
                       <p className="font-bold text-blue-900 truncate">Partner Detected: {detectedPartner.name}</p>
-                      <p className="text-[10px] text-blue-600">On SeyalPro app</p>
+                      <p className="text-[10px] text-blue-600">On CounterCub app</p>
                     </div>
                     <button
                       type="button"

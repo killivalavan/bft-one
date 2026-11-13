@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useEffect, useState, useRef } from "react";
 import { supabaseClient } from "@/lib/supabaseClient";
 import { useUser } from "@/lib/hooks/useUser";
+import { resolveCanonicalHostname } from "@/lib/tenant/hostnameResolver";
 
 export interface Business {
   id: string;
@@ -61,8 +62,8 @@ export const DEFAULT_BUSINESS: Business = {
 
 /**
  * Neutral, store-less placeholder used while the real tenant is being resolved.
- * It intentionally carries no store name/id so that no other store's identity
- * (or localStorage namespace) can ever be shown or used before resolution.
+ * Carries no store name/id so that no other store's identity (or localStorage namespace)
+ * can ever be shown or used before resolution.
  */
 export const NEUTRAL_BUSINESS: Business = {
   id: "",
@@ -88,10 +89,26 @@ export const NEUTRAL_BUSINESS: Business = {
 
 export type TenantStatus = "resolving" | "ready" | "error";
 
+export type TenantResolutionErrorCode =
+  | "TENANT_NOT_FOUND"
+  | "TENANT_RETIRED"
+  | "TENANT_HOSTNAME_MISMATCH"
+  | "TENANT_SUSPENDED"
+  | "UNASSIGNED_TENANT"
+  | "IMPERSONATION_REQUIRED"
+  | null;
+
+export interface ActiveImpersonationState {
+  sessionId: string;
+  targetBusinessId: string;
+  targetBusinessSlug?: string | null;
+  reason: string;
+  expiresAt: string;
+}
+
 export function isValidCustomLogo(url: string | null | undefined): boolean {
   if (!url) return false;
   if (url.startsWith("/dummy-logo.svg")) return false;
-  // If it's a 1x1 dummy pixel (<= 200 chars base64), it's not a real custom logo
   if (url.startsWith("data:image") && url.length < 200) return false;
   return true;
 }
@@ -107,18 +124,32 @@ const TENANT_CACHE_KEY = "bftone_tenant_cache";
 
 interface TenantCacheEntry {
   ownerUserId: string | null;
+  hostname?: string;
   business: Business;
   cachedAt: number;
 }
 
-function readTenantCache(): TenantCacheEntry | null {
+function readTenantCache(expectedHostname?: string): TenantCacheEntry | null {
   try {
     if (typeof window === "undefined") return null;
     const raw = localStorage.getItem(TENANT_CACHE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
-    // Legacy (un-owned) cache entries are ignored: they cannot be trusted to belong to this user
-    if (!parsed || typeof parsed !== "object" || !("ownerUserId" in parsed) || !parsed.business?.id) return null;
+    if (
+      !parsed ||
+      typeof parsed !== "object" ||
+      !("ownerUserId" in parsed) ||
+      !parsed.business?.id
+    ) {
+      return null;
+    }
+    if (
+      expectedHostname &&
+      parsed.hostname &&
+      parsed.hostname !== expectedHostname
+    ) {
+      return null;
+    }
     return parsed as TenantCacheEntry;
   } catch {
     return null;
@@ -135,6 +166,9 @@ interface TenantContextType {
   business: Business;
   loading: boolean;
   status: TenantStatus;
+  tenantError: TenantResolutionErrorCode;
+  userHomeBusiness?: { name: string; slug: string } | null;
+  impersonationSession: ActiveImpersonationState | null;
   isResolved: boolean;
   isModuleEnabled: (moduleName: string) => boolean;
   refreshBusiness: () => Promise<void>;
@@ -144,6 +178,9 @@ const TenantContext = createContext<TenantContextType>({
   business: NEUTRAL_BUSINESS,
   loading: true,
   status: "resolving",
+  tenantError: null,
+  userHomeBusiness: null,
+  impersonationSession: null,
   isResolved: false,
   isModuleEnabled: () => true,
   refreshBusiness: async () => {},
@@ -151,72 +188,113 @@ const TenantContext = createContext<TenantContextType>({
 
 export function TenantProvider({ children }: { children: React.ReactNode }) {
   const { user } = useUser();
-  // Identical on server and client: never prerender another store's identity into the HTML
   const [business, setBusiness] = useState<Business>(NEUTRAL_BUSINESS);
   const [status, setStatus] = useState<TenantStatus>("resolving");
+  const [tenantError, setTenantError] = useState<TenantResolutionErrorCode>(null);
+  const [userHomeBusiness, setUserHomeBusiness] = useState<{ name: string; slug: string } | null>(null);
+  const [impersonationSession, setImpersonationSession] =
+    useState<ActiveImpersonationState | null>(null);
   const loading = status === "resolving";
-  // Which user the currently-held business belongs to (null = logged-out visitor)
   const ownerRef = useRef<string | null | undefined>(undefined);
-  // Guards against out-of-order fetchTenant responses overwriting newer ones
   const requestIdRef = useRef(0);
 
   /**
-   * Extract tenant slug from subdomain.
-   * E.g. "navalur.bftone.com" → "navalur"
-   *       "mongo-s.bft-one.vercel.app" → "mongo-s"
+   * Resolves canonical hostname context strictly from `window.location.host`
+   * using the centralized hostname resolver (never query params or cookies).
    */
-  function getSubdomainSlug(): string | null {
+  function getBrowserHostnameResolution() {
     if (typeof window === "undefined") return null;
-    const hostname = window.location.hostname.toLowerCase();
-
-    // Known root domains (must match middleware.ts ROOT_DOMAINS)
-    const roots = ["seyalpro.in", "seyalpro.com", "bft-one.vercel.app", "bftone.com", "localhost"];
-
-    for (const root of roots) {
-      if (hostname.endsWith("." + root)) {
-        const sub = hostname.slice(0, -(root.length + 1));
-        if (sub && sub !== "www" && sub !== "app") {
-          return sub;
-        }
-      }
-    }
-    return null;
+    return resolveCanonicalHostname(window.location.host);
   }
 
-  function applyTenant(biz: Business, ownerUserId: string | null, reqId: number) {
-    if (reqId !== requestIdRef.current) return; // stale response
+  function applyTenant(
+    biz: Business,
+    ownerUserId: string | null,
+    reqId: number,
+    activeImpersonation: ActiveImpersonationState | null = null
+  ) {
+    if (reqId !== requestIdRef.current) return;
     ownerRef.current = ownerUserId;
     setBusiness(biz);
+    setTenantError(null);
+    setUserHomeBusiness(null);
+    setImpersonationSession(activeImpersonation);
     setStatus("ready");
     if (biz.id) persistTenant(biz, ownerUserId);
+  }
+
+  function applyTenantError(
+    errorCode: TenantResolutionErrorCode,
+    reqId: number,
+    homeBiz: { name: string; slug: string } | null = null
+  ) {
+    if (reqId !== requestIdRef.current) return;
+    ownerRef.current = undefined;
+    clearTenantCache();
+    setBusiness(NEUTRAL_BUSINESS);
+    setImpersonationSession(null);
+    setUserHomeBusiness(homeBiz);
+    setTenantError(errorCode);
+    setStatus("error");
   }
 
   async function fetchTenant() {
     const reqId = ++requestIdRef.current;
     let currentUser: { id: string; email?: string } | null = null;
     try {
-      // 1. Authenticated User Resolution (direct session check to eliminate React state race)
+      const hostRes = getBrowserHostnameResolution();
+      const currentHostname =
+        typeof window !== "undefined"
+          ? window.location.hostname.toLowerCase()
+          : "";
+
+      // If subdomain is explicitly invalid or reserved, fail closed immediately
+      if (hostRes && !hostRes.valid && hostRes.kind === "invalid_subdomain") {
+        applyTenantError("TENANT_NOT_FOUND", reqId);
+        return;
+      }
+
+      // The public website (localhost / www.countercub.com) and the platform admin host
+      // (app.localhost / app.countercub.com) never load a store, even for logged-in users.
+      // A store is only ever resolved on its own <slug> host.
+      if (hostRes?.kind === "marketing" || hostRes?.kind === "platform_admin") {
+        applyTenant(NEUTRAL_BUSINESS, user?.id ?? null, reqId, null);
+        return;
+      }
+
+      // 1. Authenticated User Resolution
       const sessionPromise = supabaseClient.auth.getSession();
       const timeoutPromise = new Promise<{ data: { session: null } }>((resolve) =>
         setTimeout(() => resolve({ data: { session: null } }), 5000)
       );
-      const { data: { session } } = await Promise.race([sessionPromise, timeoutPromise]);
+      const {
+        data: { session },
+      } = await Promise.race([sessionPromise, timeoutPromise]);
       currentUser = session?.user || user;
       const currentUserId = currentUser?.id ?? null;
 
-      // If the held business does not belong to this user, never show it: warm-start
-      // only from a cache entry owned by this exact user, otherwise go neutral + resolving.
       if (ownerRef.current !== currentUserId) {
-        const cached = currentUserId ? readTenantCache() : null;
+        const cached = currentUserId
+          ? readTenantCache(currentHostname)
+          : null;
         if (cached && cached.ownerUserId === currentUserId) {
-          ownerRef.current = currentUserId;
-          setBusiness(cached.business);
-          setStatus("ready");
+          // Verify cached slug matches subdomain if on a tenant workspace host
+          if (
+            hostRes?.kind !== "tenant_workspace" ||
+            cached.business.slug === hostRes.tenantSlug
+          ) {
+            ownerRef.current = currentUserId;
+            setBusiness(cached.business);
+            setStatus("ready");
+          } else {
+            ownerRef.current = undefined;
+            setBusiness(NEUTRAL_BUSINESS);
+            setStatus("resolving");
+          }
         } else {
           ownerRef.current = undefined;
           setBusiness(NEUTRAL_BUSINESS);
           setStatus("resolving");
-          // Preserve warm-start cache during transient hydration without premature cache eviction
         }
       }
 
@@ -228,92 +306,155 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
           .maybeSingle();
         if (profErr) throw profErr;
 
-        const isSuperAdmin = prof?.is_super_admin || currentUser.email?.toLowerCase() === "admin@seyalpro.com";
+        // Zero-Trust Principle: Super Admin status derives strictly from DB column, never email string
+        const isSuperAdmin = Boolean(prof?.is_super_admin);
 
-        // For regular shop admins/staff: ALWAYS bind strictly to their assigned business_id.
-        // Never fall back to another store.
+        // Regular shop admins/staff: strictly bound to their assigned `prof.business_id`
         if (!isSuperAdmin) {
-          if (!prof?.business_id) throw new Error("No workspace is assigned to this account.");
+          if (!prof?.business_id) {
+            applyTenantError("UNASSIGNED_TENANT", reqId);
+            return;
+          }
+
           const { data: biz, error: bizErr } = await supabaseClient
             .from("businesses")
             .select("*")
             .eq("id", prof.business_id)
             .maybeSingle();
           if (bizErr) throw bizErr;
-          if (!biz) throw new Error("Assigned workspace could not be found.");
+          if (!biz) {
+            applyTenantError("TENANT_NOT_FOUND", reqId);
+            return;
+          }
+
+          if (biz.is_active === false) {
+            applyTenantError("TENANT_SUSPENDED", reqId);
+            return;
+          }
+
+          // Cross-check hostname against user's assigned tenant membership
+          if (
+            hostRes?.kind === "tenant_workspace" &&
+            hostRes.tenantSlug &&
+            biz.slug?.toLowerCase() !== hostRes.tenantSlug.toLowerCase()
+          ) {
+            applyTenantError("TENANT_HOSTNAME_MISMATCH", reqId, {
+              name: biz.name || "Assigned Shop",
+              slug: biz.slug,
+            });
+            return;
+          }
 
           const finalBiz = normalizeBusiness(biz);
-          applyTenant(finalBiz, currentUser.id, reqId);
-          if (typeof document !== "undefined" && reqId === requestIdRef.current) {
-            document.cookie = `tenant_slug=${finalBiz.slug}; path=/; max-age=${60 * 60 * 24 * 30}; SameSite=Lax`;
-          }
+          applyTenant(finalBiz, currentUser.id, reqId, null);
           return;
         }
 
-        // For Super Admin: only an explicitly selected workspace (query, subdomain, switch cookie, or own business_id)
-        const urlSlug = typeof window !== "undefined"
-          ? new URLSearchParams(window.location.search).get("tenant")
-          : null;
-        const subdomainSlug = getSubdomainSlug();
-        const cookieMatch = typeof document !== "undefined"
-          ? document.cookie.match(/tenant_slug=([^;]+)/)
-          : null;
-        const cookieSlug = cookieMatch ? decodeURIComponent(cookieMatch[1]) : null;
-
-        const explicitSlug = urlSlug || subdomainSlug || cookieSlug;
-        if (explicitSlug) {
+        // Platform Super Admin Path:
+        // On a `<tenant-slug>.countercub.com` workspace host, verify either:
+        // (a) an active audited support impersonation session, OR
+        // (b) it matches the Super Admin's own assigned `prof.business_id`.
+        if (hostRes?.kind === "tenant_workspace" && hostRes.tenantSlug) {
           const { data: bizBySlug } = await supabaseClient
             .from("businesses")
             .select("*")
-            .eq("slug", explicitSlug)
+            .eq("slug", hostRes.tenantSlug)
             .maybeSingle();
-          if (bizBySlug) {
-            applyTenant(normalizeBusiness(bizBySlug), currentUser.id, reqId);
+
+          if (!bizBySlug) {
+            applyTenantError("TENANT_NOT_FOUND", reqId);
             return;
           }
-        }
 
-        if (prof?.business_id) {
-          const { data: bizById } = await supabaseClient
-            .from("businesses")
-            .select("*")
-            .eq("id", prof.business_id)
-            .maybeSingle();
-          if (bizById) {
-            applyTenant(normalizeBusiness(bizById), currentUser.id, reqId);
+          if (prof?.business_id === bizBySlug.id) {
+            applyTenant(normalizeBusiness(bizBySlug), currentUser.id, reqId, null);
             return;
           }
+
+          // Check for active support impersonation session via server API
+          try {
+            const token = session?.access_token;
+            const impRes = await fetch("/api/super-admin/impersonation", {
+              headers: token ? { Authorization: `Bearer ${token}` } : {},
+              cache: "no-store",
+            });
+            if (impRes.ok) {
+              const impData = await impRes.json();
+              if (
+                impData?.active &&
+                impData?.session?.targetBusinessId === bizBySlug.id
+              ) {
+                applyTenant(
+                  normalizeBusiness(bizBySlug),
+                  currentUser.id,
+                  reqId,
+                  {
+                    sessionId: impData.session.sessionId,
+                    targetBusinessId: impData.session.targetBusinessId,
+                    targetBusinessSlug: bizBySlug.slug,
+                    reason: impData.session.reason,
+                    expiresAt: impData.session.expiresAt,
+                  }
+                );
+                return;
+              }
+            }
+          } catch {}
+
+          applyTenantError("IMPERSONATION_REQUIRED", reqId);
+          return;
         }
 
-        // No workspace selected: stay store-neutral (super admin lands on the SeyalPro dashboard)
-        applyTenant(NEUTRAL_BUSINESS, currentUser.id, reqId);
+        // No shop host (should not happen: marketing/platform hosts return early above).
+        // Stay store-neutral rather than falling back to the profile's business.
+        applyTenant(NEUTRAL_BUSINESS, currentUser.id, reqId, null);
         return;
       }
 
-      // 2. Unauthenticated / Public visitor: only an explicit ?tenant or subdomain brands the page
-      const urlSlug = typeof window !== "undefined"
-        ? new URLSearchParams(window.location.search).get("tenant")
-        : null;
-      const explicitSlug = urlSlug || getSubdomainSlug();
+      // 2. Unauthenticated / Public visitor:
+      // Resolve strictly from canonical hostname via `/api/public/tenant-resolve`
+      if (hostRes?.kind === "tenant_workspace" && hostRes.tenantSlug) {
+        const res = await fetch("/api/public/tenant-resolve", {
+          method: "GET",
+          cache: "no-store",
+        });
 
-      if (explicitSlug) {
-        const { data: bizBySlug } = await supabaseClient
-          .from("businesses")
-          .select("*")
-          .eq("slug", explicitSlug)
-          .maybeSingle();
-        if (bizBySlug) {
-          applyTenant(normalizeBusiness(bizBySlug), null, reqId);
+        if (res.status === 403) {
+          applyTenantError("TENANT_SUSPENDED", reqId);
           return;
         }
+
+        if (res.status === 404) {
+          let errPayload: any = null;
+          try {
+            errPayload = await res.json();
+          } catch {}
+          applyTenantError(
+            errPayload?.code === "TENANT_RETIRED"
+              ? "TENANT_RETIRED"
+              : "TENANT_NOT_FOUND",
+            reqId
+          );
+          return;
+        }
+
+        if (res.ok) {
+          const payload = await res.json();
+          if (payload?.business) {
+            applyTenant(normalizeBusiness(payload.business), null, reqId, null);
+            return;
+          }
+        }
+
+        applyTenantError("TENANT_NOT_FOUND", reqId);
+        return;
       }
 
-      applyTenant(NEUTRAL_BUSINESS, null, reqId);
+      // Marketing or Platform Admin root domain: stay strictly store-neutral
+      applyTenant(NEUTRAL_BUSINESS, null, reqId, null);
     } catch (e) {
       console.warn("Tenant resolution failed:", e);
       if (reqId !== requestIdRef.current) return;
-      // Keep an already-verified workspace for this same user (e.g. transient network blip);
-      // otherwise surface an error instead of silently showing another store.
       if (currentUser && ownerRef.current === currentUser.id && business.id) {
         setStatus("ready");
       } else if (currentUser) {
@@ -351,42 +492,69 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
       } catch {}
     }
 
-    // Database record for this business is the primary source of truth
-    const resolvedLat = (raw.geofence_lat !== null && raw.geofence_lat !== undefined && !isNaN(Number(raw.geofence_lat)))
-      ? Number(raw.geofence_lat)
-      : ((localShopLoc.lat !== undefined && localShopLoc.lat !== null && !isNaN(Number(localShopLoc.lat)))
+    const resolvedLat =
+      raw.geofence_lat !== null &&
+      raw.geofence_lat !== undefined &&
+      !isNaN(Number(raw.geofence_lat))
+        ? Number(raw.geofence_lat)
+        : localShopLoc.lat !== undefined &&
+          localShopLoc.lat !== null &&
+          !isNaN(Number(localShopLoc.lat))
         ? Number(localShopLoc.lat)
-        : ((localExtra.geofence_lat !== undefined && localExtra.geofence_lat !== null && !isNaN(Number(localExtra.geofence_lat)))
-          ? Number(localExtra.geofence_lat)
-          : null));
+        : localExtra.geofence_lat !== undefined &&
+          localExtra.geofence_lat !== null &&
+          !isNaN(Number(localExtra.geofence_lat))
+        ? Number(localExtra.geofence_lat)
+        : null;
 
-    const resolvedLng = (raw.geofence_lng !== null && raw.geofence_lng !== undefined && !isNaN(Number(raw.geofence_lng)))
-      ? Number(raw.geofence_lng)
-      : ((localShopLoc.lng !== undefined && localShopLoc.lng !== null && !isNaN(Number(localShopLoc.lng)))
+    const resolvedLng =
+      raw.geofence_lng !== null &&
+      raw.geofence_lng !== undefined &&
+      !isNaN(Number(raw.geofence_lng))
+        ? Number(raw.geofence_lng)
+        : localShopLoc.lng !== undefined &&
+          localShopLoc.lng !== null &&
+          !isNaN(Number(localShopLoc.lng))
         ? Number(localShopLoc.lng)
-        : ((localExtra.geofence_lng !== undefined && localExtra.geofence_lng !== null && !isNaN(Number(localExtra.geofence_lng)))
-          ? Number(localExtra.geofence_lng)
-          : null));
+        : localExtra.geofence_lng !== undefined &&
+          localExtra.geofence_lng !== null &&
+          !isNaN(Number(localExtra.geofence_lng))
+        ? Number(localExtra.geofence_lng)
+        : null;
 
-    const resolvedRadius = (raw.geofence_radius_meters && !isNaN(Number(raw.geofence_radius_meters)))
-      ? Number(raw.geofence_radius_meters)
-      : (localShopLoc.radius && !isNaN(Number(localShopLoc.radius))
+    const resolvedRadius =
+      raw.geofence_radius_meters && !isNaN(Number(raw.geofence_radius_meters))
+        ? Number(raw.geofence_radius_meters)
+        : localShopLoc.radius && !isNaN(Number(localShopLoc.radius))
         ? Number(localShopLoc.radius)
-        : (localExtra.geofence_radius_meters ? Number(localExtra.geofence_radius_meters) : 150));
+        : localExtra.geofence_radius_meters
+        ? Number(localExtra.geofence_radius_meters)
+        : 150;
 
-    const resolvedEnabled = raw.geofence_enabled !== undefined
-      ? raw.geofence_enabled !== false
-      : (localShopLoc.enabled !== undefined
+    const resolvedEnabled =
+      raw.geofence_enabled !== undefined
+        ? raw.geofence_enabled !== false
+        : localShopLoc.enabled !== undefined
         ? !!localShopLoc.enabled
-        : (localExtra.geofence_enabled !== undefined ? localExtra.geofence_enabled !== false : true));
+        : localExtra.geofence_enabled !== undefined
+        ? localExtra.geofence_enabled !== false
+        : true;
 
     const isCustomDbLogo = isValidCustomLogo(raw.logo_url);
     const isCustomLocalLogo = isValidCustomLogo(localExtra.logo_url);
-    const resolvedLogo = isCustomDbLogo ? raw.logo_url : (isCustomLocalLogo ? localExtra.logo_url : (raw.logo_url || null));
+    const resolvedLogo = isCustomDbLogo
+      ? raw.logo_url
+      : isCustomLocalLogo
+      ? localExtra.logo_url
+      : raw.logo_url || null;
 
     const isCustomDbSig = isValidCustomSig(raw.signature_url);
     const hasCustomLocalSig = isValidCustomSig(localExtra.signature_url);
-    const resolvedSig = isCustomDbSig ? (raw.signature_url as string) : (hasCustomLocalSig ? localExtra.signature_url : (raw.signature_url || null));
+    const resolvedSig = isCustomDbSig
+      ? (raw.signature_url as string)
+      : hasCustomLocalSig
+      ? localExtra.signature_url
+      : raw.signature_url || null;
 
     return {
       id: bizId,
@@ -397,7 +565,11 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
       address: (raw.address as string) || localExtra.address || "",
       phone: (raw.phone as string) || localExtra.phone || "",
       gstin: (raw.gstin as string) || localExtra.gstin || "",
-      upi_id: (raw.upi_id as string) || (raw.enabled_modules?.upi_id as string) || localExtra.upi_id || "",
+      upi_id:
+        (raw.upi_id as string) ||
+        (raw.enabled_modules?.upi_id as string) ||
+        localExtra.upi_id ||
+        "",
       currency_symbol: raw.currency_symbol || "₹",
       timezone: raw.timezone || "Asia/Kolkata",
       geofence_lat: resolvedLat,
@@ -424,16 +596,29 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
 
         const isCustomBizLogo = isValidCustomLogo(biz.logo_url);
         const isCustomExistingLogo = isValidCustomLogo(existingExtra.logo_url);
-        const preservedLogo = isCustomBizLogo ? biz.logo_url : (isCustomExistingLogo ? existingExtra.logo_url : biz.logo_url);
+        const preservedLogo = isCustomBizLogo
+          ? biz.logo_url
+          : isCustomExistingLogo
+          ? existingExtra.logo_url
+          : biz.logo_url;
 
         const isCustomBizSig = isValidCustomSig(biz.signature_url);
         const isCustomExistingSig = isValidCustomSig(existingExtra.signature_url);
-        const preservedSig = isCustomBizSig ? biz.signature_url : (isCustomExistingSig ? existingExtra.signature_url : biz.signature_url);
+        const preservedSig = isCustomBizSig
+          ? biz.signature_url
+          : isCustomExistingSig
+          ? existingExtra.signature_url
+          : biz.signature_url;
 
-        const preservedUpi = (biz as any).upi_id || (biz as any).enabled_modules?.upi_id || existingExtra.upi_id || "";
+        const preservedUpi =
+          (biz as any).upi_id ||
+          (biz as any).enabled_modules?.upi_id ||
+          existingExtra.upi_id ||
+          "";
 
         const entry: TenantCacheEntry = {
           ownerUserId,
+          hostname: window.location.hostname.toLowerCase(),
           business: {
             ...biz,
             logo_url: preservedLogo,
@@ -445,19 +630,22 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
         localStorage.setItem(TENANT_CACHE_KEY, JSON.stringify(entry));
 
         if (biz.id) {
-          localStorage.setItem(`bftone_tenant_extra_${biz.id}`, JSON.stringify({
-            name: biz.name,
-            logo_url: preservedLogo,
-            signature_url: preservedSig,
-            address: biz.address || existingExtra.address || "",
-            phone: biz.phone || existingExtra.phone || "",
-            gstin: biz.gstin || existingExtra.gstin || "",
-            upi_id: preservedUpi,
-            geofence_lat: biz.geofence_lat,
-            geofence_lng: biz.geofence_lng,
-            geofence_radius_meters: biz.geofence_radius_meters,
-            geofence_enabled: biz.geofence_enabled,
-          }));
+          localStorage.setItem(
+            `bftone_tenant_extra_${biz.id}`,
+            JSON.stringify({
+              name: biz.name,
+              logo_url: preservedLogo,
+              signature_url: preservedSig,
+              address: biz.address || existingExtra.address || "",
+              phone: biz.phone || existingExtra.phone || "",
+              gstin: biz.gstin || existingExtra.gstin || "",
+              upi_id: preservedUpi,
+              geofence_lat: biz.geofence_lat,
+              geofence_lng: biz.geofence_lng,
+              geofence_radius_meters: biz.geofence_radius_meters,
+              geofence_enabled: biz.geofence_enabled,
+            })
+          );
         }
       }
     } catch {}
@@ -474,14 +662,26 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
           ...prev,
           geofence_lat: Number(e.detail.lat),
           geofence_lng: Number(e.detail.lng),
-          geofence_radius_meters: e.detail.radius ? Number(e.detail.radius) : prev.geofence_radius_meters,
-          geofence_enabled: e.detail.enabled !== undefined ? Boolean(e.detail.enabled) : prev.geofence_enabled,
+          geofence_radius_meters: e.detail.radius
+            ? Number(e.detail.radius)
+            : prev.geofence_radius_meters,
+          geofence_enabled:
+            e.detail.enabled !== undefined
+              ? Boolean(e.detail.enabled)
+              : prev.geofence_enabled,
         }));
       }
     }
     if (typeof window !== "undefined") {
-      window.addEventListener("bftone_shop_location_updated", handleLocationUpdated);
-      return () => window.removeEventListener("bftone_shop_location_updated", handleLocationUpdated);
+      window.addEventListener(
+        "bftone_shop_location_updated",
+        handleLocationUpdated
+      );
+      return () =>
+        window.removeEventListener(
+          "bftone_shop_location_updated",
+          handleLocationUpdated
+        );
     }
   }, []);
 
@@ -490,7 +690,6 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
       if (moduleName === "baker_mode" || moduleName === "b2b_bridge") return false;
       return true;
     }
-    // Opt-in modules that are strictly disabled by default unless explicitly enabled by Super Admin
     if (moduleName === "baker_mode" || moduleName === "b2b_bridge") {
       return Boolean(business.enabled_modules[moduleName]);
     }
@@ -503,6 +702,9 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
         business,
         loading,
         status,
+        tenantError,
+        userHomeBusiness,
+        impersonationSession,
         isResolved: status === "ready",
         isModuleEnabled,
         refreshBusiness: fetchTenant,

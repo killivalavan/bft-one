@@ -276,7 +276,7 @@ export default function GeofenceGate({ children }: { children: React.ReactNode }
             You must be inside {storeName} to access
           </h2>
           <p className="text-xs text-slate-500 max-w-md mx-auto mt-1 leading-relaxed">
-            Staff timesheet punching is restricted to employees on-site. SeyalPro validates your physical
+            Staff timesheet punching is restricted to employees on-site. CounterCub validates your physical
             presence using high-precision GPS geofencing.
           </p>
         </div>
@@ -470,7 +470,7 @@ export default function GeofenceGate({ children }: { children: React.ReactNode }
                     <Sparkles className="w-3.5 h-3.5 text-[#2563EB]" /> Attendance Integrity
                   </h4>
                   <p>
-                    SeyalPro enforces tamper-proof attendance verification to ensure employee working hours are
+                    CounterCub enforces tamper-proof attendance verification to ensure employee working hours are
                     recorded accurately while physically at the store.
                   </p>
                 </div>

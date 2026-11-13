@@ -7,7 +7,10 @@ export const dynamic = "force-dynamic";
 // GET: Fetch support tickets (Super Admin gets all with business details; Store Admin gets their own)
 export async function GET(request: Request) {
   try {
-    const auth = await authenticateRequest(request);
+    let auth = await authenticateRequest(request, { requireSuperAdmin: true });
+    if ("errorResponse" in auth) {
+      auth = await authenticateRequest(request);
+    }
     if ("errorResponse" in auth) {
       return auth.errorResponse;
     }
@@ -53,7 +56,7 @@ export async function GET(request: Request) {
   }
 }
 
-// POST: Store Admin/Staff raises a new issue / bug report to SeyalPro
+// POST: Store Admin/Staff raises a new issue / bug report to CounterCub
 export async function POST(request: Request) {
   try {
     const auth = await authenticateRequest(request);
@@ -64,7 +67,7 @@ export async function POST(request: Request) {
     const { user: caller, supa } = auth;
 
     if (!caller.isAdmin && !caller.isSuperAdmin) {
-      return NextResponse.json({ error: "Unauthorized. Only store administrators can raise issues to SeyalPro." }, { status: 403 });
+      return NextResponse.json({ error: "Unauthorized. Only store administrators can raise issues to CounterCub." }, { status: 403 });
     }
 
     const body = await request.json().catch(() => ({}));
@@ -137,7 +140,7 @@ export async function POST(request: Request) {
       ok: true,
       ticket,
       ticketNumber,
-      message: "Your issue has been reported directly to SeyalPro support.",
+      message: "Your issue has been reported directly to CounterCub support.",
     });
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || "Internal server error" }, { status: 500 });
@@ -147,7 +150,10 @@ export async function POST(request: Request) {
 // PATCH: Update ticket status or resolution notes (Super Admin or Store Admin)
 export async function PATCH(request: Request) {
   try {
-    const auth = await authenticateRequest(request);
+    let auth = await authenticateRequest(request, { requireSuperAdmin: true });
+    if ("errorResponse" in auth) {
+      auth = await authenticateRequest(request);
+    }
     if ("errorResponse" in auth) {
       return auth.errorResponse;
     }

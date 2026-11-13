@@ -422,7 +422,7 @@ export default function BakerPaymentsPage() {
 
     const message =
       `Hello *${formatCafeName(storeName)}* 👋\n\n` +
-      `Payment summary from *${business?.name || "SeyalPro Dispatch"}*:\n` +
+      `Payment summary from *${business?.name || "CounterCub Dispatch"}*:\n` +
       `Total Outstanding Due: *₹${totalDues.toLocaleString("en-IN")}* (${storeInvs.length} delivery ${storeInvs.length === 1 ? "slip" : "slips"})\n\n` +
       `*Pending Slips:*\n${slipsBreakdown}\n` +
       upiLine +

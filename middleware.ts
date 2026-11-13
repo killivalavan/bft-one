@@ -1,117 +1,84 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import type { HostnameResolutionOptions } from "./lib/tenant/hostnameResolver.ts";
+import { evaluateWildcardTenantRoute } from "./lib/tenant/wildcardRouter.ts";
 
-// Root domains where subdomains should be extracted.
-// Add your custom domain here after setting it up in Vercel.
-const ROOT_DOMAINS = [
-  "seyalpro.in",
-  "www.seyalpro.in",
-  "seyalpro.com",
-  "www.seyalpro.com",
-  "bft-one.vercel.app",
-  "bftone.com",
-  "www.bftone.com",
-  "localhost",
-];
-
-function extractSubdomain(hostname: string): string | null {
-  // Remove port (e.g. localhost:3000 → localhost)
-  const cleanHost = hostname.split(":")[0].toLowerCase();
-
-  // Check each root domain to see if the hostname is a subdomain of it
-  for (const root of ROOT_DOMAINS) {
-    const rootClean = root.split(":")[0].toLowerCase();
-
-    // E.g. hostname = "navalur.seyalpro.in", root = "seyalpro.in"
-    if (cleanHost.endsWith("." + rootClean)) {
-      const sub = cleanHost.slice(0, -(rootClean.length + 1)); // "navalur"
-      if (sub && sub !== "www" && sub !== "app") {
-        return sub;
-      }
-    }
+function applyDecisionHeadersAndCookies(
+  response: NextResponse,
+  responseHeaders: Record<string, string>,
+  deleteLegacyTenantCookie: boolean
+): NextResponse {
+  for (const [key, value] of Object.entries(responseHeaders)) {
+    response.headers.set(key, value);
   }
-
-  return null;
+  if (deleteLegacyTenantCookie) {
+    response.cookies.delete("tenant_slug");
+  }
+  return response;
 }
 
-export function middleware(request: NextRequest) {
-  const url = request.nextUrl.clone();
+export function middleware(
+  request: NextRequest,
+  options?: HostnameResolutionOptions
+) {
+  const decision = evaluateWildcardTenantRoute({
+    url: request.nextUrl,
+    headers: request.headers,
+    hasLegacyTenantCookie: request.cookies.has("tenant_slug"),
+    options,
+  });
 
-  // 0. Backwards compatibility redirect: /baker/* -> /b2b/*
-  if (url.pathname === "/baker" || url.pathname.startsWith("/baker/")) {
-    const newPath = url.pathname.replace(/^\/baker/, "/b2b");
-    url.pathname = newPath;
-    return NextResponse.redirect(url, 307);
+  if (decision.action === "redirect" && decision.location) {
+    const redirectRes = NextResponse.redirect(
+      decision.location,
+      decision.status
+    );
+    return applyDecisionHeadersAndCookies(
+      redirectRes,
+      decision.responseHeaders,
+      decision.deleteLegacyTenantCookie
+    );
   }
 
-  // Vercel sets x-forwarded-host in production; fall back to host header
-  const hostname = request.headers.get("x-forwarded-host")
-    || request.headers.get("host")
-    || "";
-
-  const subdomain = extractSubdomain(hostname);
-  const queryTenant = url.searchParams.get("tenant");
-
-  // 1. Resolve Tenant Slug (priority: query > cookie > subdomain > none)
-  let tenantSlug = "";
-  let source: "query" | "cookie" | "subdomain" | "none" = "none";
-
-  // Priority 1: URL query param override (?tenant=mongo-s)
-  if (queryTenant) {
-    tenantSlug = queryTenant.toLowerCase().trim();
-    source = "query";
-  } else {
-    // Priority 2: Existing cookie
-    const cookieTenant = request.cookies.get("tenant_slug")?.value;
-    if (cookieTenant) {
-      tenantSlug = cookieTenant;
-      source = "cookie";
-    } else {
-      // Priority 3: Extract from subdomain (e.g. navalur.bftone.com → navalur)
-      if (subdomain) {
-        tenantSlug = subdomain;
-        source = "subdomain";
-      }
-    }
+  if (decision.action === "rewrite" && decision.rewritePathname) {
+    const rewriteUrl = request.nextUrl.clone();
+    rewriteUrl.pathname = decision.rewritePathname;
+    rewriteUrl.search = "";
+    const rewriteRes = NextResponse.rewrite(rewriteUrl, {
+      status: decision.status,
+      request: {
+        headers: decision.sanitizedRequestHeaders,
+      },
+    });
+    return applyDecisionHeadersAndCookies(
+      rewriteRes,
+      decision.responseHeaders,
+      decision.deleteLegacyTenantCookie
+    );
   }
 
-  // 2. Clone request headers and inject tenant metadata
-  const requestHeaders = new Headers(request.headers);
-  if (tenantSlug) {
-    requestHeaders.set("x-tenant-slug", tenantSlug);
+  if (decision.action === "json_error" && decision.jsonBody) {
+    const jsonRes = NextResponse.json(decision.jsonBody, {
+      status: decision.status,
+    });
+    return applyDecisionHeadersAndCookies(
+      jsonRes,
+      decision.responseHeaders,
+      decision.deleteLegacyTenantCookie
+    );
   }
 
-  const response = NextResponse.next({
+  const nextRes = NextResponse.next({
     request: {
-      headers: requestHeaders,
+      headers: decision.sanitizedRequestHeaders,
     },
   });
 
-  // Persist tenant cookie when resolved from query OR subdomain
-  // (so subsequent navigations within the same session stay on the right tenant)
-  if ((source === "query" || source === "subdomain") && tenantSlug) {
-    response.cookies.set("tenant_slug", tenantSlug, {
-      path: "/",
-      maxAge: 60 * 60 * 24 * 30, // 30 days
-      sameSite: "lax",
-    });
-  }
-
-  // 3. Security headers
-  response.headers.set("X-Content-Type-Options", "nosniff");
-  response.headers.set("X-Frame-Options", "DENY");
-  response.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
-  if (tenantSlug) {
-    response.headers.set("x-tenant-slug", tenantSlug);
-  }
-
-  // 4. Cache-Control: Private no-store for authenticated API endpoints
-  if (url.pathname.startsWith("/api/")) {
-    response.headers.set("Cache-Control", "private, no-store, no-cache, max-age=0, must-revalidate");
-    response.headers.set("Pragma", "no-cache");
-  }
-
-  return response;
+  return applyDecisionHeadersAndCookies(
+    nextRes,
+    decision.responseHeaders,
+    decision.deleteLegacyTenantCookie
+  );
 }
 
 export const config = {

@@ -1,9 +1,8 @@
 import { format, subDays } from "date-fns";
-import { BakerProduct } from "@/app/(protected)/b2b/products/page";
-import { BakerCustomerStore } from "@/lib/utils/bakerUtils";
-import { InvoiceRecord, ExpenseRecord } from "@/app/(protected)/b2b/page";
-import { BakerPaymentRecord } from "@/app/(protected)/b2b/payments/page";
-import { BakerBroadcast } from "@/app/(protected)/b2b/broadcasts/page";
+import { type BakerProduct, type BakerCustomerStore } from "@/lib/utils/bakerUtils";
+import type { InvoiceRecord, ExpenseRecord } from "@/app/(protected)/b2b/page";
+import type { BakerPaymentRecord } from "@/app/(protected)/b2b/payments/page";
+import type { BakerBroadcast } from "@/app/(protected)/b2b/broadcasts/page";
 import { B2B_CUSTOMERS_UPDATED_EVENT } from "@/lib/services/b2bClients";
 
 export const ROYAL_BAKER_BIZ_ID = "e99fb445-d15e-4208-a8e6-0108ffdbe32a";

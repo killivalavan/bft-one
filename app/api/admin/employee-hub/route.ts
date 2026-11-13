@@ -18,18 +18,19 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Action is required" }, { status: 400 });
     }
 
-    // Helper: Verify target user belongs to caller's business and return authoritative business_id
+    // Helper: Verify target user belongs to caller's verified business context (fail closed on null business_id)
     async function resolveTargetUserBusinessId(targetUserId: string): Promise<string | null> {
+      if (!caller.businessId) return null;
       const { data: p } = await supa
         .from("profiles")
         .select("business_id")
         .eq("id", targetUserId)
+        .eq("business_id", caller.businessId)
         .maybeSingle();
-      if (!p) return null;
-      if (!caller.isSuperAdmin && (!p.business_id || p.business_id !== caller.businessId)) {
+      if (!p || !p.business_id || p.business_id !== caller.businessId) {
         return null;
       }
-      return p.business_id || caller.businessId || null;
+      return p.business_id;
     }
 
     // 1. UPDATE EMPLOYEE PROFILE & INCREMENT POLICY
@@ -73,6 +74,7 @@ export async function POST(request: Request) {
         .from("profiles")
         .update(updates)
         .eq("id", userId)
+        .eq("business_id", targetBizId)
         .select()
         .single();
 
@@ -131,7 +133,8 @@ export async function POST(request: Request) {
           base_salary_cents: newSalaryCents,
           per_day_salary_cents: perDaySalaryCents,
         })
-        .eq("id", userId);
+        .eq("id", userId)
+        .eq("business_id", targetBizId);
 
       return NextResponse.json({ ok: true, increment: incRow });
     }
@@ -143,21 +146,22 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: "incrementId is required" }, { status: 400 });
       }
 
-      let query = supa.from("employee_increments").select("*").eq("id", incrementId);
-      if (!caller.isSuperAdmin) {
-        query = query.eq("business_id", caller.businessId);
-      }
-      const { data: targetInc } = await query.maybeSingle();
+      const { data: targetInc } = await supa
+        .from("employee_increments")
+        .select("*")
+        .eq("id", incrementId)
+        .eq("business_id", caller.businessId)
+        .maybeSingle();
 
       if (!targetInc) {
         return NextResponse.json({ error: "Increment record not found or access denied." }, { status: 404 });
       }
 
-      let delQuery = supa.from("employee_increments").delete().eq("id", incrementId);
-      if (!caller.isSuperAdmin) {
-        delQuery = delQuery.eq("business_id", caller.businessId);
-      }
-      const { error: delErr } = await delQuery;
+      const { error: delErr } = await supa
+        .from("employee_increments")
+        .delete()
+        .eq("id", incrementId)
+        .eq("business_id", caller.businessId);
 
       if (delErr) {
         return NextResponse.json({ error: delErr.message }, { status: 500 });
@@ -168,6 +172,7 @@ export async function POST(request: Request) {
           .from("employee_increments")
           .select("*")
           .eq("user_id", userId)
+          .eq("business_id", caller.businessId)
           .order("effective_date", { ascending: false })
           .limit(1)
           .maybeSingle();
@@ -180,7 +185,8 @@ export async function POST(request: Request) {
               base_salary_cents: restoredBaseCents,
               per_day_salary_cents: Math.round(restoredBaseCents / 30),
             })
-            .eq("id", userId);
+            .eq("id", userId)
+            .eq("business_id", caller.businessId);
         }
       }
 
@@ -239,11 +245,11 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: "achievementId required" }, { status: 400 });
       }
 
-      let delQuery = supa.from("employee_achievements").delete().eq("id", achievementId);
-      if (!caller.isSuperAdmin) {
-        delQuery = delQuery.eq("business_id", caller.businessId);
-      }
-      const { error } = await delQuery;
+      const { error } = await supa
+        .from("employee_achievements")
+        .delete()
+        .eq("id", achievementId)
+        .eq("business_id", caller.businessId);
 
       if (error) {
         return NextResponse.json({ error: error.message }, { status: 500 });
@@ -268,7 +274,11 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: "Title and message are required" }, { status: 400 });
       }
 
-      const noticeBizId = (caller.isSuperAdmin && body.businessId) ? body.businessId : caller.businessId;
+      if (body.businessId && body.businessId !== "default" && body.businessId !== caller.businessId) {
+        return NextResponse.json({ error: "Forbidden: Cannot publish notice to another business." }, { status: 403 });
+      }
+
+      const noticeBizId = caller.businessId;
       if (!noticeBizId) {
         return NextResponse.json({ error: "Tenant business context required to publish notice" }, { status: 400 });
       }
@@ -312,11 +322,13 @@ export async function POST(request: Request) {
       if (updates.targetAudienceType !== undefined) dbUpdates.target_audience_type = updates.targetAudienceType;
       if (updates.targetAudienceValue !== undefined) dbUpdates.target_audience_value = updates.targetAudienceValue;
 
-      let upQuery = supa.from("employee_notices").update(dbUpdates).eq("id", noticeId);
-      if (!caller.isSuperAdmin) {
-        upQuery = upQuery.eq("business_id", caller.businessId);
-      }
-      const { data: updatedNotice, error } = await upQuery.select().single();
+      const { data: updatedNotice, error } = await supa
+        .from("employee_notices")
+        .update(dbUpdates)
+        .eq("id", noticeId)
+        .eq("business_id", caller.businessId)
+        .select()
+        .single();
 
       if (error) {
         return NextResponse.json({ error: error.message }, { status: 500 });
@@ -332,11 +344,11 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: "noticeId required" }, { status: 400 });
       }
 
-      let delQuery = supa.from("employee_notices").delete().eq("id", noticeId);
-      if (!caller.isSuperAdmin) {
-        delQuery = delQuery.eq("business_id", caller.businessId);
-      }
-      const { error } = await delQuery;
+      const { error } = await supa
+        .from("employee_notices")
+        .delete()
+        .eq("id", noticeId)
+        .eq("business_id", caller.businessId);
 
       if (error) {
         return NextResponse.json({ error: error.message }, { status: 500 });

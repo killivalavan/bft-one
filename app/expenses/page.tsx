@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/Input";
 import {
     ChevronLeft, ChevronRight, Loader2, Plus, Receipt, Trash2, Pencil,
     Lock, Calendar, X, Check, PackageSearch, ClipboardList, BarChart3, Search, ArrowUpDown, Download,
-    Flame, TrendingUp, TrendingDown, ArrowRight, ChevronDown,
+    Flame, TrendingUp, TrendingDown, ArrowRight, ChevronDown, ChevronUp,
     LineChart as LineChartIcon, AreaChart as AreaChartIcon, PieChart as PieChartIcon,
     Wallet, Building2, CheckCircle2, Power, Zap, AlertCircle, ArrowUpRight, ArrowDownRight,
     History, Info, Clock, Filter, SlidersHorizontal, RefreshCw, ShieldCheck, Users
@@ -22,14 +22,15 @@ import {
     BarChart, Bar, LineChart, Line, AreaChart, Area, PieChart, Pie, Cell,
     XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend
 } from "recharts";
-import { FixedPriceManager, FixedPriceItem } from "@/components/expenses/FixedPriceManager";
+import { FixedPriceManager, FixedPriceItem, COMMON_UNITS, normalizeUnit, extractNameAndUnit, formatNameWithUnitFallback } from "@/components/expenses/FixedPriceManager";
 import { ExpenseAIAgent } from "@/components/expenses/ExpenseAIAgent";
 import { calculateDailyRecurringProjections, DailyRecurringProjectedItem } from "@/lib/ai/expense-agent";
-import { Tag, Sparkles, Bot, Layers } from "lucide-react";
+import { Tag, Sparkles, Bot, Layers, Scale } from "lucide-react";
 import type jsPDF from "jspdf";
 // autoTable and html2canvas lazy-loaded in exportOverviewPdf
 
 import { useTenant } from "@/lib/context/TenantContext";
+import { useProfile } from "@/lib/hooks/useProfile";
 import { SyncStatusBadge } from "@/components/offline/SyncStatusBadge";
 import {
     STORES,
@@ -47,6 +48,7 @@ interface ExpenseRow {
     item_name: string;
     quantity: number;
     price_cents: number;
+    unit?: string | null;
     submitted_by: string | null;
     created_at: string;
 }
@@ -79,7 +81,7 @@ const CATEGORY_COLORS: Record<string, { bg: string; text: string; border: string
     Insurance: { bg: "bg-slate-100", text: "text-slate-800", border: "border-slate-200" },
     Maintenance: { bg: "bg-[#FFFBEB]", text: "text-[#B45309]", border: "border-[#FDE68A]" },
     Transport: { bg: "bg-slate-100", text: "text-slate-800", border: "border-slate-200" },
-    Marketing: { bg: "bg-[#F5F3FF]", text: "text-[#6D28D9]", border: "border-[#DDD6FE]" },
+    Marketing: { bg: "bg-blue-50", text: "text-blue-700", border: "border-blue-200" },
     Other: { bg: "bg-slate-100", text: "text-slate-800", border: "border-slate-200" },
 };
 
@@ -173,9 +175,40 @@ export default function ExpensesPage() {
     const { toast } = useToast();
     const { confirm } = useConfirm();
     const { business } = useTenant();
+    const { flags, profile: hookProfile } = useProfile() as any;
     const [loading, setLoading] = useState(true);
     const [isAdmin, setIsAdmin] = useState(false);
     const [userId, setUserId] = useState<string | null>(null);
+    const [profileBusinessId, setProfileBusinessId] = useState<string | null>(null);
+
+    // Cached Admin Flag check for instant authorization without flicker
+    const [cachedIsAdmin] = useState<boolean>(() => {
+        if (typeof window !== "undefined") {
+            try {
+                const cachedFlags = localStorage.getItem("bftone_flags");
+                if (cachedFlags) {
+                    const parsed = JSON.parse(cachedFlags);
+                    if (parsed.is_admin || parsed.isAdmin || parsed.is_super_admin || parsed.isSuperAdmin) {
+                        return true;
+                    }
+                }
+                const email = localStorage.getItem("bftone_display_email");
+                if (email && email.toLowerCase().includes("admin")) {
+                    return true;
+                }
+            } catch { }
+        }
+        return false;
+    });
+
+    const effectiveIsAdmin = Boolean(
+        isAdmin ||
+        flags?.isAdmin ||
+        flags?.isSuperAdmin ||
+        hookProfile?.is_admin ||
+        (hookProfile as any)?.is_super_admin ||
+        cachedIsAdmin
+    );
 
     // Date being viewed (before 5 AM defaults to yesterday's shift closing)
     const getInitialDate = () => {
@@ -191,8 +224,8 @@ export default function ExpensesPage() {
     const [namesById, setNamesById] = useState<Record<string, string>>({});
     const [listLoading, setListLoading] = useState(true);
 
-    // Tabs: daily expense, monthly expense, overview, AI Advisor
-    const [activeTab, setActiveTab] = useState<"add" | "monthly" | "overview" | "ai-advisor">("add");
+    // Tabs: overview, daily expense, monthly expense, AI Advisor
+    const [activeTab, setActiveTab] = useState<"add" | "monthly" | "overview" | "ai-advisor">("overview");
 
     // Overview filter: period scope + anchor date used for week/month/year navigation
     const [overviewScope, setOverviewScope] = useState<"today" | "week" | "month" | "year" | "all" | "custom">("month");
@@ -212,18 +245,20 @@ export default function ExpensesPage() {
     const [itemName, setItemName] = useState("");
     const [price, setPrice] = useState("");
     const [quantity, setQuantity] = useState("1");
+    const [customUnit, setCustomUnit] = useState<string>("each");
     const [saving, setSaving] = useState(false);
 
     // Fixed-price catalog: everyone can pick from it, only admins can edit the prices
     const [priceList, setPriceList] = useState<FixedPriceItem[]>([]);
     const [selectedFixedItem, setSelectedFixedItem] = useState<FixedPriceItem | null>(null);
-    const [showPriceManager, setShowPriceManager] = useState(false);
+    const [showPriceManager, setShowPriceManager] = useState(true);
 
     // Admin inline edit
     const [editingId, setEditingId] = useState<string | null>(null);
     const [editItemName, setEditItemName] = useState("");
     const [editPrice, setEditPrice] = useState("");
     const [editQuantity, setEditQuantity] = useState("1");
+    const [editUnit, setEditUnit] = useState<string>("each");
 
     // Fixed Monthly Expenses (recurring master list, updated only when prices change)
     const [monthlyExpenses, setMonthlyExpenses] = useState<MonthlyExpenseRow[]>([]);
@@ -246,32 +281,68 @@ export default function ExpensesPage() {
         checkUser();
     }, []);
 
-    // Support deep-linking straight into Spending Overview or AI Advisor tab
+    // Support deep-linking straight into specific tabs
     useEffect(() => {
         const tabParam = new URLSearchParams(window.location.search).get("tab");
-        if (tabParam === "overview" || tabParam === "ai-advisor" || tabParam === "monthly") {
+        if (tabParam === "daily" || tabParam === "add") {
+            setActiveTab("add");
+        } else if (tabParam === "overview" || tabParam === "ai-advisor" || tabParam === "monthly") {
             setActiveTab(tabParam as "overview" | "ai-advisor" | "monthly");
         }
     }, []);
 
+    async function getEffectiveBusinessId(): Promise<string> {
+        if (business?.id && business.id !== "default" && business.id.trim() !== "") {
+            return business.id;
+        }
+        if (profileBusinessId && profileBusinessId !== "default" && profileBusinessId.trim() !== "") {
+            return profileBusinessId;
+        }
+        if (userId) {
+            try {
+                const { data: prof } = await supabaseClient
+                    .from("profiles")
+                    .select("business_id")
+                    .eq("id", userId)
+                    .maybeSingle();
+                if (prof?.business_id) {
+                    setProfileBusinessId(prof.business_id);
+                    return prof.business_id;
+                }
+            } catch { }
+        }
+        try {
+            const { data: b } = await supabaseClient
+                .from("businesses")
+                .select("id")
+                .limit(1)
+                .maybeSingle();
+            if (b?.id) {
+                setProfileBusinessId(b.id);
+                return b.id;
+            }
+        } catch { }
+        return "a0000000-0000-0000-0000-000000000001";
+    }
+
     useEffect(() => {
         fetchPriceList();
-    }, [business?.id]);
+    }, [business?.id, profileBusinessId]);
 
     useEffect(() => {
         if (userId) fetchExpenses();
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [date, userId, business?.id]);
+    }, [date, userId, business?.id, profileBusinessId]);
 
     useEffect(() => {
-        if (userId && isAdmin) fetchAllExpenses();
+        if (userId && effectiveIsAdmin) fetchAllExpenses();
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [userId, isAdmin, business?.id]);
+    }, [userId, effectiveIsAdmin, business?.id, profileBusinessId]);
 
     useEffect(() => {
         if (userId) fetchMonthlyExpenses();
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [userId, business?.id]);
+    }, [userId, business?.id, profileBusinessId]);
 
     // Auto-switch visible date to today when clock passes 5:00
     useEffect(() => {
@@ -296,13 +367,20 @@ export default function ExpensesPage() {
 
             const { data: profile } = await supabaseClient
                 .from("profiles")
-                .select("is_admin")
+                .select("is_admin, is_super_admin, business_id")
                 .eq("id", user.id)
-                .single();
+                .maybeSingle();
 
-            setIsAdmin(!!profile?.is_admin);
+            const isUserAdmin = Boolean(
+                profile?.is_admin ||
+                (profile as any)?.is_super_admin
+            );
+            setIsAdmin(isUserAdmin);
+            if (profile?.business_id) {
+                setProfileBusinessId(profile.business_id);
+            }
         } catch (error) {
-            console.error(error);
+            console.error("Error checking user in expenses:", error);
         } finally {
             setLoading(false);
         }
@@ -325,23 +403,26 @@ export default function ExpensesPage() {
     }
 
     async function fetchExpenses() {
-        if (!business?.id || business.id === "default") {
-            setListLoading(false);
-            return;
-        }
         setListLoading(true);
         const dateStr = format(date, "yyyy-MM-dd");
-        const bizId = business.id;
+        const bizId = await getEffectiveBusinessId();
 
         // 1. Instant Warm Start from IndexedDB
         try {
             const localExpenses = await getItemsByTenant<LocalDailyExpense>(STORES.daily_expenses, bizId);
-            const dateFiltered = localExpenses.filter((e) => e.expense_date === dateStr);
+            const dateFiltered = (localExpenses || []).filter((e) => e.expense_date === dateStr).map(r => {
+                const parsed = extractNameAndUnit(r.item_name, r.unit);
+                return {
+                    ...r,
+                    item_name: parsed.name,
+                    unit: parsed.unit,
+                };
+            });
             if (dateFiltered.length > 0) {
                 setExpenses(dateFiltered as ExpenseRow[]);
-                if (isAdmin) loadNames(dateFiltered as ExpenseRow[]);
+                if (effectiveIsAdmin) loadNames(dateFiltered as ExpenseRow[]);
             }
-        } catch {}
+        } catch { }
 
         // 2. Cloud Refresh if online
         try {
@@ -359,9 +440,16 @@ export default function ExpensesPage() {
                     toast({ title: "Failed to load expenses", description: error.message, variant: "error" });
                 }
             } else {
-                const rows = (data || []) as ExpenseRow[];
+                const rows = ((data || []) as ExpenseRow[]).map(r => {
+                    const parsed = extractNameAndUnit(r.item_name, r.unit);
+                    return {
+                        ...r,
+                        item_name: parsed.name,
+                        unit: parsed.unit,
+                    };
+                });
                 setExpenses(rows);
-                if (isAdmin) loadNames(rows);
+                if (effectiveIsAdmin) loadNames(rows);
 
                 // Save to local IndexedDB
                 const localRows: LocalDailyExpense[] = rows.map((r) => ({
@@ -371,10 +459,11 @@ export default function ExpensesPage() {
                     item_name: r.item_name,
                     quantity: r.quantity,
                     price_cents: r.price_cents,
+                    unit: r.unit,
                     submitted_by: r.submitted_by,
                     created_at: r.created_at,
                 }));
-                bulkPutItems(STORES.daily_expenses, localRows).catch(() => {});
+                bulkPutItems(STORES.daily_expenses, localRows).catch(() => { });
             }
         } catch {
             // Offline fallback
@@ -384,17 +473,24 @@ export default function ExpensesPage() {
     }
 
     async function fetchAllExpenses() {
-        if (!isAdmin) return; // overview/price-watch data is admin-only
-        if (!business?.id || business.id === "default") return;
-        const bizId = business.id;
+        if (!effectiveIsAdmin) return; // overview/price-watch data is admin-only
+        const bizId = await getEffectiveBusinessId();
 
         try {
             const localExpenses = await getItemsByTenant<LocalDailyExpense>(STORES.daily_expenses, bizId);
-            if (localExpenses.length > 0) {
-                setAllExpenses(localExpenses as ExpenseRow[]);
-                if (isAdmin) loadNames(localExpenses as ExpenseRow[]);
+            if (localExpenses && localExpenses.length > 0) {
+                const normalized = (localExpenses as ExpenseRow[]).map(r => {
+                    const parsed = extractNameAndUnit(r.item_name, r.unit);
+                    return {
+                        ...r,
+                        item_name: parsed.name,
+                        unit: parsed.unit,
+                    };
+                });
+                setAllExpenses(normalized);
+                loadNames(normalized);
             }
-        } catch {}
+        } catch { }
 
         try {
             const { data, error } = await supabaseClient
@@ -404,9 +500,16 @@ export default function ExpensesPage() {
                 .order("expense_date", { ascending: true });
 
             if (!error) {
-                const rows = (data || []) as ExpenseRow[];
+                const rows = ((data || []) as ExpenseRow[]).map(r => {
+                    const parsed = extractNameAndUnit(r.item_name, r.unit);
+                    return {
+                        ...r,
+                        item_name: parsed.name,
+                        unit: parsed.unit,
+                    };
+                });
                 setAllExpenses(rows);
-                if (isAdmin) loadNames(rows);
+                loadNames(rows);
 
                 const localRows: LocalDailyExpense[] = rows.map((r) => ({
                     id: r.id,
@@ -415,18 +518,18 @@ export default function ExpensesPage() {
                     item_name: r.item_name,
                     quantity: r.quantity,
                     price_cents: r.price_cents,
+                    unit: r.unit,
                     submitted_by: r.submitted_by,
                     created_at: r.created_at,
                 }));
-                bulkPutItems(STORES.daily_expenses, localRows).catch(() => {});
+                bulkPutItems(STORES.daily_expenses, localRows).catch(() => { });
             }
-        } catch {}
+        } catch { }
     }
 
     // Fixed Monthly Expenses (recurring master list, applies across all months)
     async function fetchMonthlyExpenses() {
-        if (!business?.id || business.id === "default") return;
-        const bizId = business.id;
+        const bizId = await getEffectiveBusinessId();
 
         // 1. Fetch current staff salary structure from Users & Roles
         const { data: profs } = await supabaseClient
@@ -470,7 +573,7 @@ export default function ExpensesPage() {
                         is_active: true,
                         notes: `Auto-initialized from ${staffCount} employee salary structure in Users & Roles`,
                         submitted_by: userId,
-                        business_id: business?.id,
+                        business_id: bizId,
                     })
                     .select()
                     .single();
@@ -525,6 +628,7 @@ export default function ExpensesPage() {
         else if (lower.includes("gas") || lower.includes("cylinder") || lower.includes("fuel") || lower.includes("transport")) cat = "Transport";
 
         setMonthlySaving(true);
+        const bizId = await getEffectiveBusinessId();
         const { error } = await supabaseClient.from("monthly_expenses").insert({
             category: cat,
             item_name: trimmedName,
@@ -532,7 +636,7 @@ export default function ExpensesPage() {
             is_active: true,
             notes: monthlyNotes.trim() || null,
             submitted_by: userId,
-            business_id: business?.id,
+            business_id: bizId,
         });
         setMonthlySaving(false);
 
@@ -651,6 +755,7 @@ export default function ExpensesPage() {
             else cat = "Other";
         }
 
+        const bizId = await getEffectiveBusinessId();
         const { error } = await supabaseClient.from("monthly_expenses").insert({
             category: cat,
             item_name: item.itemName,
@@ -658,7 +763,7 @@ export default function ExpensesPage() {
             is_active: true,
             notes: `Derived from daily demand of ${item.avgDailyQuantity.toFixed(1)} units/day (@ ₹${(item.avgUnitCostCents / 100).toFixed(2)}/unit)`,
             submitted_by: userId,
-            business_id: business?.id,
+            business_id: bizId,
         });
 
         if (error) {
@@ -702,24 +807,50 @@ export default function ExpensesPage() {
     }
 
     async function fetchPriceList() {
-        if (!business?.id || business.id === "default") return;
-        const bizId = business.id;
+        const bizId = await getEffectiveBusinessId();
         const { data, error } = await supabaseClient
             .from("expense_price_list")
             .select("*")
             .eq("business_id", bizId)
             .order("item_name", { ascending: true });
 
-        if (!error) setPriceList((data || []) as FixedPriceItem[]);
+        if (!error && data) {
+            const parsed = (data as any[]).map(r => {
+                const { name, unit } = extractNameAndUnit(r.item_name, r.unit);
+                return {
+                    id: r.id,
+                    item_name: name,
+                    price_cents: r.price_cents,
+                    unit: unit,
+                    active: r.active !== false,
+                } as FixedPriceItem;
+            });
+            setPriceList(parsed);
+        }
     }
 
-    async function addPriceItem(name: string, priceRupees: number) {
-        const { error } = await supabaseClient.from("expense_price_list").insert({
+    async function addPriceItem(name: string, priceRupees: number, unit?: string) {
+        const bizId = await getEffectiveBusinessId();
+        const cleanUnit = normalizeUnit(unit);
+        let { error } = await supabaseClient.from("expense_price_list").insert({
             item_name: name,
             price_cents: Math.round(priceRupees * 100),
+            unit: cleanUnit,
             updated_by: userId,
-            business_id: business?.id,
+            business_id: bizId,
         });
+
+        if (error && (error.code === 'PGRST204' || error.code === '42703')) {
+            const fallbackName = formatNameWithUnitFallback(name, cleanUnit);
+            const retryRes = await supabaseClient.from("expense_price_list").insert({
+                item_name: fallbackName,
+                price_cents: Math.round(priceRupees * 100),
+                updated_by: userId,
+                business_id: bizId,
+            });
+            error = retryRes.error;
+        }
+
         if (error) {
             toast({ title: "Failed to add item", description: error.message, variant: "error" });
             return false;
@@ -729,19 +860,35 @@ export default function ExpensesPage() {
         return true;
     }
 
-    async function updatePriceItemPrice(id: string, priceRupees: number) {
-        const { error } = await supabaseClient.from("expense_price_list").update({
+    async function updatePriceItemPrice(id: string, priceRupees: number, unit?: string) {
+        const cleanUnit = normalizeUnit(unit);
+        let { error } = await supabaseClient.from("expense_price_list").update({
             price_cents: Math.round(priceRupees * 100),
+            unit: cleanUnit,
             updated_by: userId,
             updated_at: new Date().toISOString(),
         }).eq("id", id);
+
+        if (error && (error.code === 'PGRST204' || error.code === '42703')) {
+            const currentItem = priceList.find(p => p.id === id);
+            const baseName = currentItem ? currentItem.item_name : "";
+            const fallbackName = formatNameWithUnitFallback(baseName, cleanUnit);
+            const retryRes = await supabaseClient.from("expense_price_list").update({
+                item_name: fallbackName,
+                price_cents: Math.round(priceRupees * 100),
+                updated_by: userId,
+                updated_at: new Date().toISOString(),
+            }).eq("id", id);
+            error = retryRes.error;
+        }
+
         if (error) {
             toast({ title: "Failed to update price", description: error.message, variant: "error" });
             return false;
         }
         toast({ title: "Price updated", variant: "success" });
         fetchPriceList();
-        setSelectedFixedItem(prev => prev && prev.id === id ? { ...prev, price_cents: Math.round(priceRupees * 100) } : prev);
+        setSelectedFixedItem(prev => prev && prev.id === id ? { ...prev, price_cents: Math.round(priceRupees * 100), unit: cleanUnit } : prev);
         return true;
     }
 
@@ -776,6 +923,7 @@ export default function ExpensesPage() {
         setItemName("");
         setPrice("");
         setQuantity("1");
+        setCustomUnit("each");
         setSelectedFixedItem(null);
     }
 
@@ -783,21 +931,28 @@ export default function ExpensesPage() {
         setSelectedFixedItem(item);
         setItemName(item ? item.item_name : "");
         setPrice("");
+        if (item?.unit) {
+            setCustomUnit(normalizeUnit(item.unit));
+        } else {
+            setCustomUnit("each");
+        }
     }
 
     async function addExpense() {
-        const qtyNum = Number(quantity) || 1;
-        if (qtyNum <= 0) {
-            toast({ title: "Invalid quantity", variant: "error" });
+        const qtyNum = Number(quantity);
+        if (isNaN(qtyNum) || qtyNum <= 0) {
+            toast({ title: "Invalid quantity", description: "Enter a positive number (e.g. 1, 2.5)", variant: "error" });
             return;
         }
 
         let finalName: string;
         let finalPriceCents: number;
+        let finalUnit: string;
 
         if (selectedFixedItem) {
             finalName = selectedFixedItem.item_name;
-            finalPriceCents = selectedFixedItem.price_cents * qtyNum;
+            finalUnit = normalizeUnit(selectedFixedItem.unit);
+            finalPriceCents = Math.round(selectedFixedItem.price_cents * qtyNum);
         } else {
             const trimmedName = itemName.trim();
             if (!trimmedName) {
@@ -809,12 +964,14 @@ export default function ExpensesPage() {
                 toast({ title: "Invalid price", description: "Enter a valid amount", variant: "error" });
                 return;
             }
-            finalName = trimmedName;
+            const parsed = extractNameAndUnit(trimmedName, customUnit);
+            finalName = parsed.name;
+            finalUnit = parsed.unit;
             finalPriceCents = Math.round(priceNum * 100);
         }
 
         setSaving(true);
-        const bizId = business?.id || "default";
+        const bizId = await getEffectiveBusinessId();
         const newExpenseId = crypto.randomUUID();
         // If user is saving on 'today' before 5:00, record as yesterday
         const now = new Date();
@@ -831,6 +988,7 @@ export default function ExpensesPage() {
             item_name: finalName,
             quantity: qtyNum,
             price_cents: finalPriceCents,
+            unit: finalUnit,
             submitted_by: userId,
             created_at: new Date().toISOString(),
         };
@@ -842,34 +1000,81 @@ export default function ExpensesPage() {
         setExpenses((prev) => [...prev, localExp as ExpenseRow]);
         setAllExpenses((prev) => [...prev, localExp as ExpenseRow]);
 
-        // 3. Enqueue idempotent synchronization operation
-        await enqueueSyncOperation({
-            businessId: bizId,
-            tableName: "daily_expenses",
-            action: "INSERT",
-            payload: {
-                id: localExp.id,
-                expense_date: localExp.expense_date,
-                item_name: localExp.item_name,
-                quantity: localExp.quantity,
-                price_cents: localExp.price_cents,
-                submitted_by: localExp.submitted_by,
-                business_id: localExp.business_id,
-                created_at: localExp.created_at,
-            },
-            customId: newExpenseId,
-        });
+        // 3. Direct write to Supabase if online, fallback to sync queue
+        let directSynced = false;
+        if (typeof navigator === "undefined" || navigator.onLine) {
+            try {
+                let { error: insertErr } = await supabaseClient.from("daily_expenses").insert({
+                    id: localExp.id,
+                    business_id: bizId,
+                    expense_date: localExp.expense_date,
+                    item_name: localExp.item_name,
+                    quantity: localExp.quantity,
+                    price_cents: localExp.price_cents,
+                    unit: localExp.unit,
+                    submitted_by: localExp.submitted_by,
+                    created_at: localExp.created_at,
+                });
+                if (insertErr && (insertErr.code === 'PGRST204' || insertErr.code === '42703')) {
+                    const fallbackName = formatNameWithUnitFallback(localExp.item_name, localExp.unit || "each");
+                    const retryRes = await supabaseClient.from("daily_expenses").insert({
+                        id: localExp.id,
+                        business_id: bizId,
+                        expense_date: localExp.expense_date,
+                        item_name: fallbackName,
+                        quantity: localExp.quantity,
+                        price_cents: localExp.price_cents,
+                        submitted_by: localExp.submitted_by,
+                        created_at: localExp.created_at,
+                    });
+                    insertErr = retryRes.error;
+                }
+                if (!insertErr) {
+                    directSynced = true;
+                } else {
+                    console.warn("Direct Supabase insert failed, enqueuing sync:", insertErr);
+                }
+            } catch (e) {
+                console.warn("Direct insert exception:", e);
+            }
+        }
+
+        if (!directSynced) {
+            await enqueueSyncOperation({
+                businessId: bizId,
+                tableName: "daily_expenses",
+                action: "INSERT",
+                payload: {
+                    id: localExp.id,
+                    business_id: bizId,
+                    expense_date: localExp.expense_date,
+                    item_name: formatNameWithUnitFallback(localExp.item_name, localExp.unit || "each"),
+                    quantity: localExp.quantity,
+                    price_cents: localExp.price_cents,
+                    unit: localExp.unit,
+                    submitted_by: localExp.submitted_by,
+                    created_at: localExp.created_at,
+                },
+                customId: newExpenseId,
+            });
+        }
 
         setSaving(false);
-        toast({ title: "Expense saved! 💰", description: "Saved locally and queued for automatic sync", variant: "success" });
+        toast({
+            title: "Expense saved! 💰",
+            description: directSynced ? "Saved successfully to cloud" : "Saved locally and queued for automatic sync",
+            variant: "success",
+        });
         resetForm();
     }
 
     function startEdit(row: ExpenseRow) {
         setEditingId(row.id);
-        setEditItemName(row.item_name);
+        const parsed = extractNameAndUnit(row.item_name, row.unit);
+        setEditItemName(parsed.name);
         setEditPrice((row.price_cents / 100).toString());
         setEditQuantity(row.quantity.toString());
+        setEditUnit(parsed.unit);
     }
 
     function cancelEdit() {
@@ -879,20 +1084,25 @@ export default function ExpensesPage() {
     async function saveEdit(row: ExpenseRow) {
         const trimmedName = editItemName.trim();
         const priceNum = Number(editPrice);
-        const qtyNum = Number(editQuantity) || 1;
-        if (!trimmedName || !editPrice || isNaN(priceNum) || priceNum <= 0) {
-            toast({ title: "Invalid entry", description: "Check name and price", variant: "error" });
+        const qtyNum = Number(editQuantity);
+        if (!trimmedName || !editPrice || isNaN(priceNum) || priceNum <= 0 || isNaN(qtyNum) || qtyNum <= 0) {
+            toast({ title: "Invalid entry", description: "Check name, price, and quantity", variant: "error" });
             return;
         }
 
-        const bizId = business?.id || "default";
+        const bizId = await getEffectiveBusinessId();
+        const parsed = extractNameAndUnit(trimmedName, editUnit);
+        const cleanUnit = parsed.unit;
+        const cleanName = parsed.name;
+
         const updatedExp: LocalDailyExpense = {
             id: row.id,
             business_id: bizId,
             expense_date: row.expense_date,
-            item_name: trimmedName,
+            item_name: cleanName,
             quantity: qtyNum,
             price_cents: Math.round(priceNum * 100),
+            unit: cleanUnit,
             submitted_by: row.submitted_by,
             created_at: row.created_at,
         };
@@ -904,45 +1114,102 @@ export default function ExpensesPage() {
         setExpenses((prev) => prev.map((e) => (e.id === row.id ? (updatedExp as ExpenseRow) : e)));
         setAllExpenses((prev) => prev.map((e) => (e.id === row.id ? (updatedExp as ExpenseRow) : e)));
 
-        // 3. Enqueue sync update
-        await enqueueSyncOperation({
-            businessId: bizId,
-            tableName: "daily_expenses",
-            action: "UPDATE",
-            payload: {
-                id: updatedExp.id,
-                item_name: updatedExp.item_name,
-                quantity: updatedExp.quantity,
-                price_cents: updatedExp.price_cents,
-                updated_by: userId,
-                updated_at: new Date().toISOString(),
-            },
-            customId: `update-${updatedExp.id}-${Date.now()}`,
-        });
+        // 3. Direct write to Supabase if online, fallback to sync queue
+        let directSynced = false;
+        if (typeof navigator === "undefined" || navigator.onLine) {
+            try {
+                let { error: updateErr } = await supabaseClient
+                    .from("daily_expenses")
+                    .update({
+                        item_name: updatedExp.item_name,
+                        quantity: updatedExp.quantity,
+                        price_cents: updatedExp.price_cents,
+                        unit: updatedExp.unit,
+                        updated_at: new Date().toISOString(),
+                    })
+                    .eq("id", row.id);
+                if (updateErr && (updateErr.code === 'PGRST204' || updateErr.code === '42703')) {
+                    const fallbackName = formatNameWithUnitFallback(updatedExp.item_name, updatedExp.unit || "each");
+                    const retryRes = await supabaseClient
+                        .from("daily_expenses")
+                        .update({
+                            item_name: fallbackName,
+                            quantity: updatedExp.quantity,
+                            price_cents: updatedExp.price_cents,
+                            updated_at: new Date().toISOString(),
+                        })
+                        .eq("id", row.id);
+                    updateErr = retryRes.error;
+                }
+                if (!updateErr) {
+                    directSynced = true;
+                } else {
+                    console.warn("Direct Supabase update failed, enqueuing sync:", updateErr);
+                }
+            } catch (e) {
+                console.warn("Direct update exception:", e);
+            }
+        }
+
+        if (!directSynced) {
+            await enqueueSyncOperation({
+                businessId: bizId,
+                tableName: "daily_expenses",
+                action: "UPDATE",
+                payload: {
+                    id: updatedExp.id,
+                    item_name: formatNameWithUnitFallback(updatedExp.item_name, updatedExp.unit || "each"),
+                    quantity: updatedExp.quantity,
+                    price_cents: updatedExp.price_cents,
+                    unit: updatedExp.unit,
+                    updated_by: userId,
+                    updated_at: new Date().toISOString(),
+                },
+                customId: `update-${updatedExp.id}-${Date.now()}`,
+            });
+        }
 
         toast({ title: "Expense updated", variant: "success" });
         setEditingId(null);
     }
 
     async function deleteExpense(row: ExpenseRow) {
-        const ok = await confirm({
-            title: "Delete Expense",
-            description: `Are you sure you want to delete "${row.item_name}"?`,
-            confirmLabel: "Delete Expense",
-            variant: "danger",
-        });
-        if (!ok) return;
+    const ok = await confirm({
+        title: "Delete Expense",
+        description: `Are you sure you want to delete "${row.item_name}"?`,
+        confirmLabel: "Delete Expense",
+        variant: "danger",
+    });
+    if (!ok) return;
 
-        const bizId = business?.id || "default";
+    const bizId = await getEffectiveBusinessId();
 
-        // 1. Delete from IndexedDB immediately
-        await idbDeleteItem(STORES.daily_expenses, row.id);
+    // 1. Delete from IndexedDB immediately
+    await idbDeleteItem(STORES.daily_expenses, row.id);
 
-        // 2. Optimistic UI update
-        setExpenses((prev) => prev.filter((e) => e.id !== row.id));
-        setAllExpenses((prev) => prev.filter((e) => e.id !== row.id));
+    // 2. Optimistic UI update
+    setExpenses((prev) => prev.filter((e) => e.id !== row.id));
+    setAllExpenses((prev) => prev.filter((e) => e.id !== row.id));
 
-        // 3. Enqueue sync delete
+    // 3. Direct delete from Supabase if online, fallback to sync queue
+    let directSynced = false;
+    if (typeof navigator === "undefined" || navigator.onLine) {
+        try {
+            const { error: delErr } = await supabaseClient
+                .from("daily_expenses")
+                .delete()
+                .eq("id", row.id);
+            if (!delErr) {
+                directSynced = true;
+            } else {
+                console.warn("Direct Supabase delete failed, enqueuing sync:", delErr);
+            }
+        } catch (e) {
+            console.warn("Direct delete exception:", e);
+        }
+    }
+
+    if (!directSynced) {
         await enqueueSyncOperation({
             businessId: bizId,
             tableName: "daily_expenses",
@@ -950,780 +1217,870 @@ export default function ExpensesPage() {
             payload: { id: row.id },
             customId: `delete-${row.id}-${Date.now()}`,
         });
-
-        toast({ title: "Expense deleted", variant: "success" });
     }
 
-    if (loading) return <div className="min-h-screen flex items-center justify-center"><Loader2 className="animate-spin text-zinc-400" /></div>;
+    toast({ title: "Expense deleted", variant: "success" });
+    if (editingId === row.id) setEditingId(null);
+}
 
-    function getOverviewRange(): { start: Date; end: Date } | null {
-        switch (overviewScope) {
-            case "today":
-                return { start: startOfDay(new Date()), end: endOfDay(new Date()) };
-            case "week":
-                return { start: startOfWeek(overviewAnchor, { weekStartsOn: 1 }), end: endOfWeek(overviewAnchor, { weekStartsOn: 1 }) };
-            case "month":
-                return { start: startOfMonth(overviewAnchor), end: endOfMonth(overviewAnchor) };
-            case "year":
-                return { start: startOfYear(overviewAnchor), end: endOfYear(overviewAnchor) };
-            case "custom": {
-                if (!customFrom && !customTo) return null;
-                const start = customFrom ? startOfDay(new Date(`${customFrom}T00:00:00`)) : new Date(0);
-                const end = customTo ? endOfDay(new Date(`${customTo}T00:00:00`)) : endOfDay(new Date());
-                return { start, end };
-            }
-            default:
-                return null;
+if (loading) return <div className="min-h-screen flex items-center justify-center"><Loader2 className="animate-spin text-zinc-400" /></div>;
+
+function getOverviewRange(): { start: Date; end: Date } | null {
+    switch (overviewScope) {
+        case "today":
+            return { start: startOfDay(new Date()), end: endOfDay(new Date()) };
+        case "week":
+            return { start: startOfWeek(overviewAnchor, { weekStartsOn: 1 }), end: endOfWeek(overviewAnchor, { weekStartsOn: 1 }) };
+        case "month":
+            return { start: startOfMonth(overviewAnchor), end: endOfMonth(overviewAnchor) };
+        case "year":
+            return { start: startOfYear(overviewAnchor), end: endOfYear(overviewAnchor) };
+        case "custom": {
+            if (!customFrom && !customTo) return null;
+            const start = customFrom ? startOfDay(new Date(`${customFrom}T00:00:00`)) : new Date(0);
+            const end = customTo ? endOfDay(new Date(`${customTo}T00:00:00`)) : endOfDay(new Date());
+            return { start, end };
         }
+        default:
+            return null;
     }
+}
 
-    const overviewRange = getOverviewRange();
-    const rangedRows = overviewRange
-        ? allExpenses.filter(r => {
-            const d = new Date(`${r.expense_date}T00:00:00`);
-            return d >= overviewRange.start && d <= overviewRange.end;
-        })
-        : allExpenses;
-
-    // Active fixed recurring monthly expenses
-    const activeMonthlyExpenses = monthlyExpenses.filter(m => m.is_active !== false);
-
-    // Multiplier for recurring monthly overhead based on selected overview time frame
-    const periodMonthlyMultiplier = (() => {
-        switch (overviewScope) {
-            case "today":
-                return 1 / 30; // 1 day's share of monthly fixed overhead
-            case "week":
-                return 7 / 30; // 1 week's share of monthly fixed overhead
-            case "month":
-                return 1;      // 1 full month
-            case "year":
-                return 12;     // 1 full year
-            case "all": {
-                // Number of distinct calendar months with recorded daily expenses
-                const monthsSet = new Set(allExpenses.map(e => e.expense_date.substring(0, 7)));
-                return Math.max(1, monthsSet.size);
-            }
-            case "custom": {
-                if (!overviewRange) return 1;
-                const days = Math.max(1, Math.round((overviewRange.end.getTime() - overviewRange.start.getTime()) / (1000 * 60 * 60 * 24)));
-                return days / 30.4;
-            }
-            default:
-                return 1;
-        }
-    })();
-
-    const searchTerm = searchQuery.trim().toLowerCase();
-    const overviewRows = searchTerm
-        ? rangedRows.filter(r => r.item_name.toLowerCase().includes(searchTerm))
-        : rangedRows;
-
-    const filteredMonthlyRows = searchTerm
-        ? activeMonthlyExpenses.filter(r => r.item_name.toLowerCase().includes(searchTerm) || r.category.toLowerCase().includes(searchTerm))
-        : activeMonthlyExpenses;
-
-    const overviewDailyTotalCents = overviewRows.reduce((sum, r) => sum + r.price_cents, 0);
-    const fixedMonthlyBaseTotalCents = filteredMonthlyRows.reduce((sum, r) => sum + r.amount_cents, 0);
-    const overviewMonthlyTotalCents = Math.round(fixedMonthlyBaseTotalCents * periodMonthlyMultiplier);
-    const overviewTotalCents = overviewDailyTotalCents + overviewMonthlyTotalCents;
-
-    const overviewItemSummary = Object.values(
-        overviewRows.reduce((acc, r) => {
-            const key = r.item_name.trim().toLowerCase();
-            if (!acc[key]) acc[key] = { name: r.item_name, quantity: 0, cents: 0, type: "daily" as const };
-            acc[key].quantity += Number(r.quantity) || 0;
-            acc[key].cents += r.price_cents;
-            return acc;
-        }, {} as Record<string, { name: string; quantity: number; cents: number; type: "daily" | "monthly" }>)
-    ).sort((a, b) => b.cents - a.cents);
-
-    // Monthly expense item summary for overview (scaled by time multiplier)
-    const monthlyItemSummary = filteredMonthlyRows.map(r => ({
-        name: r.item_name,
-        category: r.category,
-        quantity: 1,
-        monthlyBaseCents: r.amount_cents,
-        cents: Math.round(r.amount_cents * periodMonthlyMultiplier),
-    })).sort((a, b) => b.cents - a.cents);
-
-    const distinctItemCount = overviewItemSummary.length;
-    const totalOverviewEntries = overviewRows.length + filteredMonthlyRows.length;
-    const avgPerEntryCents = totalOverviewEntries > 0 ? overviewTotalCents / totalOverviewEntries : 0;
-
-    // Chart grouping: by day for short ranges, by month across a year, by year for all-time
-    const chartGroupBy: "day" | "month" | "year" =
-        overviewScope === "year" ? "month" : overviewScope === "all" ? "year" : "day";
-    const chartMap = new Map<string, number>();
-    for (const r of overviewRows) {
+const overviewRange = getOverviewRange();
+const rangedRows = overviewRange
+    ? allExpenses.filter(r => {
         const d = new Date(`${r.expense_date}T00:00:00`);
-        const key = chartGroupBy === "day" ? format(d, "MMM d") : chartGroupBy === "month" ? format(d, "MMM") : format(d, "yyyy");
-        chartMap.set(key, (chartMap.get(key) || 0) + r.price_cents);
+        return d >= overviewRange.start && d <= overviewRange.end;
+    })
+    : allExpenses;
+
+// Active fixed recurring monthly expenses
+const activeMonthlyExpenses = monthlyExpenses.filter(m => m.is_active !== false);
+
+// Multiplier for recurring monthly overhead based on selected overview time frame
+const periodMonthlyMultiplier = (() => {
+    switch (overviewScope) {
+        case "today":
+            return 1 / 30; // 1 day's share of monthly fixed overhead
+        case "week":
+            return 7 / 30; // 1 week's share of monthly fixed overhead
+        case "month":
+            return 1;      // 1 full month
+        case "year":
+            return 12;     // 1 full year
+        case "all": {
+            // Number of distinct calendar months with recorded daily expenses
+            const monthsSet = new Set(allExpenses.map(e => e.expense_date.substring(0, 7)));
+            return Math.max(1, monthsSet.size);
+        }
+        case "custom": {
+            if (!overviewRange) return 1;
+            const days = Math.max(1, Math.round((overviewRange.end.getTime() - overviewRange.start.getTime()) / (1000 * 60 * 60 * 24)));
+            return days / 30.4;
+        }
+        default:
+            return 1;
     }
-    // If viewing year or multi-month, distribute fixed monthly overheads across months in trend chart
-    if (chartGroupBy === "month") {
-        for (const [key, cents] of chartMap.entries()) {
-            chartMap.set(key, cents + fixedMonthlyBaseTotalCents);
-        }
+})();
+
+const searchTerm = searchQuery.trim().toLowerCase();
+const overviewRows = searchTerm
+    ? rangedRows.filter(r => r.item_name.toLowerCase().includes(searchTerm))
+    : rangedRows;
+
+const filteredMonthlyRows = searchTerm
+    ? activeMonthlyExpenses.filter(r => r.item_name.toLowerCase().includes(searchTerm) || r.category.toLowerCase().includes(searchTerm))
+    : activeMonthlyExpenses;
+
+const overviewDailyTotalCents = overviewRows.reduce((sum, r) => sum + r.price_cents, 0);
+const fixedMonthlyBaseTotalCents = filteredMonthlyRows.reduce((sum, r) => sum + r.amount_cents, 0);
+const overviewMonthlyTotalCents = Math.round(fixedMonthlyBaseTotalCents * periodMonthlyMultiplier);
+const overviewTotalCents = overviewDailyTotalCents + overviewMonthlyTotalCents;
+
+const overviewItemSummary = Object.values(
+    overviewRows.reduce((acc, r) => {
+        const key = r.item_name.trim().toLowerCase();
+        if (!acc[key]) acc[key] = { name: r.item_name, quantity: 0, cents: 0, type: "daily" as const };
+        acc[key].quantity += Number(r.quantity) || 0;
+        acc[key].cents += r.price_cents;
+        return acc;
+    }, {} as Record<string, { name: string; quantity: number; cents: number; type: "daily" | "monthly" }>)
+).sort((a, b) => b.cents - a.cents);
+
+// Monthly expense item summary for overview (scaled by time multiplier)
+const monthlyItemSummary = filteredMonthlyRows.map(r => ({
+    name: r.item_name,
+    category: r.category,
+    quantity: 1,
+    monthlyBaseCents: r.amount_cents,
+    cents: Math.round(r.amount_cents * periodMonthlyMultiplier),
+})).sort((a, b) => b.cents - a.cents);
+
+const distinctItemCount = overviewItemSummary.length;
+const totalOverviewEntries = overviewRows.length + filteredMonthlyRows.length;
+const avgPerEntryCents = totalOverviewEntries > 0 ? overviewTotalCents / totalOverviewEntries : 0;
+
+// Chart grouping: by day for short ranges, by month across a year, by year for all-time
+const chartGroupBy: "day" | "month" | "year" =
+    overviewScope === "year" ? "month" : overviewScope === "all" ? "year" : "day";
+const chartMap = new Map<string, number>();
+for (const r of overviewRows) {
+    const d = new Date(`${r.expense_date}T00:00:00`);
+    const key = chartGroupBy === "day" ? format(d, "MMM d") : chartGroupBy === "month" ? format(d, "MMM") : format(d, "yyyy");
+    chartMap.set(key, (chartMap.get(key) || 0) + r.price_cents);
+}
+// If viewing year or multi-month, distribute fixed monthly overheads across months in trend chart
+if (chartGroupBy === "month") {
+    for (const [key, cents] of chartMap.entries()) {
+        chartMap.set(key, cents + fixedMonthlyBaseTotalCents);
     }
-    const chartData = Array.from(chartMap.entries()).map(([name, cents]) => ({ name, Amount: cents / 100 }));
+}
+const chartData = Array.from(chartMap.entries()).map(([name, cents]) => ({ name, Amount: cents / 100 }));
 
-    // "Where is it leaking" insights: biggest spend contributors, most-bought items, and their share of the total
-    const PIE_COLORS = ["#0891B2", "#F97316", "#8B5CF6", "#EC4899", "#22C55E", "#A1A1AA"];
-    const topLeakItems = overviewItemSummary.slice(0, 6).map(i => ({
-        name: i.name,
-        Amount: i.cents / 100,
-        percent: overviewTotalCents > 0 ? (i.cents / overviewTotalCents) * 100 : 0,
-    }));
-    const topQuantityItems = [...overviewItemSummary]
-        .sort((a, b) => b.quantity - a.quantity)
-        .slice(0, 6)
-        .map(i => ({ name: i.name, Qty: i.quantity }));
-    const pieData = (() => {
-        const top = overviewItemSummary.slice(0, 5).map(i => ({ name: i.name, value: i.cents / 100 }));
-        const othersCents = overviewItemSummary.slice(5).reduce((sum, i) => sum + i.cents, 0);
-        if (othersCents > 0) top.push({ name: "Other", value: othersCents / 100 });
-        return top;
-    })();
-    const biggestLeak = overviewItemSummary[0] || null;
-    const biggestLeakPercent = biggestLeak && overviewTotalCents > 0 ? (biggestLeak.cents / overviewTotalCents) * 100 : 0;
+// "Where is it leaking" insights: biggest spend contributors, most-bought items, and their share of the total
+const PIE_COLORS = ["#0891B2", "#F97316", "#8B5CF6", "#EC4899", "#22C55E", "#A1A1AA"];
+const topLeakItems = overviewItemSummary.slice(0, 6).map(i => ({
+    name: i.name,
+    Amount: i.cents / 100,
+    percent: overviewTotalCents > 0 ? (i.cents / overviewTotalCents) * 100 : 0,
+}));
+const topQuantityItems = [...overviewItemSummary]
+    .sort((a, b) => b.quantity - a.quantity)
+    .slice(0, 6)
+    .map(i => ({ name: i.name, Qty: i.quantity }));
+const pieData = (() => {
+    const top = overviewItemSummary.slice(0, 5).map(i => ({ name: i.name, value: i.cents / 100 }));
+    const othersCents = overviewItemSummary.slice(5).reduce((sum, i) => sum + i.cents, 0);
+    if (othersCents > 0) top.push({ name: "Other", value: othersCents / 100 });
+    return top;
+})();
+const biggestLeak = overviewItemSummary[0] || null;
+const biggestLeakPercent = biggestLeak && overviewTotalCents > 0 ? (biggestLeak.cents / overviewTotalCents) * 100 : 0;
 
-    // Price Watch: full price-change timeline per item across all history (not just the selected period),
-    // so a past spike is still visible even if the price has since come back down (e.g. ₹20 -> ₹100 -> ₹20).
-    const priceTimelines = (() => {
-        const searchT = searchQuery.trim().toLowerCase();
-        const source = searchT ? allExpenses.filter(r => r.item_name.toLowerCase().includes(searchT)) : allExpenses;
-        const byItem = new Map<string, { name: string; entries: { date: string; unit: number }[] }>();
-        for (const r of source) {
-            if (!r.quantity || r.quantity <= 0) continue;
-            const key = r.item_name.trim().toLowerCase();
-            if (!byItem.has(key)) byItem.set(key, { name: r.item_name, entries: [] });
-            byItem.get(key)!.entries.push({ date: r.expense_date, unit: r.price_cents / r.quantity });
+// Price Watch: full price-change timeline per item across all history (not just the selected period),
+// so a past spike is still visible even if the price has since come back down (e.g. ₹20 -> ₹100 -> ₹20).
+const priceTimelines = (() => {
+    const searchT = searchQuery.trim().toLowerCase();
+    const source = searchT ? allExpenses.filter(r => r.item_name.toLowerCase().includes(searchT)) : allExpenses;
+    const byItem = new Map<string, { name: string; entries: { date: string; unit: number }[] }>();
+    for (const r of source) {
+        if (!r.quantity || r.quantity <= 0) continue;
+        const key = r.item_name.trim().toLowerCase();
+        if (!byItem.has(key)) byItem.set(key, { name: r.item_name, entries: [] });
+        byItem.get(key)!.entries.push({ date: r.expense_date, unit: r.price_cents / r.quantity });
+    }
+
+    type Change = { date: string; fromCents: number; toCents: number; percent: number };
+    const timelines: {
+        key: string; name: string; currentCents: number; firstCents: number;
+        peakCents: number; peakDate: string; changes: Change[];
+    }[] = [];
+
+    for (const [key, { name, entries }] of byItem.entries()) {
+        const sorted = [...entries].sort((a, b) => a.date.localeCompare(b.date));
+        // Collapse consecutive purchases at (roughly) the same price into a single price-point
+        const points: { date: string; unit: number }[] = [];
+        for (const e of sorted) {
+            const last = points[points.length - 1];
+            if (!last || Math.round(last.unit) !== Math.round(e.unit)) points.push(e);
         }
+        if (points.length < 2) continue; // price never changed
 
-        type Change = { date: string; fromCents: number; toCents: number; percent: number };
-        const timelines: {
-            key: string; name: string; currentCents: number; firstCents: number;
-            peakCents: number; peakDate: string; changes: Change[];
-        }[] = [];
-
-        for (const [key, { name, entries }] of byItem.entries()) {
-            const sorted = [...entries].sort((a, b) => a.date.localeCompare(b.date));
-            // Collapse consecutive purchases at (roughly) the same price into a single price-point
-            const points: { date: string; unit: number }[] = [];
-            for (const e of sorted) {
-                const last = points[points.length - 1];
-                if (!last || Math.round(last.unit) !== Math.round(e.unit)) points.push(e);
-            }
-            if (points.length < 2) continue; // price never changed
-
-            const changes: Change[] = [];
-            for (let i = 1; i < points.length; i++) {
-                const from = points[i - 1].unit;
-                const to = points[i].unit;
-                changes.push({ date: points[i].date, fromCents: from, toCents: to, percent: from > 0 ? ((to - from) / from) * 100 : 0 });
-            }
-            if (!changes.some(c => c.percent > 0)) continue; // only surface items that have gone up at least once
-
-            let peak = points[0];
-            for (const p of points) if (p.unit > peak.unit) peak = p;
-
-            timelines.push({
-                key,
-                name,
-                currentCents: points[points.length - 1].unit,
-                firstCents: points[0].unit,
-                peakCents: peak.unit,
-                peakDate: peak.date,
-                changes: [...changes].reverse(), // most recent change first
-            });
+        const changes: Change[] = [];
+        for (let i = 1; i < points.length; i++) {
+            const from = points[i - 1].unit;
+            const to = points[i].unit;
+            changes.push({ date: points[i].date, fromCents: from, toCents: to, percent: from > 0 ? ((to - from) / from) * 100 : 0 });
         }
+        if (!changes.some(c => c.percent > 0)) continue; // only surface items that have gone up at least once
 
-        return timelines.sort((a, b) => {
-            const growthA = a.firstCents > 0 ? (a.peakCents - a.firstCents) / a.firstCents : 0;
-            const growthB = b.firstCents > 0 ? (b.peakCents - b.firstCents) / b.firstCents : 0;
-            return growthB - growthA;
+        let peak = points[0];
+        for (const p of points) if (p.unit > peak.unit) peak = p;
+
+        timelines.push({
+            key,
+            name,
+            currentCents: points[points.length - 1].unit,
+            firstCents: points[0].unit,
+            peakCents: peak.unit,
+            peakDate: peak.date,
+            changes: [...changes].reverse(), // most recent change first
         });
-    })();
+    }
 
-    const unifiedTransactions = [
-        ...overviewRows.map(r => ({
-            id: r.id,
-            type: "daily" as const,
-            date: r.expense_date,
-            rawDate: new Date(r.created_at || `${r.expense_date}T00:00:00`),
-            item_name: r.item_name,
-            subtext: r.quantity > 1 ? `Qty: ${r.quantity}` : "Daily supply",
-            amount_cents: r.price_cents,
-            submitted_by: r.submitted_by,
-            category: "Daily",
-        })),
-        ...filteredMonthlyRows.map(m => ({
-            id: m.id,
-            type: "monthly" as const,
-            date: overviewRange ? format(overviewRange.start, "yyyy-MM-dd") : format(new Date(), "yyyy-MM-dd"),
-            rawDate: new Date(m.created_at),
-            item_name: m.item_name,
-            subtext: m.notes ? `${m.category} · Fixed Overhead · ${m.notes}` : `${m.category} · Fixed Overhead`,
-            amount_cents: Math.round(m.amount_cents * periodMonthlyMultiplier),
-            submitted_by: m.submitted_by,
-            category: m.category,
-        })),
-    ];
-
-    const sortedTransactions = [...unifiedTransactions].sort((a, b) => {
-        const diff = sortKey === "date"
-            ? b.rawDate.getTime() - a.rawDate.getTime()
-            : a.amount_cents - b.amount_cents;
-        return sortDir === "asc" ? -diff : diff;
+    return timelines.sort((a, b) => {
+        const growthA = a.firstCents > 0 ? (a.peakCents - a.firstCents) / a.firstCents : 0;
+        const growthB = b.firstCents > 0 ? (b.peakCents - b.firstCents) / b.firstCents : 0;
+        return growthB - growthA;
     });
+})();
 
-    function toggleSort(key: "date" | "amount") {
-        if (sortKey === key) setSortDir(d => (d === "asc" ? "desc" : "asc"));
-        else { setSortKey(key); setSortDir("desc"); }
-    }
+const unifiedTransactions = [
+    ...overviewRows.map(r => ({
+        id: r.id,
+        type: "daily" as const,
+        date: r.expense_date,
+        rawDate: new Date(r.created_at || `${r.expense_date}T00:00:00`),
+        item_name: r.item_name,
+        subtext: `${r.quantity} ${r.unit || "each"}`,
+        amount_cents: r.price_cents,
+        submitted_by: r.submitted_by,
+        category: "Daily",
+    })),
+    ...filteredMonthlyRows.map(m => ({
+        id: m.id,
+        type: "monthly" as const,
+        date: overviewRange ? format(overviewRange.start, "yyyy-MM-dd") : format(new Date(), "yyyy-MM-dd"),
+        rawDate: new Date(m.created_at),
+        item_name: m.item_name,
+        subtext: m.notes ? `${m.category} · Fixed Overhead · ${m.notes}` : `${m.category} · Fixed Overhead`,
+        amount_cents: Math.round(m.amount_cents * periodMonthlyMultiplier),
+        submitted_by: m.submitted_by,
+        category: m.category,
+    })),
+];
 
-    function togglePriceItem(key: string) {
-        setExpandedPriceItems(prev => {
-            const next = new Set(prev);
-            if (next.has(key)) next.delete(key); else next.add(key);
-            return next;
-        });
-    }
+const sortedTransactions = [...unifiedTransactions].sort((a, b) => {
+    const diff = sortKey === "date"
+        ? b.rawDate.getTime() - a.rawDate.getTime()
+        : a.amount_cents - b.amount_cents;
+    return sortDir === "asc" ? -diff : diff;
+});
 
-    let overviewPeriodLabel = "All Time";
-    if (overviewScope === "today") overviewPeriodLabel = format(new Date(), "MMMM d, yyyy");
-    else if (overviewScope === "week" && overviewRange) overviewPeriodLabel = `${format(overviewRange.start, "MMM d")} – ${format(overviewRange.end, "MMM d, yyyy")}`;
-    else if (overviewScope === "month") overviewPeriodLabel = format(overviewAnchor, "MMMM yyyy");
-    else if (overviewScope === "year") overviewPeriodLabel = format(overviewAnchor, "yyyy");
+function toggleSort(key: "date" | "amount") {
+    if (sortKey === key) setSortDir(d => (d === "asc" ? "desc" : "asc"));
+    else { setSortKey(key); setSortDir("desc"); }
+}
 
-    function prevOverviewPeriod() {
-        if (overviewScope === "week") setOverviewAnchor(d => addWeeks(d, -1));
-        else if (overviewScope === "month") setOverviewAnchor(d => addMonths(d, -1));
-        else if (overviewScope === "year") setOverviewAnchor(d => addYears(d, -1));
-    }
-
-    function nextOverviewPeriod() {
-        if (overviewScope === "week") setOverviewAnchor(d => addWeeks(d, 1));
-        else if (overviewScope === "month") setOverviewAnchor(d => addMonths(d, 1));
-        else if (overviewScope === "year") setOverviewAnchor(d => addYears(d, 1));
-    }
-
-    const showsNav = overviewScope === "week" || overviewScope === "month" || overviewScope === "year";
-    const scopeOptions: Array<{ id: typeof overviewScope; label: string }> = [
-        { id: "today", label: "Today" },
-        { id: "week", label: "This Week" },
-        { id: "month", label: "This Month" },
-        { id: "year", label: "This Year" },
-        { id: "all", label: "All Time" },
-        { id: "custom", label: "Custom Range" },
-    ];
-
-    const viewedDateTotalCents = expenses.reduce((sum, r) => sum + r.price_cents, 0);
-    const totalActiveMonthlyFixedCents = activeMonthlyExpenses.reduce((sum, r) => sum + r.amount_cents, 0);
-    const activeMonthlyOverheadsCount = activeMonthlyExpenses.length;
-    const pausedMonthlyOverheadsCount = monthlyExpenses.filter(r => r.is_active === false).length;
-
-    // AI-calculated daily recurring demand projected across 30 days
-    const aiDailyProjections = calculateDailyRecurringProjections(allExpenses);
-    const grandTotalMonthlyOperationalCents = totalActiveMonthlyFixedCents + aiDailyProjections.totalProjectedMonthlyCents;
-    const grandTotalDailyBurnCents = Math.round(totalActiveMonthlyFixedCents / 30.4) + aiDailyProjections.totalDailyBurnCents;
-    const totalAiPotentialSavingsCents = aiDailyProjections.items.reduce((sum, i) => sum + i.suggestedSavingsCents, 0);
-
-    const displayedAiItems = aiDailyProjections.items.filter(item => {
-        if (aiRecurrenceFilter === "all") return true;
-        return item.recurrenceLevel === aiRecurrenceFilter;
+function togglePriceItem(key: string) {
+    setExpandedPriceItems(prev => {
+        const next = new Set(prev);
+        if (next.has(key)) next.delete(key); else next.add(key);
+        return next;
     });
+}
 
-    // Filtered monthly overheads list for the Monthly Hub tab
-    const displayedMonthlyExpenses = monthlyExpenses.filter(row => {
-        const matchesCat = monthlyCategoryFilter === "all" || row.category === monthlyCategoryFilter;
-        const q = monthlySearchQuery.trim().toLowerCase();
-        const matchesSearch = !q || row.item_name.toLowerCase().includes(q) || (row.notes && row.notes.toLowerCase().includes(q)) || row.category.toLowerCase().includes(q);
-        return matchesCat && matchesSearch;
-    });
+let overviewPeriodLabel = "All Time";
+if (overviewScope === "today") overviewPeriodLabel = format(new Date(), "MMMM d, yyyy");
+else if (overviewScope === "week" && overviewRange) overviewPeriodLabel = `${format(overviewRange.start, "MMM d")} – ${format(overviewRange.end, "MMM d, yyyy")}`;
+else if (overviewScope === "month") overviewPeriodLabel = format(overviewAnchor, "MMMM yyyy");
+else if (overviewScope === "year") overviewPeriodLabel = format(overviewAnchor, "yyyy");
 
-    // Captures a chart section as an image so the PDF mirrors what's on screen, not just raw numbers
-    async function addChartImage(doc: jsPDF, el: HTMLDivElement | null, title: string, y: number): Promise<number> {
-        if (!el) return y;
-        const pageWidth = doc.internal.pageSize.getWidth();
-        const imgWidth = pageWidth - 28;
-        const { default: html2canvas } = await import("html2canvas-pro");
-        const canvas = await html2canvas(el, { scale: 2, backgroundColor: "#ffffff" });
-        const imgHeight = (canvas.height * imgWidth) / canvas.width;
+function prevOverviewPeriod() {
+    if (overviewScope === "week") setOverviewAnchor(d => addWeeks(d, -1));
+    else if (overviewScope === "month") setOverviewAnchor(d => addMonths(d, -1));
+    else if (overviewScope === "year") setOverviewAnchor(d => addYears(d, -1));
+}
 
-        if (y + imgHeight + 14 > 280) { doc.addPage(); y = 20; }
-        doc.setFontSize(13);
+function nextOverviewPeriod() {
+    if (overviewScope === "week") setOverviewAnchor(d => addWeeks(d, 1));
+    else if (overviewScope === "month") setOverviewAnchor(d => addMonths(d, 1));
+    else if (overviewScope === "year") setOverviewAnchor(d => addYears(d, 1));
+}
+
+const showsNav = overviewScope === "week" || overviewScope === "month" || overviewScope === "year";
+const scopeOptions: Array<{ id: typeof overviewScope; label: string }> = [
+    { id: "today", label: "Today" },
+    { id: "week", label: "This Week" },
+    { id: "month", label: "This Month" },
+    { id: "year", label: "This Year" },
+    { id: "all", label: "All Time" },
+    { id: "custom", label: "Custom Range" },
+];
+
+const viewedDateTotalCents = expenses.reduce((sum, r) => sum + r.price_cents, 0);
+const totalActiveMonthlyFixedCents = activeMonthlyExpenses.reduce((sum, r) => sum + r.amount_cents, 0);
+const activeMonthlyOverheadsCount = activeMonthlyExpenses.length;
+const pausedMonthlyOverheadsCount = monthlyExpenses.filter(r => r.is_active === false).length;
+
+// AI-calculated daily recurring demand projected across 30 days
+const aiDailyProjections = calculateDailyRecurringProjections(allExpenses);
+const grandTotalMonthlyOperationalCents = totalActiveMonthlyFixedCents + aiDailyProjections.totalProjectedMonthlyCents;
+const grandTotalDailyBurnCents = Math.round(totalActiveMonthlyFixedCents / 30.4) + aiDailyProjections.totalDailyBurnCents;
+const totalAiPotentialSavingsCents = aiDailyProjections.items.reduce((sum, i) => sum + i.suggestedSavingsCents, 0);
+
+const displayedAiItems = aiDailyProjections.items.filter(item => {
+    if (aiRecurrenceFilter === "all") return true;
+    return item.recurrenceLevel === aiRecurrenceFilter;
+});
+
+// Filtered monthly overheads list for the Monthly Hub tab
+const displayedMonthlyExpenses = monthlyExpenses.filter(row => {
+    const matchesCat = monthlyCategoryFilter === "all" || row.category === monthlyCategoryFilter;
+    const q = monthlySearchQuery.trim().toLowerCase();
+    const matchesSearch = !q || row.item_name.toLowerCase().includes(q) || (row.notes && row.notes.toLowerCase().includes(q)) || row.category.toLowerCase().includes(q);
+    return matchesCat && matchesSearch;
+});
+
+// Captures a chart section as an image so the PDF mirrors what's on screen, not just raw numbers
+async function addChartImage(doc: jsPDF, el: HTMLDivElement | null, title: string, y: number): Promise<number> {
+    if (!el) return y;
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const imgWidth = pageWidth - 28;
+    const { default: html2canvas } = await import("html2canvas-pro");
+    const canvas = await html2canvas(el, { scale: 2, backgroundColor: "#ffffff" });
+    const imgHeight = (canvas.height * imgWidth) / canvas.width;
+
+    if (y + imgHeight + 14 > 280) { doc.addPage(); y = 20; }
+    doc.setFontSize(13);
+    doc.setTextColor(24, 24, 27);
+    doc.text(title, 14, y);
+    y += 5;
+    doc.addImage(canvas.toDataURL("image/png"), "PNG", 14, y, imgWidth, imgHeight);
+    return y + imgHeight + 10;
+}
+
+async function exportOverviewPdf() {
+    setExportingPdf(true);
+    try {
+        const [{ default: jsPDF }, { default: autoTable }] = await Promise.all([import("jspdf"), import("jspdf-autotable")]);
+        const doc = new jsPDF();
+        let y = 20;
+
+        doc.setFontSize(18);
+        doc.text("Daily Expenses Report", 14, y);
+        y += 8;
+        doc.setFontSize(11);
+        doc.setTextColor(82, 82, 91);
+        doc.text(`Period: ${overviewPeriodLabel}`, 14, y);
+        y += 6;
+        doc.text(`Generated: ${format(new Date(), "dd MMM yyyy, h:mm a")}`, 14, y);
+        y += 8;
+
+        doc.setFontSize(11);
         doc.setTextColor(24, 24, 27);
-        doc.text(title, 14, y);
-        y += 5;
-        doc.addImage(canvas.toDataURL("image/png"), "PNG", 14, y, imgWidth, imgHeight);
-        return y + imgHeight + 10;
-    }
+        doc.text(`Total Spent: Rs. ${(overviewTotalCents / 100).toFixed(2)}`, 14, y);
+        doc.text(`Avg / Entry: Rs. ${(avgPerEntryCents / 100).toFixed(2)}`, 105, y);
+        y += 6;
+        doc.text(`Entries: ${overviewRows.length}`, 14, y);
+        doc.text(`Distinct Items: ${distinctItemCount}`, 105, y);
+        y += 10;
 
-    async function exportOverviewPdf() {
-        setExportingPdf(true);
-        try {
-            const [{ default: jsPDF }, { default: autoTable }] = await Promise.all([import("jspdf"), import("jspdf-autotable")]);
-            const doc = new jsPDF();
-            let y = 20;
-
-            doc.setFontSize(18);
-            doc.text("Daily Expenses Report", 14, y);
-            y += 8;
-            doc.setFontSize(11);
-            doc.setTextColor(82, 82, 91);
-            doc.text(`Period: ${overviewPeriodLabel}`, 14, y);
-            y += 6;
-            doc.text(`Generated: ${format(new Date(), "dd MMM yyyy, h:mm a")}`, 14, y);
-            y += 8;
-
-            doc.setFontSize(11);
+        if (biggestLeak) {
+            doc.setFillColor(255, 251, 235);
+            doc.rect(14, y - 5, 182, 12, "F");
+            doc.setTextColor(180, 83, 9);
+            doc.setFontSize(10);
+            doc.text(
+                `Biggest Expense Leak: ${biggestLeak.name} - Rs. ${(biggestLeak.cents / 100).toFixed(2)} (${biggestLeakPercent.toFixed(0)}% of total spend)`,
+                17, y + 2
+            );
             doc.setTextColor(24, 24, 27);
-            doc.text(`Total Spent: Rs. ${(overviewTotalCents / 100).toFixed(2)}`, 14, y);
-            doc.text(`Avg / Entry: Rs. ${(avgPerEntryCents / 100).toFixed(2)}`, 105, y);
-            y += 6;
-            doc.text(`Entries: ${overviewRows.length}`, 14, y);
-            doc.text(`Distinct Items: ${distinctItemCount}`, 105, y);
-            y += 10;
+            y += 14;
+        }
 
-            if (biggestLeak) {
-                doc.setFillColor(255, 251, 235);
-                doc.rect(14, y - 5, 182, 12, "F");
-                doc.setTextColor(180, 83, 9);
-                doc.setFontSize(10);
-                doc.text(
-                    `Biggest Expense Leak: ${biggestLeak.name} - Rs. ${(biggestLeak.cents / 100).toFixed(2)} (${biggestLeakPercent.toFixed(0)}% of total spend)`,
-                    17, y + 2
-                );
-                doc.setTextColor(24, 24, 27);
-                y += 14;
-            }
+        y = await addChartImage(doc, trendChartRef.current, "Spending Trend", y);
+        y = await addChartImage(doc, leakChartsRef.current, "Where the Money Is Going", y);
 
-            y = await addChartImage(doc, trendChartRef.current, "Spending Trend", y);
-            y = await addChartImage(doc, leakChartsRef.current, "Where the Money Is Going", y);
-
-            if (priceTimelines.length > 0) {
-                if (y > 250) { doc.addPage(); y = 20; }
-                doc.setFontSize(13);
-                doc.text("Price Watch — Items That Got Costlier", 14, y);
-                autoTable(doc, {
-                    startY: y + 4,
-                    head: [["Item", "First Price", "Peak Price (Date)", "Current Price", "Peak Change"]],
-                    body: priceTimelines.map(t => [
-                        t.name,
-                        `Rs. ${(t.firstCents / 100).toFixed(2)}`,
-                        `Rs. ${(t.peakCents / 100).toFixed(2)} (${format(new Date(`${t.peakDate}T00:00:00`), "d MMM yyyy")})`,
-                        `Rs. ${(t.currentCents / 100).toFixed(2)}`,
-                        `+${(t.firstCents > 0 ? ((t.peakCents - t.firstCents) / t.firstCents) * 100 : 0).toFixed(0)}%`,
-                    ]),
-                    headStyles: { fillColor: [225, 29, 72] },
-                });
-                y = (doc as any).lastAutoTable.finalY + 10;
-            }
-
+        if (priceTimelines.length > 0) {
             if (y > 250) { doc.addPage(); y = 20; }
             doc.setFontSize(13);
-            doc.text("Item-wise Breakdown", 14, y);
+            doc.text("Price Watch — Items That Got Costlier", 14, y);
             autoTable(doc, {
                 startY: y + 4,
-                head: [["Item", "Qty", "Total (Rs)"]],
-                body: overviewItemSummary.map(i => [i.name, i.quantity, (i.cents / 100).toFixed(2)]),
-                headStyles: { fillColor: [8, 145, 178] },
-            });
-
-            if (monthlyItemSummary.length > 0) {
-                const currentY = (doc as any).lastAutoTable.finalY + 10;
-                let myY = currentY;
-                if (myY > 250) { doc.addPage(); myY = 20; }
-                doc.setFontSize(13);
-                doc.text("Monthly Fixed Overheads Breakdown", 14, myY);
-                autoTable(doc, {
-                    startY: myY + 4,
-                    head: [["Category", "Item", "Total (Rs)"]],
-                    body: monthlyItemSummary.map(i => [i.category, i.name, (i.cents / 100).toFixed(2)]),
-                    headStyles: { fillColor: [124, 58, 237] },
-                });
-            }
-
-            const afterItemsY = (doc as any).lastAutoTable.finalY + 10;
-            let transY = afterItemsY;
-            if (transY > 250) { doc.addPage(); transY = 20; }
-            doc.setFontSize(13);
-            doc.text("All Transactions (Daily & Monthly)", 14, transY);
-
-            autoTable(doc, {
-                startY: transY + 4,
-                head: [["Date", "Type / Category", "Item", "Details", "Amount (Rs)", ...(isAdmin ? ["Added By"] : [])]],
-                body: sortedTransactions.map(r => [
-                    format(new Date(`${r.date}T00:00:00`), "dd MMM yyyy"),
-                    r.category,
-                    r.item_name,
-                    r.subtext,
-                    (r.amount_cents / 100).toFixed(2),
-                    ...(isAdmin ? [r.submitted_by && namesById[r.submitted_by] ? namesById[r.submitted_by] : "-"] : []),
+                head: [["Item", "First Price", "Peak Price (Date)", "Current Price", "Peak Change"]],
+                body: priceTimelines.map(t => [
+                    t.name,
+                    `Rs. ${(t.firstCents / 100).toFixed(2)}`,
+                    `Rs. ${(t.peakCents / 100).toFixed(2)} (${format(new Date(`${t.peakDate}T00:00:00`), "d MMM yyyy")})`,
+                    `Rs. ${(t.currentCents / 100).toFixed(2)}`,
+                    `+${(t.firstCents > 0 ? ((t.peakCents - t.firstCents) / t.firstCents) * 100 : 0).toFixed(0)}%`,
                 ]),
-                headStyles: { fillColor: [39, 39, 42] },
+                headStyles: { fillColor: [225, 29, 72] },
             });
-
-            const fileLabel = overviewPeriodLabel.replace(/[^a-z0-9]+/gi, "_");
-            doc.save(`expenses_report_${fileLabel}.pdf`);
-        } finally {
-            setExportingPdf(false);
+            y = (doc as any).lastAutoTable.finalY + 10;
         }
+
+        if (y > 250) { doc.addPage(); y = 20; }
+        doc.setFontSize(13);
+        doc.text("Item-wise Breakdown", 14, y);
+        autoTable(doc, {
+            startY: y + 4,
+            head: [["Item", "Qty", "Total (Rs)"]],
+            body: overviewItemSummary.map(i => [i.name, i.quantity, (i.cents / 100).toFixed(2)]),
+            headStyles: { fillColor: [8, 145, 178] },
+        });
+
+        if (monthlyItemSummary.length > 0) {
+            const currentY = (doc as any).lastAutoTable.finalY + 10;
+            let myY = currentY;
+            if (myY > 250) { doc.addPage(); myY = 20; }
+            doc.setFontSize(13);
+            doc.text("Monthly Fixed Overheads Breakdown", 14, myY);
+            autoTable(doc, {
+                startY: myY + 4,
+                head: [["Category", "Item", "Total (Rs)"]],
+                body: monthlyItemSummary.map(i => [i.category, i.name, (i.cents / 100).toFixed(2)]),
+                headStyles: { fillColor: [124, 58, 237] },
+            });
+        }
+
+        const afterItemsY = (doc as any).lastAutoTable.finalY + 10;
+        let transY = afterItemsY;
+        if (transY > 250) { doc.addPage(); transY = 20; }
+        doc.setFontSize(13);
+        doc.text("All Transactions (Daily & Monthly)", 14, transY);
+
+        autoTable(doc, {
+            startY: transY + 4,
+            head: [["Date", "Type / Category", "Item", "Details", "Amount (Rs)", ...(effectiveIsAdmin ? ["Added By"] : [])]],
+            body: sortedTransactions.map(r => [
+                format(new Date(`${r.date}T00:00:00`), "dd MMM yyyy"),
+                r.category,
+                r.item_name,
+                r.subtext,
+                (r.amount_cents / 100).toFixed(2),
+                ...(effectiveIsAdmin ? [r.submitted_by && namesById[r.submitted_by] ? namesById[r.submitted_by] : "-"] : []),
+            ]),
+            headStyles: { fillColor: [39, 39, 42] },
+        });
+
+        const fileLabel = overviewPeriodLabel.replace(/[^a-z0-9]+/gi, "_");
+        doc.save(`expenses_report_${fileLabel}.pdf`);
+    } finally {
+        setExportingPdf(false);
     }
+}
 
-    return (
-        <div>
-            <div className={`mx-auto p-4 md:p-6 space-y-6 ${isAdmin ? "max-w-6xl" : "max-w-md"}`}>
-                {/* Header */}
-                <div className="space-y-4">
-                    <div className="flex items-center justify-between gap-4">
-                        <div>
-                            <div className="flex items-center gap-2">
-                                <h1 className="text-2xl font-bold text-zinc-900 tracking-tight flex items-center gap-2">
-                                    <Receipt size={22} className="text-cyan-600" />
-                                    Expenses
-                                </h1>
-                                <SyncStatusBadge />
-                            </div>
-                            <p className="text-zinc-500 text-sm">Track daily &amp; monthly expenses, analyze trends &amp; optimize costs</p>
+return (
+    <div>
+        <div className={`mx-auto p-4 md:p-6 space-y-6 ${effectiveIsAdmin ? "max-w-6xl" : "max-w-md"}`}>
+            {/* Header */}
+            <div className="space-y-4">
+                <div className="flex items-center justify-between gap-4">
+                    <div>
+                        <div className="flex items-center gap-2">
+                            <h1 className="text-2xl font-bold text-zinc-900 tracking-tight flex items-center gap-2">
+                                <Receipt size={22} className="text-[#2563EB]" />
+                                Expenses
+                            </h1>
+                            <SyncStatusBadge />
                         </div>
-
-                        {isAdmin && activeTab === "add" && (
-                            <div className="flex items-center gap-1.5">
-                                <span className="hidden sm:inline-flex text-[10px] font-extrabold uppercase tracking-wider bg-zinc-100 text-zinc-600 border border-zinc-200 px-2 py-1 rounded-lg">
-                                    Admin Only
-                                </span>
-                                <div className="flex items-center gap-1 bg-white border border-zinc-200 rounded-lg p-1 shadow-sm">
-                                    <button onClick={() => { setDate(d => addDays(d, -1)); setManualOverride(true); }} className="p-2 hover:bg-zinc-50 rounded-md text-zinc-600">
-                                        <ChevronLeft size={18} />
-                                    </button>
-                                    <div className="px-2 text-sm font-semibold text-zinc-900 min-w-[90px] text-center">
-                                        {isToday ? "Today" : format(date, "MMM dd")}
-                                    </div>
-                                    <button
-                                        onClick={() => { setDate(d => addDays(d, 1)); setManualOverride(true); }}
-                                        className="p-2 hover:bg-zinc-50 rounded-md text-zinc-600 disabled:opacity-30"
-                                        disabled={isToday}
-                                    >
-                                        <ChevronRight size={18} />
-                                    </button>
-                                </div>
-                            </div>
-                        )}
+                        <p className="text-zinc-500 text-sm">Track daily &amp; monthly expenses, analyze trends &amp; optimize costs</p>
                     </div>
 
-                    {new Date().getHours() < 5 && isSameDay(date, addDays(new Date(), -1)) && activeTab === "add" ? (
-                        <div className="bg-blue-50 text-blue-900 text-xs px-3 py-2.5 rounded-lg border border-blue-200/80 flex items-center gap-2 shadow-2xs">
-                            <Clock size={14} className="text-blue-600 shrink-0" />
-                            <span><strong>Note:</strong> You are entering expenses for yesterday's shift closing. This will auto-switch to today at 5:00 AM.</span>
+                    {effectiveIsAdmin && activeTab === "add" && (
+                        <div className="flex items-center gap-1.5">
+                            <span className="hidden sm:inline-flex text-[10px] font-extrabold uppercase tracking-wider bg-zinc-100 text-zinc-600 border border-zinc-200 px-2 py-1 rounded-lg">
+                                Admin Only
+                            </span>
+                            <div className="flex items-center gap-1 bg-white border border-zinc-200 rounded-lg p-1 shadow-sm">
+                                <button onClick={() => { setDate(d => addDays(d, -1)); setManualOverride(true); }} className="p-2 hover:bg-zinc-50 rounded-md text-zinc-600">
+                                    <ChevronLeft size={18} />
+                                </button>
+                                <div className="px-2 text-sm font-semibold text-zinc-900 min-w-[90px] text-center">
+                                    {isToday ? "Today" : format(date, "MMM dd")}
+                                </div>
+                                <button
+                                    onClick={() => { setDate(d => addDays(d, 1)); setManualOverride(true); }}
+                                    className="p-2 hover:bg-zinc-50 rounded-md text-zinc-600 disabled:opacity-30"
+                                    disabled={isToday}
+                                >
+                                    <ChevronRight size={18} />
+                                </button>
+                            </div>
                         </div>
-                    ) : !isToday && activeTab === "add" ? (
-                        <div className="bg-amber-50 text-amber-800 text-xs px-3 py-2 rounded-lg border border-amber-200 flex items-center gap-2">
-                            <Calendar size={12} />
-                            Viewing past entries: <strong>{format(date, "MMMM do, yyyy")}</strong>
-                        </div>
-                    ) : null}
+                    )}
                 </div>
 
-                {/* Tabs — Overview, Monthly and AI Advisor are admin-only */}
-                {isAdmin && (
-                    <div className="flex p-1 bg-zinc-100 rounded-xl">
-                        <button
-                            onClick={() => setActiveTab("add")}
-                            className={`flex-1 flex items-center justify-center gap-2 py-2.5 text-xs sm:text-sm font-medium rounded-lg transition-all ${activeTab === "add" ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-500 hover:text-zinc-700"}`}
-                        >
-                            <ClipboardList size={16} className={activeTab === "add" ? "text-cyan-600" : "text-zinc-400"} />
-                            <span>Daily Expense</span>
-                        </button>
-                        <button
-                            onClick={() => setActiveTab("monthly")}
-                            className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs sm:text-sm font-medium rounded-lg transition-all ${activeTab === "monthly" ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-500 hover:text-zinc-700"}`}
-                        >
-                            <Building2 size={16} className={activeTab === "monthly" ? "text-violet-600" : "text-zinc-400"} />
-                            <span>Monthly Expense</span>
-                            <span className="text-[9px] font-extrabold uppercase px-1 py-0.2 rounded bg-violet-100 text-violet-800">
-                                Admin Only
-                            </span>
-                        </button>
-                        <button
-                            onClick={() => setActiveTab("overview")}
-                            className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs sm:text-sm font-medium rounded-lg transition-all ${activeTab === "overview" ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-500 hover:text-zinc-700"}`}
-                        >
-                            <BarChart3 size={16} className={activeTab === "overview" ? "text-cyan-600" : "text-zinc-400"} />
-                            <span>Overview</span>
-                            <span className="text-[9px] font-extrabold uppercase px-1 py-0.2 rounded bg-cyan-100 text-cyan-800">
-                                Admin Only
-                            </span>
-                        </button>
-                        <button
-                            onClick={() => setActiveTab("ai-advisor")}
-                            className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs sm:text-sm font-medium rounded-lg transition-all relative ${activeTab === "ai-advisor" ? "bg-gradient-to-r from-violet-600 to-indigo-600 text-white shadow-sm" : "text-zinc-600 hover:text-zinc-900 hover:bg-zinc-200/50"}`}
-                        >
-                            <Sparkles size={15} className={activeTab === "ai-advisor" ? "text-violet-200 animate-pulse" : "text-violet-600"} />
-                            <span>AI Advisor</span>
-                            <span className={`text-[9px] uppercase font-bold px-1.5 py-0.2 rounded-full ${activeTab === "ai-advisor" ? "bg-white/20 text-white" : "bg-violet-100 text-violet-800"}`}>
-                                Admin Only
-                            </span>
-                        </button>
+                {new Date().getHours() < 5 && isSameDay(date, addDays(new Date(), -1)) && activeTab === "add" ? (
+                    <div className="bg-blue-50 text-blue-900 text-xs px-3 py-2.5 rounded-lg border border-blue-200/80 flex items-center gap-2 shadow-2xs">
+                        <Clock size={14} className="text-blue-600 shrink-0" />
+                        <span><strong>Note:</strong> You are entering expenses for yesterday's shift closing. This will auto-switch to today at 5:00 AM.</span>
                     </div>
-                )}
+                ) : !isToday && activeTab === "add" ? (
+                    <div className="bg-amber-50 text-amber-800 text-xs px-3 py-2 rounded-lg border border-amber-200 flex items-center gap-2">
+                        <Calendar size={12} />
+                        Viewing past entries: <strong>{format(date, "MMMM do, yyyy")}</strong>
+                    </div>
+                ) : null}
+            </div>
 
-                {(activeTab === "add" || !isAdmin) && (
-                    <>
-                        {/* Total Cost */}
-                        <div className="bg-white p-4 rounded-2xl shadow-sm border border-zinc-100 flex items-center justify-between">
-                            <div>
-                                <p className="text-xs text-zinc-400 uppercase tracking-wider">
-                                    {isToday ? "Today's Total" : `Total for ${format(date, "MMM dd")}`}
-                                </p>
-                                <p className="text-2xl font-bold text-zinc-900">₹{(viewedDateTotalCents / 100).toFixed(2)}</p>
-                            </div>
-                            <p className="text-xs text-zinc-400 shrink-0">{expenses.length} {expenses.length === 1 ? "entry" : "entries"}</p>
+            {/* Tabs — Overview, Monthly and AI Advisor are admin-only */}
+            {effectiveIsAdmin && (
+                <div className="flex p-1 bg-zinc-100 rounded-xl">
+                    <button
+                        onClick={() => setActiveTab("overview")}
+                        className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs sm:text-sm font-medium rounded-lg transition-all ${activeTab === "overview" ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-500 hover:text-zinc-700"}`}
+                    >
+                        <BarChart3 size={16} className={activeTab === "overview" ? "text-[#2563EB]" : "text-zinc-400"} />
+                        <span>Overview</span>
+                        <span className="text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200/60">
+                            Admin Only
+                        </span>
+                    </button>
+                    <button
+                        onClick={() => setActiveTab("add")}
+                        className={`flex-1 flex items-center justify-center gap-2 py-2.5 text-xs sm:text-sm font-medium rounded-lg transition-all ${activeTab === "add" ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-500 hover:text-zinc-700"}`}
+                    >
+                        <ClipboardList size={16} className={activeTab === "add" ? "text-[#2563EB]" : "text-zinc-400"} />
+                        <span>Daily Expense</span>
+                    </button>
+                    <button
+                        onClick={() => setActiveTab("monthly")}
+                        className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs sm:text-sm font-medium rounded-lg transition-all ${activeTab === "monthly" ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-500 hover:text-zinc-700"}`}
+                    >
+                        <Building2 size={16} className={activeTab === "monthly" ? "text-[#2563EB]" : "text-zinc-400"} />
+                        <span>Monthly Expense</span>
+                        <span className="text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200/60">
+                            Admin Only
+                        </span>
+                    </button>
+                    <button
+                        onClick={() => setActiveTab("ai-advisor")}
+                        className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs sm:text-sm font-medium rounded-lg transition-all relative ${activeTab === "ai-advisor" ? "bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-sm" : "text-zinc-600 hover:text-zinc-900 hover:bg-zinc-200/50"}`}
+                    >
+                        <Sparkles size={15} className={activeTab === "ai-advisor" ? "text-blue-200 animate-pulse" : "text-[#2563EB]"} />
+                        <span>AI Advisor</span>
+                        <span className={`text-[9px] uppercase font-bold px-1.5 py-0.2 rounded-full ${activeTab === "ai-advisor" ? "bg-white/20 text-white" : "bg-blue-50 text-blue-700 border border-blue-200/60"}`}>
+                            Admin Only
+                        </span>
+                    </button>
+                </div>
+            )}
+
+            {(activeTab === "add" || !effectiveIsAdmin) && (
+                <>
+                    {/* Total Cost */}
+                    <div className="bg-white p-4 rounded-2xl shadow-sm border border-zinc-100 flex items-center justify-between">
+                        <div>
+                            <p className="text-xs text-zinc-400 uppercase tracking-wider">
+                                {isToday ? "Today's Total" : `Total for ${format(date, "MMM dd")}`}
+                            </p>
+                            <p className="text-2xl font-bold text-zinc-900">₹{(viewedDateTotalCents / 100).toFixed(2)}</p>
+                        </div>
+                        <p className="text-xs text-zinc-400 shrink-0">{expenses.length} {expenses.length === 1 ? "entry" : "entries"}</p>
+                    </div>
+
+                    {/* Add Entry */}
+                    <div className="bg-white p-5 rounded-2xl shadow-sm border border-zinc-100 space-y-3">
+                        <div className="flex items-center justify-between">
+                            <h2 className="font-semibold text-zinc-900">Add Expense</h2>
+                            {effectiveIsAdmin && (
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setActiveTab("overview");
+                                        setShowPriceManager(true);
+                                    }}
+                                    className="text-xs font-semibold text-[#2563EB] hover:text-blue-700 flex items-center gap-1.5 px-2.5 py-1 rounded-lg hover:bg-blue-50 border border-blue-200 transition-colors"
+                                    title="Manage Fixed Price Items in Overview"
+                                >
+                                    <Tag size={13} />
+                                    <span>Edit Fixed Prices ({priceList.length})</span>
+                                </button>
+                            )}
                         </div>
 
-                        {/* Add Entry */}
-                        <div className="bg-white p-5 rounded-2xl shadow-sm border border-zinc-100 space-y-3">
-                            <h2 className="font-semibold text-zinc-900">Add Expense</h2>
-
-                            {priceList.filter(p => p.active).length > 0 && (
-                                <div className="flex flex-wrap content-start gap-2 max-h-[76px] overflow-y-auto pb-1">
-                                    <button
-                                        onClick={() => selectFixedItem(null)}
-                                        className={`px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap border transition-colors ${!selectedFixedItem ? "bg-cyan-600 border-cyan-600 text-white" : "bg-white border-zinc-200 text-zinc-600 hover:border-zinc-300"}`}
-                                    >
-                                        Custom
-                                    </button>
-                                    {priceList.filter(p => p.active).map(item => (
+                        {priceList.filter(p => p.active).length > 0 && (
+                            <div className="flex flex-wrap content-start gap-2 max-h-[84px] overflow-y-auto pb-1">
+                                <button
+                                    type="button"
+                                    onClick={() => selectFixedItem(null)}
+                                    className={`px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap border transition-all ${!selectedFixedItem ? "bg-[#2563EB] border-[#2563EB] text-white shadow-xs" : "bg-white border-zinc-200 text-zinc-600 hover:border-zinc-300"}`}
+                                >
+                                    Custom
+                                </button>
+                                {priceList.filter(p => p.active).map(item => {
+                                    const isSelected = selectedFixedItem?.id === item.id;
+                                    const displayUnit = item.unit || "each";
+                                    return (
                                         <button
                                             key={item.id}
+                                            type="button"
                                             onClick={() => selectFixedItem(item)}
-                                            className={`px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap border transition-colors ${selectedFixedItem?.id === item.id ? "bg-cyan-600 border-cyan-600 text-white" : "bg-white border-zinc-200 text-zinc-600 hover:border-zinc-300"}`}
+                                            className={`px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap border transition-all flex items-center gap-1.5 ${isSelected ? "bg-[#2563EB] border-[#2563EB] text-white shadow-xs" : "bg-white border-zinc-200 text-zinc-600 hover:border-zinc-300 hover:bg-zinc-50"}`}
                                         >
-                                            {item.item_name} · ₹{(item.price_cents / 100).toFixed(0)}
+                                            <span>{item.item_name}</span>
+                                            <span className={`text-[10px] px-1.5 py-0.5 rounded-md font-bold uppercase tracking-wider ${isSelected ? "bg-blue-700 text-blue-100" : "bg-zinc-100 text-zinc-600"}`}>
+                                                ₹{(item.price_cents / 100).toFixed(0)}/{displayUnit}
+                                            </span>
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        )}
+
+                        {selectedFixedItem ? (
+                            <div className="relative">
+                                <Input
+                                    placeholder="Item name"
+                                    value={itemName}
+                                    disabled={true}
+                                    className="bg-zinc-50 font-medium text-zinc-800 pr-24"
+                                />
+                                <div className="absolute right-2.5 top-1/2 -translate-y-1/2 flex items-center gap-1.5 pointer-events-none">
+                                    <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
+                                        {selectedFixedItem.unit || "each"}
+                                    </span>
+                                    <Lock size={12} className="text-zinc-400" />
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="space-y-2">
+                                <Input
+                                    placeholder="Item name, e.g. Paper Plates, Tomatoes"
+                                    value={itemName}
+                                    onChange={(e) => setItemName(e.target.value)}
+                                />
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                    <span className="text-xs font-medium text-zinc-500 flex items-center gap-1 mr-1">
+                                        <Scale size={11} className="text-zinc-400" /> Unit:
+                                    </span>
+                                    {COMMON_UNITS.map(u => (
+                                        <button
+                                            key={u.value}
+                                            type="button"
+                                            onClick={() => setCustomUnit(u.value)}
+                                            className={`text-xs px-2.5 py-0.5 rounded-md font-semibold border transition-all ${customUnit === u.value
+                                                    ? "bg-[#2563EB] border-[#2563EB] text-white shadow-xs"
+                                                    : "bg-white border-zinc-200 text-zinc-600 hover:border-zinc-300"
+                                                }`}
+                                        >
+                                            {u.value}
                                         </button>
                                     ))}
                                 </div>
-                            )}
+                            </div>
+                        )}
 
-                            <Input
-                                placeholder="Item name, e.g. Paper Plates"
-                                value={itemName}
-                                onChange={(e) => setItemName(e.target.value)}
-                                disabled={!!selectedFixedItem}
-                            />
-                            <div className="flex gap-3 items-start">
-                                <div className="flex-1 space-y-1">
-                                    <label className="text-xs font-medium text-zinc-500 flex items-center gap-1 h-4">
+                        <div className="flex gap-3 items-start">
+                            <div className="flex-1 space-y-1">
+                                <label className="text-xs font-medium text-zinc-500 flex items-center justify-between h-4">
+                                    <span className="flex items-center gap-1">
                                         Price (₹)
                                         {selectedFixedItem && <Lock size={10} className="text-zinc-400" />}
-                                    </label>
-                                    <Input
-                                        type="number"
-                                        placeholder="0.00"
-                                        value={selectedFixedItem ? ((selectedFixedItem.price_cents * (Number(quantity) || 1)) / 100).toFixed(2) : price}
-                                        onChange={(e) => setPrice(e.target.value)}
-                                        disabled={!!selectedFixedItem}
-                                    />
-                                </div>
-                                <div className="w-20 space-y-1">
-                                    <label className="text-xs font-medium text-zinc-500 flex items-center h-4">Qty</label>
-                                    <Input
-                                        type="number"
-                                        min={1}
-                                        value={quantity}
-                                        onChange={(e) => setQuantity(e.target.value)}
-                                    />
-                                </div>
-                            </div>
-                            <Button className="w-full gap-2" onClick={addExpense} disabled={saving}>
-                                {saving ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
-                                Add Expense
-                            </Button>
-                        </div>
-
-                        {/* Entries List */}
-                        <div className="bg-white rounded-2xl shadow-sm border border-zinc-100 overflow-hidden">
-                            <div className="p-5 pb-3 flex items-center justify-between">
-                                <h2 className="font-semibold text-zinc-900">
-                                    {isToday ? "Today's Entries" : `Entries for ${format(date, "MMM dd")}`}
-                                </h2>
-                                {!isAdmin && (
-                                    <span className="text-[11px] font-medium text-zinc-400 flex items-center gap-1">
-                                        <Lock size={10} /> Locked after saving
                                     </span>
-                                )}
+                                    {selectedFixedItem && (
+                                        <span className="text-[11px] text-[#2563EB] font-semibold">
+                                            ₹{(selectedFixedItem.price_cents / 100).toFixed(2)}/{selectedFixedItem.unit || "each"}
+                                        </span>
+                                    )}
+                                </label>
+                                <Input
+                                    type="number"
+                                    placeholder="0.00"
+                                    value={selectedFixedItem ? ((selectedFixedItem.price_cents * (Number(quantity) || 1)) / 100).toFixed(2) : price}
+                                    onChange={(e) => setPrice(e.target.value)}
+                                    disabled={!!selectedFixedItem}
+                                />
                             </div>
+                            <div className="w-28 space-y-1">
+                                <label className="text-xs font-medium text-zinc-500 flex items-center justify-between h-4">
+                                    <span>Qty</span>
+                                    <span className="text-[10px] text-zinc-500 font-bold uppercase">
+                                        ({selectedFixedItem ? (selectedFixedItem.unit || "each") : customUnit})
+                                    </span>
+                                </label>
+                                <Input
+                                    type="number"
+                                    min="0.01"
+                                    step="any"
+                                    value={quantity}
+                                    onChange={(e) => setQuantity(e.target.value)}
+                                />
+                            </div>
+                        </div>
+                        <Button className="w-full gap-2" onClick={addExpense} disabled={saving}>
+                            {saving ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
+                            Add Expense
+                        </Button>
+                    </div>
 
-                            {listLoading ? (
-                                <div className="py-10 flex justify-center"><Loader2 className="animate-spin text-zinc-300" /></div>
-                            ) : expenses.length === 0 ? (
-                                <div className="flex flex-col items-center justify-center py-10 text-center px-5">
-                                    <PackageSearch className="w-10 h-10 text-zinc-300 mb-2" />
-                                    <p className="text-zinc-500 text-sm">No expenses added for this day</p>
-                                </div>
-                            ) : (
-                                <div className="divide-y divide-zinc-50">
-                                    {expenses.map((row) => {
-                                        const isEditing = editingId === row.id;
-                                        return (
-                                            <div key={row.id} className="px-5 py-3">
-                                                {isEditing ? (
-                                                    <div className="space-y-2">
-                                                        <Input value={editItemName} onChange={(e) => setEditItemName(e.target.value)} />
-                                                        <div className="flex gap-2">
-                                                            <Input type="number" className="flex-1" value={editPrice} onChange={(e) => setEditPrice(e.target.value)} placeholder="Price" />
-                                                            <Input type="number" className="w-20" min={1} value={editQuantity} onChange={(e) => setEditQuantity(e.target.value)} placeholder="Qty" />
-                                                        </div>
-                                                        <div className="flex gap-2">
-                                                            <Button size="sm" className="flex-1 gap-1" onClick={() => saveEdit(row)}>
-                                                                <Check size={14} /> Save
-                                                            </Button>
-                                                            <Button size="sm" variant="ghost" className="gap-1" onClick={cancelEdit}>
-                                                                <X size={14} /> Cancel
-                                                            </Button>
-                                                        </div>
-                                                    </div>
-                                                ) : (
-                                                    <div className="flex items-center justify-between gap-3">
-                                                        <div className="min-w-0">
-                                                            <div className="flex items-center gap-2">
-                                                                <span className="font-medium text-zinc-900 truncate">{row.item_name}</span>
-                                                                {row.quantity > 1 && (
-                                                                    <span className="text-[11px] text-zinc-400 shrink-0">×{row.quantity}</span>
-                                                                )}
-                                                            </div>
-                                                            <p className="text-[11px] text-zinc-400">
-                                                                {format(new Date(row.created_at), "h:mm a")}
-                                                                {isAdmin && row.submitted_by && namesById[row.submitted_by] && (
-                                                                    <> · {namesById[row.submitted_by]}</>
-                                                                )}
-                                                            </p>
-                                                        </div>
-                                                        <div className="flex items-center gap-2 shrink-0">
-                                                            <span className="font-semibold text-zinc-900">₹{(row.price_cents / 100).toFixed(2)}</span>
-                                                            {isAdmin && (
-                                                                <div className="flex items-center gap-1">
-                                                                    <button onClick={() => startEdit(row)} title="Edit Expense (Admin Only - Staff cannot edit)" className="p-1.5 rounded-md hover:bg-zinc-100 text-zinc-500">
-                                                                        <Pencil size={14} />
-                                                                    </button>
-                                                                    <button onClick={() => deleteExpense(row)} title="Delete Expense (Admin Only - Staff cannot delete)" className="p-1.5 rounded-md hover:bg-red-50 text-red-500">
-                                                                        <Trash2 size={14} />
-                                                                    </button>
-                                                                </div>
-                                                            )}
-                                                        </div>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        );
-                                    })}
-                                </div>
+                    {/* Entries List */}
+                    <div className="bg-white rounded-2xl shadow-sm border border-zinc-100 overflow-hidden">
+                        <div className="p-5 pb-3 flex items-center justify-between">
+                            <h2 className="font-semibold text-zinc-900">
+                                {isToday ? "Today's Entries" : `Entries for ${format(date, "MMM dd")}`}
+                            </h2>
+                            {!effectiveIsAdmin && (
+                                <span className="text-[11px] font-medium text-zinc-400 flex items-center gap-1">
+                                    <Lock size={10} /> Locked after saving
+                                </span>
                             )}
                         </div>
-                    </>
-                )}
 
-                {activeTab === "monthly" && isAdmin && (
-                    <div className="space-y-8">
-                        {/* Master Operational Cost Overview Banner */}
-                        <div className="bg-gradient-to-br from-violet-950 via-indigo-950 to-slate-950 text-white p-6 sm:p-7 rounded-3xl shadow-xl border border-violet-800/40 relative overflow-hidden">
-                            <div className="absolute -right-10 -bottom-10 w-64 h-64 bg-violet-500/10 rounded-full blur-3xl pointer-events-none" />
-                            <div className="absolute -left-10 -top-10 w-64 h-64 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
-                            
-                            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 relative z-10">
-                                <div className="space-y-2.5 max-w-2xl">
-                                    <div className="flex items-center gap-2 flex-wrap">
-                                        <span className="text-[11px] font-bold uppercase tracking-wider px-3 py-0.5 rounded-full bg-violet-500/20 text-violet-200 border border-violet-400/30 flex items-center gap-1.5">
-                                            <Sparkles size={12} className="text-violet-300" />
-                                            Total Monthly Operational Cost
-                                        </span>
-                                        <span className="text-xs text-violet-300/80 flex items-center gap-1">
-                                            <ShieldCheck size={13} className="text-emerald-400" />
-                                            Fixed Overheads + AI Daily Projected Demand
-                                        </span>
-                                    </div>
-                                    <h2 className="text-3xl sm:text-4xl font-black tracking-tight">
-                                        ₹{(grandTotalMonthlyOperationalCents / 100).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                        <span className="text-sm sm:text-base font-normal text-violet-300 ml-2">/ month</span>
-                                    </h2>
-                                    <p className="text-xs sm:text-sm text-violet-200/80 leading-relaxed">
-                                        Combined monthly operational budget: <strong className="text-white font-semibold">₹{(totalActiveMonthlyFixedCents / 100).toLocaleString("en-IN")}</strong> in fixed master commitments (Rent, Salaries, EB) + <strong className="text-white font-semibold">₹{(aiDailyProjections.totalProjectedMonthlyCents / 100).toLocaleString("en-IN")}</strong> projected from recurring daily needs (e.g. daily water cans, milk, supplies).
+                        {listLoading ? (
+                            <div className="py-10 flex justify-center"><Loader2 className="animate-spin text-zinc-300" /></div>
+                        ) : expenses.length === 0 ? (
+                            <div className="flex flex-col items-center justify-center py-10 text-center px-5">
+                                <PackageSearch className="w-10 h-10 text-zinc-300 mb-2" />
+                                <p className="text-zinc-500 text-sm">No expenses added for this day</p>
+                            </div>
+                        ) : (
+                            <div className="divide-y divide-zinc-50">
+                                {expenses.map((row) => {
+                                    const isEditing = editingId === row.id;
+                                    const displayUnit = row.unit || "each";
+                                    return (
+                                        <div key={row.id} className="px-5 py-3">
+                                            {isEditing ? (
+                                                <div className="space-y-2">
+                                                    <Input value={editItemName} onChange={(e) => setEditItemName(e.target.value)} />
+                                                    <div className="flex gap-2 items-center">
+                                                        <Input type="number" className="flex-1" value={editPrice} onChange={(e) => setEditPrice(e.target.value)} placeholder="Price" />
+                                                        <Input type="number" className="w-20" min="0.01" step="any" value={editQuantity} onChange={(e) => setEditQuantity(e.target.value)} placeholder="Qty" />
+                                                        <select
+                                                            value={editUnit}
+                                                            onChange={(e) => setEditUnit(e.target.value)}
+                                                            className="h-9 rounded-lg border border-zinc-200 bg-white px-2 text-xs font-medium text-zinc-700"
+                                                        >
+                                                            {COMMON_UNITS.map(u => (
+                                                                <option key={u.value} value={u.value}>{u.value}</option>
+                                                            ))}
+                                                            {!COMMON_UNITS.some(u => u.value === editUnit) && (
+                                                                <option value={editUnit}>{editUnit}</option>
+                                                            )}
+                                                        </select>
+                                                    </div>
+                                                    <div className="flex gap-2">
+                                                        <Button size="sm" className="flex-1 gap-1" onClick={() => saveEdit(row)}>
+                                                            <Check size={14} /> Save
+                                                        </Button>
+                                                        <Button size="sm" variant="ghost" className="gap-1" onClick={cancelEdit}>
+                                                            <X size={14} /> Cancel
+                                                        </Button>
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                <div className="flex items-center justify-between gap-3">
+                                                    <div className="min-w-0">
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="font-medium text-zinc-900 truncate">{row.item_name}</span>
+                                                            <span className="text-[11px] font-semibold text-zinc-600 bg-zinc-100 px-2 py-0.5 rounded-full shrink-0">
+                                                                {row.quantity} {displayUnit}
+                                                            </span>
+                                                        </div>
+                                                        <p className="text-[11px] text-zinc-400">
+                                                            {format(new Date(row.created_at), "h:mm a")}
+                                                            {effectiveIsAdmin && row.submitted_by && namesById[row.submitted_by] && (
+                                                                <> · {namesById[row.submitted_by]}</>
+                                                            )}
+                                                        </p>
+                                                    </div>
+                                                    <div className="flex items-center gap-2 shrink-0">
+                                                        <span className="font-semibold text-zinc-900">₹{(row.price_cents / 100).toFixed(2)}</span>
+                                                        {effectiveIsAdmin && (
+                                                            <div className="flex items-center gap-1">
+                                                                <button onClick={() => startEdit(row)} title="Edit Expense" className="p-1.5 rounded-md hover:bg-zinc-100 text-zinc-500">
+                                                                    <Pencil size={14} />
+                                                                </button>
+                                                                <button onClick={() => deleteExpense(row)} title="Delete Expense" className="p-1.5 rounded-md hover:bg-red-50 text-red-500">
+                                                                    <Trash2 size={14} />
+                                                                </button>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+                    </div>
+                </>
+            )}
+
+            {activeTab === "monthly" && effectiveIsAdmin && (
+                <div className="space-y-8">
+                    {/* Master Operational Cost Overview Banner */}
+                    <div className="bg-gradient-to-br from-[#0B1528] via-[#1E3A8A] to-[#0F172A] text-white p-6 sm:p-7 rounded-3xl shadow-xl border border-blue-800/40 relative overflow-hidden">
+                        <div className="absolute -right-10 -bottom-10 w-64 h-64 bg-blue-500/10 rounded-full blur-3xl pointer-events-none" />
+                        <div className="absolute -left-10 -top-10 w-64 h-64 bg-blue-400/10 rounded-full blur-3xl pointer-events-none" />
+
+                        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 relative z-10">
+                            <div className="space-y-2.5 max-w-2xl">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                    <span className="text-[11px] font-bold uppercase tracking-wider px-3 py-0.5 rounded-full bg-blue-500/20 text-blue-200 border border-blue-400/30 flex items-center gap-1.5">
+                                        <Sparkles size={12} className="text-blue-300" />
+                                        Total Monthly Operational Cost
+                                    </span>
+                                    <span className="text-xs text-blue-300/80 flex items-center gap-1">
+                                        <ShieldCheck size={13} className="text-emerald-400" />
+                                        Fixed Overheads + AI Daily Projected Demand
+                                    </span>
+                                </div>
+                                <h2 className="text-3xl sm:text-4xl font-black tracking-tight">
+                                    ₹{(grandTotalMonthlyOperationalCents / 100).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                    <span className="text-sm sm:text-base font-normal text-blue-200 ml-2">/ month</span>
+                                </h2>
+                                <p className="text-xs sm:text-sm text-blue-100/80 leading-relaxed">
+                                    Combined monthly operational budget: <strong className="text-white font-semibold">₹{(totalActiveMonthlyFixedCents / 100).toLocaleString("en-IN")}</strong> in fixed master commitments (Rent, Salaries, EB) + <strong className="text-white font-semibold">₹{(aiDailyProjections.totalProjectedMonthlyCents / 100).toLocaleString("en-IN")}</strong> projected from recurring daily needs (e.g. daily water cans, milk, supplies).
+                                </p>
+                            </div>
+
+                            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-2 gap-3 shrink-0">
+                                <div className="bg-white/10 backdrop-blur-md rounded-2xl p-3.5 border border-white/10">
+                                    <p className="text-[10px] uppercase font-semibold text-blue-200 flex items-center gap-1">
+                                        <Building2 size={12} className="text-blue-300" /> 1. Fixed Overheads
                                     </p>
+                                    <p className="text-base sm:text-lg font-bold text-white mt-1">
+                                        ₹{(totalActiveMonthlyFixedCents / 100).toLocaleString("en-IN", { maximumFractionDigits: 0 })}
+                                    </p>
+                                    <p className="text-[10px] text-blue-200/80 mt-0.5">{activeMonthlyOverheadsCount} direct commitments</p>
                                 </div>
 
-                                <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-2 gap-3 shrink-0">
-                                    <div className="bg-white/10 backdrop-blur-md rounded-2xl p-3.5 border border-white/10">
-                                        <p className="text-[10px] uppercase font-semibold text-violet-200 flex items-center gap-1">
-                                            <Building2 size={12} className="text-violet-300" /> 1. Fixed Overheads
-                                        </p>
-                                        <p className="text-base sm:text-lg font-bold text-white mt-1">
-                                            ₹{(totalActiveMonthlyFixedCents / 100).toLocaleString("en-IN", { maximumFractionDigits: 0 })}
-                                        </p>
-                                        <p className="text-[10px] text-violet-300/90 mt-0.5">{activeMonthlyOverheadsCount} direct commitments</p>
-                                    </div>
+                                <div className="bg-white/10 backdrop-blur-md rounded-2xl p-3.5 border border-white/10">
+                                    <p className="text-[10px] uppercase font-semibold text-blue-200 flex items-center gap-1">
+                                        <Bot size={12} className="text-blue-300" /> 2. AI Daily Projected
+                                    </p>
+                                    <p className="text-base sm:text-lg font-bold text-blue-300 mt-1">
+                                        ₹{(aiDailyProjections.totalProjectedMonthlyCents / 100).toLocaleString("en-IN", { maximumFractionDigits: 0 })}
+                                    </p>
+                                    <p className="text-[10px] text-blue-200/80 mt-0.5">{aiDailyProjections.items.length} daily consumables</p>
+                                </div>
 
-                                    <div className="bg-white/10 backdrop-blur-md rounded-2xl p-3.5 border border-white/10">
-                                        <p className="text-[10px] uppercase font-semibold text-violet-200 flex items-center gap-1">
-                                            <Bot size={12} className="text-cyan-300" /> 2. AI Daily Projected
-                                        </p>
-                                        <p className="text-base sm:text-lg font-bold text-cyan-300 mt-1">
-                                            ₹{(aiDailyProjections.totalProjectedMonthlyCents / 100).toLocaleString("en-IN", { maximumFractionDigits: 0 })}
-                                        </p>
-                                        <p className="text-[10px] text-violet-300/90 mt-0.5">{aiDailyProjections.items.length} daily consumables</p>
-                                    </div>
+                                <div className="bg-white/10 backdrop-blur-md rounded-2xl p-3.5 border border-white/10">
+                                    <p className="text-[10px] uppercase font-semibold text-blue-200">Daily Total Burn</p>
+                                    <p className="text-base sm:text-lg font-bold text-amber-300 mt-1">
+                                        ₹{(grandTotalDailyBurnCents / 100).toLocaleString("en-IN", { maximumFractionDigits: 0 })}
+                                    </p>
+                                    <p className="text-[10px] text-blue-200/80 mt-0.5">estimated / day</p>
+                                </div>
 
-                                    <div className="bg-white/10 backdrop-blur-md rounded-2xl p-3.5 border border-white/10">
-                                        <p className="text-[10px] uppercase font-semibold text-violet-200">Daily Total Burn</p>
-                                        <p className="text-base sm:text-lg font-bold text-amber-300 mt-1">
-                                            ₹{(grandTotalDailyBurnCents / 100).toLocaleString("en-IN", { maximumFractionDigits: 0 })}
-                                        </p>
-                                        <p className="text-[10px] text-violet-300/90 mt-0.5">estimated / day</p>
-                                    </div>
-
-                                    <div className="bg-white/10 backdrop-blur-md rounded-2xl p-3.5 border border-white/10">
-                                        <p className="text-[10px] uppercase font-semibold text-violet-200">AI Savings Room</p>
-                                        <p className="text-base sm:text-lg font-bold text-emerald-300 mt-1">
-                                            ₹{(totalAiPotentialSavingsCents / 100).toLocaleString("en-IN", { maximumFractionDigits: 0 })}
-                                        </p>
-                                        <p className="text-[10px] text-violet-300/90 mt-0.5">wholesale / bulk opts</p>
-                                    </div>
+                                <div className="bg-white/10 backdrop-blur-md rounded-2xl p-3.5 border border-white/10">
+                                    <p className="text-[10px] uppercase font-semibold text-blue-200">AI Savings Room</p>
+                                    <p className="text-base sm:text-lg font-bold text-emerald-300 mt-1">
+                                        ₹{(totalAiPotentialSavingsCents / 100).toLocaleString("en-IN", { maximumFractionDigits: 0 })}
+                                    </p>
+                                    <p className="text-[10px] text-blue-200/80 mt-0.5">wholesale / bulk opts</p>
                                 </div>
                             </div>
                         </div>
+                    </div>
 
-                        {/* SECTION 1: MASTER FIXED OVERHEADS */}
-                        <div className="space-y-4">
-                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                                <div>
-                                    <h3 className="text-base sm:text-lg font-bold text-zinc-900 flex items-center gap-2">
-                                        <Building2 size={20} className="text-violet-600" />
-                                        1. Fixed Monthly Overheads (Master Commitments)
-                                    </h3>
-                                    <p className="text-xs text-zinc-500 mt-0.5">
-                                        Direct recurring commitments (Rent, Staff Salaries, EB electricity, Internet, AMC). Fixed across all months.
-                                    </p>
+                    {/* SECTION 1: MASTER FIXED OVERHEADS */}
+                    <div className="space-y-4">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                            <div>
+                                <h3 className="text-base sm:text-lg font-bold text-zinc-900 flex items-center gap-2">
+                                    <Building2 size={20} className="text-[#2563EB]" />
+                                    1. Fixed Monthly Overheads (Master Commitments)
+                                </h3>
+                                <p className="text-xs text-zinc-500 mt-0.5">
+                                    Direct recurring commitments (Rent, Staff Salaries, EB electricity, Internet, AMC). Fixed across all months.
+                                </p>
+                            </div>
+                            <span className="text-xs font-bold text-blue-900 bg-blue-50 px-3 py-1.5 rounded-xl border border-blue-200 shrink-0 w-fit">
+                                Total Fixed: ₹{(totalActiveMonthlyFixedCents / 100).toLocaleString("en-IN", { minimumFractionDigits: 2 })} / mo
+                            </span>
+                        </div>
+
+                        {/* Add Monthly Fixed Expense Form */}
+                        <div className="bg-white p-5 sm:p-6 rounded-2xl shadow-sm border border-zinc-100 space-y-4">
+                            <div className="flex items-center justify-between">
+                                <div className="space-y-0.5">
+                                    <h4 className="font-bold text-zinc-900 flex items-center gap-2 text-sm sm:text-base">
+                                        <Plus size={16} className="text-[#2563EB]" />
+                                        Add Fixed Monthly Commitment
+                                    </h4>
+                                    <p className="text-xs text-zinc-500">Rent, staff salaries, EB electricity bill, internet, water &amp; recurring fixed commitments</p>
                                 </div>
-                                <span className="text-xs font-bold text-violet-900 bg-violet-50 px-3 py-1.5 rounded-xl border border-violet-200 shrink-0 w-fit">
-                                    Total Fixed: ₹{(totalActiveMonthlyFixedCents / 100).toLocaleString("en-IN", { minimumFractionDigits: 2 })} / mo
+                                <span className="text-[11px] font-semibold px-2.5 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
+                                    Admin Managed
                                 </span>
                             </div>
-
-                            {/* Add Monthly Fixed Expense Form */}
-                            <div className="bg-white p-5 sm:p-6 rounded-2xl shadow-sm border border-zinc-100 space-y-4">
-                                <div className="flex items-center justify-between">
-                                    <div className="space-y-0.5">
-                                        <h4 className="font-bold text-zinc-900 flex items-center gap-2 text-sm sm:text-base">
-                                            <Plus size={16} className="text-violet-600" />
-                                            Add Fixed Monthly Commitment
-                                        </h4>
-                                        <p className="text-xs text-zinc-500">Rent, staff salaries, EB electricity bill, internet, water &amp; recurring fixed commitments</p>
-                                    </div>
-                                    <span className="text-[11px] font-semibold px-2.5 py-1 rounded-full bg-violet-50 text-violet-700 border border-violet-200">
-                                        Admin Managed
-                                    </span>
-                                </div>
 
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                 <div className="space-y-1">
@@ -1759,7 +2116,7 @@ export default function ExpensesPage() {
                                 />
                             </div>
 
-                            <Button className="w-full gap-2 bg-gradient-to-r from-violet-600 to-indigo-600 text-white hover:from-violet-700 hover:to-indigo-700 shadow-sm" onClick={addMonthlyExpense} disabled={monthlySaving}>
+                            <Button className="w-full gap-2 bg-[#2563EB] hover:bg-blue-700 text-white shadow-xs font-semibold" onClick={addMonthlyExpense} disabled={monthlySaving}>
                                 {monthlySaving ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
                                 Add Fixed Monthly Expense
                             </Button>
@@ -1794,11 +2151,10 @@ export default function ExpensesPage() {
                             <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
                                 <button
                                     onClick={() => setMonthlyCategoryFilter("all")}
-                                    className={`px-3 py-1 rounded-full text-xs font-semibold whitespace-nowrap transition-colors border ${
-                                        monthlyCategoryFilter === "all"
+                                    className={`px-3 py-1 rounded-full text-xs font-semibold whitespace-nowrap transition-colors border ${monthlyCategoryFilter === "all"
                                             ? "bg-zinc-900 text-white border-zinc-900 shadow-xs"
                                             : "bg-white text-zinc-600 border-zinc-200 hover:bg-zinc-50"
-                                    }`}
+                                        }`}
                                 >
                                     All ({monthlyExpenses.length})
                                 </button>
@@ -1810,11 +2166,10 @@ export default function ExpensesPage() {
                                         <button
                                             key={cat}
                                             onClick={() => setMonthlyCategoryFilter(cat)}
-                                            className={`px-3 py-1 rounded-full text-xs font-semibold whitespace-nowrap transition-colors border ${
-                                                isSelected
-                                                    ? "bg-violet-700 text-white border-violet-700 shadow-xs"
+                                            className={`px-3 py-1 rounded-full text-xs font-semibold whitespace-nowrap transition-colors border ${isSelected
+                                                    ? "bg-[#2563EB] text-white border-[#2563EB] shadow-xs"
                                                     : "bg-white text-zinc-600 border-zinc-200 hover:bg-zinc-50"
-                                            }`}
+                                                }`}
                                         >
                                             {cat} ({count})
                                         </button>
@@ -1834,7 +2189,7 @@ export default function ExpensesPage() {
                                         Manage recurring commitments. Click the pencil icon to update rates when an expense increases.
                                     </p>
                                 </div>
-                                <span className="text-sm font-bold text-violet-900 bg-violet-50 px-3 py-1 rounded-lg border border-violet-200">
+                                <span className="text-sm font-bold text-blue-900 bg-blue-50 px-3 py-1 rounded-lg border border-blue-200">
                                     Total: ₹{(totalActiveMonthlyFixedCents / 100).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} / mo
                                 </span>
                             </div>
@@ -1864,9 +2219,9 @@ export default function ExpensesPage() {
                                         return (
                                             <div key={row.id} className={`px-5 py-4 transition-colors ${!isActive ? "bg-zinc-50/70 opacity-70" : "hover:bg-zinc-50/40"}`}>
                                                 {isEditing ? (
-                                                    <div className="space-y-3 p-4 bg-violet-50/40 rounded-xl border border-violet-200">
-                                                        <div className="flex items-center justify-between pb-1 border-b border-violet-100">
-                                                            <span className="text-xs font-bold text-violet-900">Edit Fixed Overhead</span>
+                                                    <div className="space-y-3 p-4 bg-blue-50/40 rounded-xl border border-blue-200">
+                                                        <div className="flex items-center justify-between pb-1 border-b border-blue-100">
+                                                            <span className="text-xs font-bold text-blue-900">Edit Fixed Overhead</span>
                                                             <span className="text-[11px] text-zinc-500">
                                                                 Updating amount records price change history automatically
                                                             </span>
@@ -1908,7 +2263,7 @@ export default function ExpensesPage() {
                                                             <Input value={monthlyEditNotes} onChange={(e) => setMonthlyEditNotes(e.target.value)} placeholder="Notes / details" />
                                                         </div>
                                                         <div className="flex gap-2 pt-2">
-                                                            <Button size="sm" className="flex-1 gap-1 bg-violet-700 hover:bg-violet-800 text-white" onClick={() => saveMonthlyEdit(row)}>
+                                                            <Button size="sm" className="flex-1 gap-1 bg-[#2563EB] hover:bg-blue-700 text-white font-semibold shadow-xs" onClick={() => saveMonthlyEdit(row)}>
                                                                 <Check size={14} /> Save Changes
                                                             </Button>
                                                             <Button size="sm" variant="ghost" className="gap-1 text-zinc-600 hover:bg-zinc-100" onClick={cancelMonthlyEdit}>
@@ -1938,11 +2293,10 @@ export default function ExpensesPage() {
                                                             {/* Price Change Audit Pill */}
                                                             {priceChanged && (
                                                                 <div className="flex items-center gap-2 flex-wrap pt-0.5">
-                                                                    <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-md flex items-center gap-1 border ${
-                                                                        priceDiff > 0
+                                                                    <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-md flex items-center gap-1 border ${priceDiff > 0
                                                                             ? "bg-rose-50 text-rose-700 border-rose-200"
                                                                             : "bg-emerald-50 text-emerald-700 border-emerald-200"
-                                                                    }`}>
+                                                                        }`}>
                                                                         {priceDiff > 0 ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
                                                                         <span>
                                                                             {priceDiff > 0 ? "Increased from" : "Decreased from"} ₹{(row.previous_amount_cents! / 100).toLocaleString("en-IN")}
@@ -1988,9 +2342,8 @@ export default function ExpensesPage() {
                                                                 const isIncrease = diff > 0;
                                                                 return (
                                                                     <div className="flex items-center gap-2 pt-0.5">
-                                                                        <span className={`text-[11px] font-medium px-2 py-0.5 rounded-md flex items-center gap-1.5 border ${
-                                                                            isIncrease ? "bg-amber-50 text-amber-900 border-amber-200" : "bg-blue-50 text-blue-900 border-blue-200"
-                                                                        }`}>
+                                                                        <span className={`text-[11px] font-medium px-2 py-0.5 rounded-md flex items-center gap-1.5 border ${isIncrease ? "bg-amber-50 text-amber-900 border-amber-200" : "bg-blue-50 text-blue-900 border-blue-200"
+                                                                            }`}>
                                                                             <Bot size={12} className={isIncrease ? "text-amber-600" : "text-blue-600"} />
                                                                             <span>
                                                                                 Live Daily Run-Rate: ₹{(matchedAi.projectedMonthlySpendCents / 100).toLocaleString("en-IN")}/mo ({isIncrease ? "+" : ""}₹{(diff / 100).toLocaleString("en-IN")}/mo {isIncrease ? "higher" : "lower"} consumption)
@@ -2029,18 +2382,17 @@ export default function ExpensesPage() {
                                                             <div className="flex items-center gap-1.5 pl-2 border-l border-zinc-200">
                                                                 <button
                                                                     onClick={() => toggleMonthlyActive(row)}
-                                                                    className={`p-2 rounded-lg transition-colors text-xs font-medium flex items-center gap-1 border ${
-                                                                        isActive
+                                                                    className={`p-2 rounded-lg transition-colors text-xs font-medium flex items-center gap-1 border ${isActive
                                                                             ? "bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100"
                                                                             : "bg-zinc-100 border-zinc-200 text-zinc-500 hover:bg-zinc-200"
-                                                                    }`}
+                                                                        }`}
                                                                     title={isActive ? "Pause Overhead" : "Resume Overhead"}
                                                                 >
                                                                     <Power size={14} className={isActive ? "text-emerald-600" : "text-zinc-400"} />
                                                                 </button>
                                                                 <button
                                                                     onClick={() => startMonthlyEdit(row)}
-                                                                    className="p-2 rounded-lg hover:bg-violet-50 text-violet-700 border border-violet-200 transition-colors"
+                                                                    className="p-2 rounded-lg hover:bg-blue-50 text-[#2563EB] border border-blue-200 transition-colors"
                                                                     title="Edit rate or details"
                                                                 >
                                                                     <Pencil size={14} />
@@ -2064,290 +2416,291 @@ export default function ExpensesPage() {
                         </div>
                     </div>
 
-                        {/* SECTION 2: AI-CALCULATED RECURRING MONTHLY DEMAND */}
-                        <div className="space-y-4 pt-6 border-t-2 border-zinc-200/60">
-                            {/* Section Header */}
-                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-gradient-to-r from-cyan-500/10 via-indigo-500/10 to-violet-500/10 p-5 rounded-2xl border border-cyan-200/60">
-                                <div className="space-y-1.5">
-                                    <div className="flex items-center gap-2 flex-wrap">
-                                        <span className="text-[11px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-cyan-700 text-white shadow-xs flex items-center gap-1.5">
-                                            <Bot size={13} />
-                                            Agentic AI Engine
-                                        </span>
-                                        <span className="text-xs text-cyan-900 font-semibold flex items-center gap-1">
-                                            <Sparkles size={13} className="text-amber-500" />
-                                            30-Day Daily Run-Rate Projections
-                                        </span>
-                                    </div>
-                                    <h3 className="text-base sm:text-lg font-bold text-zinc-900">
-                                        2. AI-Calculated Recurring Monthly Demand (Derived from Daily Purchases)
-                                    </h3>
-                                    <p className="text-xs text-zinc-600 max-w-2xl leading-relaxed">
-                                        Agentic AI analyzes your daily expense entries, calculates your daily consumption velocity (e.g. buying 10 water cans daily @ ₹35/can), and projects your full 30-day recurring spend with wholesale vendor optimization advice.
-                                    </p>
-                                </div>
-
-                                <div className="flex sm:flex-col items-center sm:items-end justify-between sm:justify-center gap-1 shrink-0 bg-white/90 backdrop-blur-sm p-3.5 rounded-2xl border border-cyan-200 shadow-xs">
-                                    <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">AI Projected Spend</span>
-                                    <span className="text-lg sm:text-xl font-black text-cyan-950">
-                                        ₹{(aiDailyProjections.totalProjectedMonthlyCents / 100).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
-                                        <span className="text-xs font-normal text-zinc-400 ml-1">/ mo</span>
+                    {/* SECTION 2: AI-CALCULATED RECURRING MONTHLY DEMAND */}
+                    <div className="space-y-4 pt-6 border-t-2 border-zinc-200/60">
+                        {/* Section Header */}
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-gradient-to-r from-blue-500/10 via-slate-500/5 to-blue-500/5 p-5 rounded-2xl border border-blue-200/80">
+                            <div className="space-y-1.5">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                    <span className="text-[11px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-[#2563EB] text-white shadow-xs flex items-center gap-1.5">
+                                        <Bot size={13} />
+                                        Agentic AI Engine
                                     </span>
-                                    <span className="text-[10px] text-zinc-400">from {aiDailyProjections.items.length} daily recurring items</span>
+                                    <span className="text-xs text-blue-900 font-semibold flex items-center gap-1">
+                                        <Sparkles size={13} className="text-amber-500" />
+                                        30-Day Daily Run-Rate Projections
+                                    </span>
                                 </div>
+                                <h3 className="text-base sm:text-lg font-bold text-zinc-900">
+                                    2. AI-Calculated Recurring Monthly Demand (Derived from Daily Purchases)
+                                </h3>
+                                <p className="text-xs text-zinc-600 max-w-2xl leading-relaxed">
+                                    Agentic AI analyzes your daily expense entries, calculates your daily consumption velocity (e.g. buying 10 water cans daily @ ₹35/can), and projects your full 30-day recurring spend with wholesale vendor optimization advice.
+                                </p>
                             </div>
 
-                            {/* Recurrence Filter Pills */}
-                            <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
-                                <button
-                                    onClick={() => setAiRecurrenceFilter("all")}
-                                    className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all border ${
-                                        aiRecurrenceFilter === "all"
-                                            ? "bg-cyan-700 text-white border-cyan-700 shadow-xs"
-                                            : "bg-white text-zinc-600 border-zinc-200 hover:bg-zinc-50"
-                                    }`}
-                                >
-                                    All Recurring Items ({aiDailyProjections.items.length})
-                                </button>
-                                <button
-                                    onClick={() => setAiRecurrenceFilter("daily")}
-                                    className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all border ${
-                                        aiRecurrenceFilter === "daily"
-                                            ? "bg-emerald-600 text-white border-emerald-600 shadow-xs"
-                                            : "bg-white text-zinc-600 border-zinc-200 hover:bg-zinc-50"
-                                    }`}
-                                >
-                                    Daily Need / High Recurrence ({aiDailyProjections.items.filter(i => i.recurrenceLevel === "daily").length})
-                                </button>
-                                <button
-                                    onClick={() => setAiRecurrenceFilter("frequent")}
-                                    className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all border ${
-                                        aiRecurrenceFilter === "frequent"
-                                            ? "bg-blue-600 text-white border-blue-600 shadow-xs"
-                                            : "bg-white text-zinc-600 border-zinc-200 hover:bg-zinc-50"
-                                    }`}
-                                >
-                                    Frequent Consumables ({aiDailyProjections.items.filter(i => i.recurrenceLevel === "frequent").length})
-                                </button>
+                            <div className="flex sm:flex-col items-center sm:items-end justify-between sm:justify-center gap-1 shrink-0 bg-white/90 backdrop-blur-sm p-3.5 rounded-2xl border border-blue-200 shadow-xs">
+                                <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">AI Projected Spend</span>
+                                <span className="text-lg sm:text-xl font-black text-slate-900">
+                                    ₹{(aiDailyProjections.totalProjectedMonthlyCents / 100).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                                    <span className="text-xs font-normal text-zinc-400 ml-1">/ mo</span>
+                                </span>
+                                <span className="text-[10px] text-zinc-400">from {aiDailyProjections.items.length} daily recurring items</span>
                             </div>
+                        </div>
 
-                            {/* AI Projected Cards List */}
-                            {displayedAiItems.length === 0 ? (
-                                <div className="bg-white rounded-2xl border border-dashed border-zinc-200 p-8 text-center space-y-2">
-                                    <Bot className="w-10 h-10 text-zinc-300 mx-auto" />
-                                    <p className="text-sm font-semibold text-zinc-700">No daily recurring items detected yet</p>
-                                    <p className="text-xs text-zinc-400 max-w-md mx-auto">
-                                        Log your daily store purchases (e.g., 20L water cans, milk, vegetables, packaging, fuel) in the Daily Expense tab. The AI will automatically compute your daily consumption velocity and project your 30-day recurring spend here.
-                                    </p>
-                                </div>
-                            ) : (
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    {displayedAiItems.map((item, idx) => (
-                                        <div
-                                            key={idx}
-                                            className="bg-white rounded-2xl border border-zinc-200 shadow-sm hover:shadow-md transition-all p-5 flex flex-col justify-between space-y-4 hover:border-cyan-300"
-                                        >
-                                            <div className="space-y-3">
-                                                <div className="flex items-start justify-between gap-3">
-                                                    <div className="min-w-0 flex-1">
-                                                        <div className="flex items-center gap-2 flex-wrap">
-                                                            <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded-md border ${
-                                                                item.recurrenceLevel === "daily"
-                                                                    ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                                                                    : "bg-blue-50 text-blue-700 border-blue-200"
+                        {/* Recurrence Filter Pills */}
+                        <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+                            <button
+                                onClick={() => setAiRecurrenceFilter("all")}
+                                className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all border ${aiRecurrenceFilter === "all"
+                                        ? "bg-[#2563EB] text-white border-[#2563EB] shadow-xs"
+                                        : "bg-white text-zinc-600 border-zinc-200 hover:bg-zinc-50"
+                                    }`}
+                            >
+                                All Recurring Items ({aiDailyProjections.items.length})
+                            </button>
+                            <button
+                                onClick={() => setAiRecurrenceFilter("daily")}
+                                className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all border ${aiRecurrenceFilter === "daily"
+                                        ? "bg-emerald-600 text-white border-emerald-600 shadow-xs"
+                                        : "bg-white text-zinc-600 border-zinc-200 hover:bg-zinc-50"
+                                    }`}
+                            >
+                                Daily Need / High Recurrence ({aiDailyProjections.items.filter(i => i.recurrenceLevel === "daily").length})
+                            </button>
+                            <button
+                                onClick={() => setAiRecurrenceFilter("frequent")}
+                                className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all border ${aiRecurrenceFilter === "frequent"
+                                        ? "bg-blue-600 text-white border-blue-600 shadow-xs"
+                                        : "bg-white text-zinc-600 border-zinc-200 hover:bg-zinc-50"
+                                    }`}
+                            >
+                                Frequent Consumables ({aiDailyProjections.items.filter(i => i.recurrenceLevel === "frequent").length})
+                            </button>
+                        </div>
+
+                        {/* AI Projected Cards List */}
+                        {displayedAiItems.length === 0 ? (
+                            <div className="bg-white rounded-2xl border border-dashed border-zinc-200 p-8 text-center space-y-2">
+                                <Bot className="w-10 h-10 text-zinc-300 mx-auto" />
+                                <p className="text-sm font-semibold text-zinc-700">No daily recurring items detected yet</p>
+                                <p className="text-xs text-zinc-400 max-w-md mx-auto">
+                                    Log your daily store purchases (e.g., 20L water cans, milk, vegetables, packaging, fuel) in the Daily Expense tab. The AI will automatically compute your daily consumption velocity and project your 30-day recurring spend here.
+                                </p>
+                            </div>
+                        ) : (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                {displayedAiItems.map((item, idx) => (
+                                    <div
+                                        key={idx}
+                                        className="bg-white rounded-2xl border border-zinc-200 shadow-sm hover:shadow-md transition-all p-5 flex flex-col justify-between space-y-4 hover:border-blue-300"
+                                    >
+                                        <div className="space-y-3">
+                                            <div className="flex items-start justify-between gap-3">
+                                                <div className="min-w-0 flex-1">
+                                                    <div className="flex items-center gap-2 flex-wrap">
+                                                        <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded-md border ${item.recurrenceLevel === "daily"
+                                                                ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                                                : "bg-blue-50 text-blue-700 border-blue-200"
                                                             }`}>
-                                                                {item.recurrenceLevel === "daily" ? "Daily Need" : "Frequent Consumable"}
-                                                            </span>
-                                                            <span className="text-[10px] font-semibold text-zinc-500 bg-zinc-100 px-2 py-0.5 rounded-md">
-                                                                {item.categorySuggestion}
-                                                            </span>
-                                                        </div>
-                                                        <h4 className="text-base font-bold text-zinc-900 mt-1.5 truncate" title={item.itemName}>
-                                                            {item.itemName}
-                                                        </h4>
-                                                        <p className="text-[11px] text-zinc-400 mt-0.5">
-                                                            Logged across {item.purchaseDaysCount} of {item.totalDaysSpan} recorded days ({item.confidenceScore}% consistency)
-                                                        </p>
+                                                            {item.recurrenceLevel === "daily" ? "Daily Need" : "Frequent Consumable"}
+                                                        </span>
+                                                        <span className="text-[10px] font-semibold text-zinc-500 bg-zinc-100 px-2 py-0.5 rounded-md">
+                                                            {item.categorySuggestion}
+                                                        </span>
                                                     </div>
-
-                                                    <div className="text-right shrink-0">
-                                                        <p className="text-lg sm:text-xl font-black text-zinc-900">
-                                                            ₹{(item.projectedMonthlySpendCents / 100).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
-                                                            <span className="text-xs font-normal text-zinc-400 ml-1">/mo</span>
-                                                        </p>
-                                                        <p className="text-[11px] text-zinc-500 font-medium">
-                                                            ~{Math.round(item.projectedMonthlyQuantity)} units / month
-                                                        </p>
-                                                    </div>
+                                                    <h4 className="text-base font-bold text-zinc-900 mt-1.5 truncate" title={item.itemName}>
+                                                        {item.itemName}
+                                                    </h4>
+                                                    <p className="text-[11px] text-zinc-400 mt-0.5">
+                                                        Logged across {item.purchaseDaysCount} of {item.totalDaysSpan} recorded days ({item.confidenceScore}% consistency)
+                                                    </p>
                                                 </div>
 
-                                                {/* Quantity & Daily Velocity Metrics */}
-                                                <div className="grid grid-cols-2 gap-2 bg-zinc-50 p-3 rounded-xl border border-zinc-100 text-xs">
-                                                    <div>
-                                                        <span className="text-[10px] uppercase font-semibold text-zinc-400 block">Daily Consumption</span>
-                                                        <span className="font-bold text-zinc-800 text-sm">
-                                                            {item.avgDailyQuantity.toFixed(1)} <span className="text-xs font-normal text-zinc-500">units / day</span>
-                                                        </span>
-                                                    </div>
-                                                    <div>
-                                                        <span className="text-[10px] uppercase font-semibold text-zinc-400 block">Avg Daily Outflow</span>
-                                                        <span className="font-bold text-zinc-800 text-sm">
-                                                            ₹{(item.avgDailySpendCents / 100).toFixed(2)} <span className="text-xs font-normal text-zinc-500">(@ ₹{(item.avgUnitCostCents / 100).toFixed(2)}/unit)</span>
-                                                        </span>
-                                                    </div>
+                                                <div className="text-right shrink-0">
+                                                    <p className="text-lg sm:text-xl font-black text-zinc-900">
+                                                        ₹{(item.projectedMonthlySpendCents / 100).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                                                        <span className="text-xs font-normal text-zinc-400 ml-1">/mo</span>
+                                                    </p>
+                                                    <p className="text-[11px] text-zinc-500 font-medium">
+                                                        ~{Math.round(item.projectedMonthlyQuantity)} units / month
+                                                    </p>
                                                 </div>
                                             </div>
 
-                                            {/* Dynamic Lock / Sync Action Footer */}
-                                            {(() => {
-                                                const lockedOverhead = monthlyExpenses.find(
-                                                    m => m.item_name.trim().toLowerCase() === item.itemName.trim().toLowerCase()
-                                                );
-                                                const isLocked = !!lockedOverhead;
-                                                const isDrifted = isLocked && lockedOverhead.amount_cents !== item.projectedMonthlySpendCents;
-                                                const driftDiff = isDrifted ? item.projectedMonthlySpendCents - lockedOverhead.amount_cents : 0;
+                                            {/* Quantity & Daily Velocity Metrics */}
+                                            <div className="grid grid-cols-2 gap-2 bg-zinc-50 p-3 rounded-xl border border-zinc-100 text-xs">
+                                                <div>
+                                                    <span className="text-[10px] uppercase font-semibold text-zinc-400 block">Daily Consumption</span>
+                                                    <span className="font-bold text-zinc-800 text-sm">
+                                                        {item.avgDailyQuantity.toFixed(1)} <span className="text-xs font-normal text-zinc-500">units / day</span>
+                                                    </span>
+                                                </div>
+                                                <div>
+                                                    <span className="text-[10px] uppercase font-semibold text-zinc-400 block">Avg Daily Outflow</span>
+                                                    <span className="font-bold text-zinc-800 text-sm">
+                                                        ₹{(item.avgDailySpendCents / 100).toFixed(2)} <span className="text-xs font-normal text-zinc-500">(@ ₹{(item.avgUnitCostCents / 100).toFixed(2)}/unit)</span>
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        </div>
 
-                                                return (
-                                                    <div className="pt-2 border-t border-zinc-100 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5">
-                                                        <div className="text-[11px] text-zinc-500">
-                                                            {isDrifted ? (
-                                                                <span className="font-semibold text-amber-700 flex items-center gap-1">
-                                                                    <TrendingUp size={12} className="text-amber-600 shrink-0" />
-                                                                    Fixed at ₹{(lockedOverhead.amount_cents / 100).toLocaleString("en-IN")}/mo ({driftDiff > 0 ? "+" : ""}₹{(driftDiff / 100).toLocaleString("en-IN")}/mo consumption {driftDiff > 0 ? "increase" : "decrease"})
-                                                                </span>
-                                                            ) : isLocked ? (
-                                                                <span className="text-emerald-700 font-semibold flex items-center gap-1">
-                                                                    <Check size={12} className="text-emerald-600 shrink-0" />
-                                                                    Locked in Fixed Overheads at ₹{(lockedOverhead.amount_cents / 100).toLocaleString("en-IN")}/mo
-                                                                </span>
-                                                            ) : item.suggestedSavingsCents > 0 ? (
-                                                                <span className="text-emerald-700 font-medium">
-                                                                    Potential wholesale saving: ₹{(item.suggestedSavingsCents / 100).toLocaleString("en-IN")}/mo
-                                                                </span>
-                                                            ) : (
-                                                                <span className="text-zinc-400">Regular store operating consumable</span>
-                                                            )}
-                                                        </div>
+                                        {/* Dynamic Lock / Sync Action Footer */}
+                                        {(() => {
+                                            const lockedOverhead = monthlyExpenses.find(
+                                                m => m.item_name.trim().toLowerCase() === item.itemName.trim().toLowerCase()
+                                            );
+                                            const isLocked = !!lockedOverhead;
+                                            const isDrifted = isLocked && lockedOverhead.amount_cents !== item.projectedMonthlySpendCents;
+                                            const driftDiff = isDrifted ? item.projectedMonthlySpendCents - lockedOverhead.amount_cents : 0;
 
-                                                        <div className="flex items-center gap-1.5 shrink-0 justify-end flex-wrap">
-                                                            {isLocked && (
-                                                                <Button
-                                                                    size="sm"
-                                                                    variant="ghost"
-                                                                    onClick={() => removeAiItemFromMonthlyOverheads(item)}
-                                                                    className="text-rose-600 hover:bg-rose-50 hover:text-rose-700 border border-rose-200 text-xs font-semibold h-8 px-2.5 gap-1 shadow-2xs"
-                                                                    title="Remove from Fixed Monthly Overheads"
-                                                                >
-                                                                    <Trash2 size={13} />
-                                                                    <span>Remove from Fixed</span>
-                                                                </Button>
-                                                            )}
+                                            return (
+                                                <div className="pt-2 border-t border-zinc-100 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5">
+                                                    <div className="text-[11px] text-zinc-500">
+                                                        {isDrifted ? (
+                                                            <span className="font-semibold text-amber-700 flex items-center gap-1">
+                                                                <TrendingUp size={12} className="text-amber-600 shrink-0" />
+                                                                Fixed at ₹{(lockedOverhead.amount_cents / 100).toLocaleString("en-IN")}/mo ({driftDiff > 0 ? "+" : ""}₹{(driftDiff / 100).toLocaleString("en-IN")}/mo consumption {driftDiff > 0 ? "increase" : "decrease"})
+                                                            </span>
+                                                        ) : isLocked ? (
+                                                            <span className="text-emerald-700 font-semibold flex items-center gap-1">
+                                                                <Check size={12} className="text-emerald-600 shrink-0" />
+                                                                Locked in Fixed Overheads at ₹{(lockedOverhead.amount_cents / 100).toLocaleString("en-IN")}/mo
+                                                            </span>
+                                                        ) : item.suggestedSavingsCents > 0 ? (
+                                                            <span className="text-emerald-700 font-medium">
+                                                                Potential wholesale saving: ₹{(item.suggestedSavingsCents / 100).toLocaleString("en-IN")}/mo
+                                                            </span>
+                                                        ) : (
+                                                            <span className="text-zinc-400">Regular store operating consumable</span>
+                                                        )}
+                                                    </div>
 
+                                                    <div className="flex items-center gap-1.5 shrink-0 justify-end flex-wrap">
+                                                        {isLocked && (
                                                             <Button
                                                                 size="sm"
-                                                                onClick={() => addAiItemToMonthlyOverheads(item)}
-                                                                className={`text-xs font-semibold h-8 px-3 gap-1.5 shadow-xs transition-all ${
-                                                                    isDrifted
-                                                                        ? "bg-amber-600 hover:bg-amber-700 text-white"
-                                                                        : isLocked
+                                                                variant="ghost"
+                                                                onClick={() => removeAiItemFromMonthlyOverheads(item)}
+                                                                className="text-rose-600 hover:bg-rose-50 hover:text-rose-700 border border-rose-200 text-xs font-semibold h-8 px-2.5 gap-1 shadow-2xs"
+                                                                title="Remove from Fixed Monthly Overheads"
+                                                            >
+                                                                <Trash2 size={13} />
+                                                                <span>Remove from Fixed</span>
+                                                            </Button>
+                                                        )}
+
+                                                        <Button
+                                                            size="sm"
+                                                            onClick={() => addAiItemToMonthlyOverheads(item)}
+                                                            className={`text-xs font-semibold h-8 px-3 gap-1.5 shadow-xs transition-all ${isDrifted
+                                                                    ? "bg-amber-600 hover:bg-amber-700 text-white"
+                                                                    : isLocked
                                                                         ? "bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300"
                                                                         : "bg-zinc-900 hover:bg-zinc-800 text-white"
                                                                 }`}
-                                                            >
-                                                                {isDrifted ? (
-                                                                    <>
-                                                                        <TrendingUp size={13} />
-                                                                        <span>Sync New Rate</span>
-                                                                    </>
-                                                                ) : isLocked ? (
-                                                                    <>
-                                                                        <Check size={13} className="text-emerald-600" />
-                                                                        <span>Synced</span>
-                                                                    </>
-                                                                ) : (
-                                                                    <>
-                                                                        <Plus size={13} />
-                                                                        <span>Lock as Fixed Overhead</span>
-                                                                    </>
-                                                                )}
-                                                            </Button>
-                                                        </div>
+                                                        >
+                                                            {isDrifted ? (
+                                                                <>
+                                                                    <TrendingUp size={13} />
+                                                                    <span>Sync New Rate</span>
+                                                                </>
+                                                            ) : isLocked ? (
+                                                                <>
+                                                                    <Check size={13} className="text-emerald-600" />
+                                                                    <span>Synced</span>
+                                                                </>
+                                                            ) : (
+                                                                <>
+                                                                    <Plus size={13} />
+                                                                    <span>Lock as Fixed Overhead</span>
+                                                                </>
+                                                            )}
+                                                        </Button>
                                                     </div>
-                                                );
-                                            })()}
-                                        </div>
-                                    ))}
+                                                </div>
+                                            );
+                                        })()}
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
+
+            {activeTab === "overview" && effectiveIsAdmin && (
+                <div className="space-y-6">
+                    {/* Filters */}
+                    <div className="bg-white p-4 rounded-2xl shadow-sm border border-zinc-100 space-y-3">
+                        <div className="flex items-center gap-3">
+                            <div className="flex items-center gap-1 bg-zinc-100 rounded-xl p-1 overflow-x-auto flex-1">
+                                {scopeOptions.map(opt => (
+                                    <button
+                                        key={opt.id}
+                                        onClick={() => setOverviewScope(opt.id)}
+                                        className={`px-3 py-2 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors ${overviewScope === opt.id ? "bg-white shadow-sm text-zinc-900" : "text-zinc-500 hover:text-zinc-700"}`}
+                                    >
+                                        {opt.label}
+                                    </button>
+                                ))}
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setShowPriceManager(v => !v)}
+                                className={`flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-lg border transition-all shrink-0 ${showPriceManager ? "bg-[#2563EB] border-[#2563EB] text-white shadow-sm" : "bg-blue-50 border-blue-200 text-blue-800 hover:bg-blue-100"}`}
+                            >
+                                <Tag size={14} className={showPriceManager ? "text-white" : "text-[#2563EB]"} />
+                                <span>Fixed Price Items</span>
+                                <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded-full ${showPriceManager ? "bg-white/25 text-white" : "bg-blue-200 text-blue-900"}`}>
+                                    {priceList.length}
+                                </span>
+                                <ChevronDown size={14} className={`transition-transform duration-200 ${showPriceManager ? "rotate-180" : ""}`} />
+                            </button>
+                            <Button onClick={exportOverviewPdf} variant="outline" size="sm" className="gap-2 shrink-0" disabled={exportingPdf}>
+                                {exportingPdf ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
+                                {exportingPdf ? "Generating…" : "Export"}
+                            </Button>
+                        </div>
+
+                        <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                            {showsNav && (
+                                <div className="flex items-center justify-between sm:justify-start gap-2 bg-zinc-50 border border-zinc-200 rounded-xl p-1 shrink-0">
+                                    <button onClick={prevOverviewPeriod} className="p-2 hover:bg-white rounded-lg text-zinc-600">
+                                        <ChevronLeft size={18} />
+                                    </button>
+                                    <div className="text-sm font-semibold text-zinc-900 text-center px-2 min-w-[140px]">
+                                        {overviewPeriodLabel}
+                                    </div>
+                                    <button onClick={nextOverviewPeriod} className="p-2 hover:bg-white rounded-lg text-zinc-600">
+                                        <ChevronRight size={18} />
+                                    </button>
                                 </div>
                             )}
+
+                            {overviewScope === "custom" && (
+                                <div className="flex items-center gap-2 flex-wrap">
+                                    <Input type="date" className="w-auto" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)} />
+                                    <span className="text-zinc-400 text-sm">to</span>
+                                    <Input type="date" className="w-auto" value={customTo} onChange={(e) => setCustomTo(e.target.value)} />
+                                </div>
+                            )}
+
+                            <div className="relative flex-1 min-w-[200px]">
+                                <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
+                                <Input
+                                    placeholder="Search item name..."
+                                    className="pl-9"
+                                    value={searchQuery}
+                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                />
+                            </div>
                         </div>
                     </div>
-                )}
 
-                {activeTab === "overview" && isAdmin && (
-                    <div className="space-y-6">
-                        {/* Filters */}
-                        <div className="bg-white p-4 rounded-2xl shadow-sm border border-zinc-100 space-y-3">
-                            <div className="flex items-center gap-3">
-                                <div className="flex items-center gap-1 bg-zinc-100 rounded-xl p-1 overflow-x-auto flex-1">
-                                    {scopeOptions.map(opt => (
-                                        <button
-                                            key={opt.id}
-                                            onClick={() => setOverviewScope(opt.id)}
-                                            className={`px-3 py-2 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors ${overviewScope === opt.id ? "bg-white shadow-sm text-zinc-900" : "text-zinc-500 hover:text-zinc-700"}`}
-                                        >
-                                            {opt.label}
-                                        </button>
-                                    ))}
-                                </div>
-                                <button
-                                    onClick={() => setShowPriceManager(v => !v)}
-                                    className={`flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-lg border transition-colors shrink-0 ${showPriceManager ? "bg-cyan-600 border-cyan-600 text-white" : "bg-white border-zinc-200 text-zinc-600 hover:border-zinc-300"}`}
-                                >
-                                    <Tag size={14} />
-                                    Price List
-                                </button>
-                                <Button onClick={exportOverviewPdf} variant="outline" size="sm" className="gap-2 shrink-0" disabled={exportingPdf}>
-                                    {exportingPdf ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
-                                    {exportingPdf ? "Generating…" : "Export"}
-                                </Button>
-                            </div>
-
-                            <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-                                {showsNav && (
-                                    <div className="flex items-center justify-between sm:justify-start gap-2 bg-zinc-50 border border-zinc-200 rounded-xl p-1 shrink-0">
-                                        <button onClick={prevOverviewPeriod} className="p-2 hover:bg-white rounded-lg text-zinc-600">
-                                            <ChevronLeft size={18} />
-                                        </button>
-                                        <div className="text-sm font-semibold text-zinc-900 text-center px-2 min-w-[140px]">
-                                            {overviewPeriodLabel}
-                                        </div>
-                                        <button onClick={nextOverviewPeriod} className="p-2 hover:bg-white rounded-lg text-zinc-600">
-                                            <ChevronRight size={18} />
-                                        </button>
-                                    </div>
-                                )}
-
-                                {overviewScope === "custom" && (
-                                    <div className="flex items-center gap-2 flex-wrap">
-                                        <Input type="date" className="w-auto" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)} />
-                                        <span className="text-zinc-400 text-sm">to</span>
-                                        <Input type="date" className="w-auto" value={customTo} onChange={(e) => setCustomTo(e.target.value)} />
-                                    </div>
-                                )}
-
-                                <div className="relative flex-1 min-w-[200px]">
-                                    <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
-                                    <Input
-                                        placeholder="Search item name..."
-                                        className="pl-9"
-                                        value={searchQuery}
-                                        onChange={(e) => setSearchQuery(e.target.value)}
-                                    />
-                                </div>
-                            </div>
-                        </div>
-
-                        {showPriceManager && (
+                    {showPriceManager ? (
+                        <div className="relative">
                             <FixedPriceManager
                                 items={priceList}
                                 onAdd={addPriceItem}
@@ -2355,466 +2708,506 @@ export default function ExpensesPage() {
                                 onToggleActive={togglePriceItemActive}
                                 onDelete={deletePriceItem}
                             />
-                        )}
-
-                        {/* Stats */}
-                        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                            <div className="bg-white p-5 rounded-2xl shadow-sm border border-zinc-100">
-                                <p className="text-xs text-zinc-400 uppercase tracking-wider">Total Spent</p>
-                                <p className="text-2xl font-bold text-zinc-900 mt-1">₹{(overviewTotalCents / 100).toFixed(2)}</p>
-                                <p className="text-[11px] text-zinc-400 mt-0.5">{totalOverviewEntries} total entries</p>
-                            </div>
-                            <div className="bg-white p-5 rounded-2xl shadow-sm border border-zinc-100">
-                                <p className="text-xs text-zinc-400 uppercase tracking-wider">Daily Expenses</p>
-                                <p className="text-2xl font-bold text-cyan-600 mt-1">₹{(overviewDailyTotalCents / 100).toFixed(2)}</p>
-                                <p className="text-[11px] text-zinc-400 mt-0.5">{overviewRows.length} daily entries</p>
-                            </div>
-                            <div className="bg-white p-5 rounded-2xl shadow-sm border border-zinc-100">
-                                <p className="text-xs text-zinc-400 uppercase tracking-wider">Monthly Overheads</p>
-                                <p className="text-2xl font-bold text-violet-600 mt-1">₹{(overviewMonthlyTotalCents / 100).toFixed(2)}</p>
-                                <p className="text-[11px] text-zinc-400 mt-0.5">{filteredMonthlyRows.length} recurring entries</p>
-                            </div>
-                            <div className="bg-white p-5 rounded-2xl shadow-sm border border-zinc-100">
-                                <p className="text-xs text-zinc-400 uppercase tracking-wider">Avg / Entry</p>
-                                <p className="text-2xl font-bold text-zinc-900 mt-1">₹{(avgPerEntryCents / 100).toFixed(2)}</p>
-                                <p className="text-[11px] text-zinc-400 mt-0.5">{distinctItemCount} distinct items</p>
+                            <div className="flex justify-end p-2 -mt-2">
+                                <button
+                                    type="button"
+                                    onClick={() => setShowPriceManager(false)}
+                                    className="text-xs text-zinc-400 hover:text-zinc-600 flex items-center gap-1 py-1 px-2 rounded cursor-pointer"
+                                >
+                                    Collapse Fixed Price Items <ChevronUp size={12} />
+                                </button>
                             </div>
                         </div>
-
-                        {/* Biggest leak insight */}
-                        {biggestLeak && (
-                            <div className="bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200/70 rounded-2xl p-4 sm:p-5 flex items-center gap-4">
-                                <div className="w-11 h-11 rounded-xl bg-amber-100 text-amber-600 flex items-center justify-center shrink-0">
-                                    <Flame size={20} />
-                                </div>
-                                <div className="min-w-0 flex-1">
-                                    <p className="text-xs font-semibold text-amber-700 uppercase tracking-wider">Biggest Expense Leak</p>
-                                    <p className="text-sm text-zinc-700 mt-0.5">
-                                        <span className="font-bold text-zinc-900 capitalize">{biggestLeak.name}</span> cost{" "}
-                                        <span className="font-bold text-zinc-900">₹{(biggestLeak.cents / 100).toFixed(2)}</span> — that&apos;s{" "}
-                                        <span className="font-bold text-amber-700">{biggestLeakPercent.toFixed(0)}%</span> of total spend this period.
-                                    </p>
-                                    <div className="w-full h-1.5 bg-amber-100 rounded-full mt-2 overflow-hidden">
-                                        <div className="h-full bg-amber-500 rounded-full" style={{ width: `${Math.min(biggestLeakPercent, 100)}%` }} />
-                                    </div>
-                                </div>
-                            </div>
-                        )}
-
-                        {/* Chart */}
-                        <div ref={trendChartRef} className="bg-white p-5 rounded-2xl shadow-sm border border-zinc-100 h-[320px]">
-                            <div className="flex items-center justify-between mb-4">
-                                <h2 className="font-semibold text-zinc-900">Spending Trend</h2>
-                                <div className="flex items-center gap-1 bg-zinc-100 rounded-lg p-1">
-                                    <button
-                                        onClick={() => setTrendChartType("bar")}
-                                        className={`p-1.5 rounded-md transition-colors ${trendChartType === "bar" ? "bg-white shadow-sm text-cyan-600" : "text-zinc-400 hover:text-zinc-600"}`}
-                                        title="Bar chart"
-                                    >
-                                        <BarChart3 size={14} />
-                                    </button>
-                                    <button
-                                        onClick={() => setTrendChartType("line")}
-                                        className={`p-1.5 rounded-md transition-colors ${trendChartType === "line" ? "bg-white shadow-sm text-cyan-600" : "text-zinc-400 hover:text-zinc-600"}`}
-                                        title="Line chart"
-                                    >
-                                        <LineChartIcon size={14} />
-                                    </button>
-                                    <button
-                                        onClick={() => setTrendChartType("area")}
-                                        className={`p-1.5 rounded-md transition-colors ${trendChartType === "area" ? "bg-white shadow-sm text-cyan-600" : "text-zinc-400 hover:text-zinc-600"}`}
-                                        title="Area chart"
-                                    >
-                                        <AreaChartIcon size={14} />
-                                    </button>
-                                </div>
-                            </div>
-                            {chartData.length > 0 ? (
-                                <ResponsiveContainer width="100%" height="85%">
-                                    {trendChartType === "bar" ? (
-                                        <BarChart data={chartData}>
-                                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E4E4E5" />
-                                            <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#71717A', fontSize: 12 }} />
-                                            <YAxis axisLine={false} tickLine={false} tick={{ fill: '#71717A', fontSize: 12 }} tickFormatter={(v) => `₹${v}`} />
-                                            <Tooltip
-                                                contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
-                                                cursor={{ fill: '#F4F4F5' }}
-                                                formatter={(v: number | undefined) => [`₹${(v ?? 0).toFixed(2)}`, "Spent"]}
-                                            />
-                                            <Bar dataKey="Amount" fill="#0891B2" radius={[4, 4, 0, 0]} />
-                                        </BarChart>
-                                    ) : trendChartType === "line" ? (
-                                        <LineChart data={chartData}>
-                                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E4E4E5" />
-                                            <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#71717A', fontSize: 12 }} />
-                                            <YAxis axisLine={false} tickLine={false} tick={{ fill: '#71717A', fontSize: 12 }} tickFormatter={(v) => `₹${v}`} />
-                                            <Tooltip
-                                                contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
-                                                formatter={(v: number | undefined) => [`₹${(v ?? 0).toFixed(2)}`, "Spent"]}
-                                            />
-                                            <Line type="monotone" dataKey="Amount" stroke="#0891B2" strokeWidth={2.5} dot={{ r: 3, fill: "#0891B2" }} activeDot={{ r: 5 }} />
-                                        </LineChart>
-                                    ) : (
-                                        <AreaChart data={chartData}>
-                                            <defs>
-                                                <linearGradient id="expenseAreaFill" x1="0" y1="0" x2="0" y2="1">
-                                                    <stop offset="5%" stopColor="#0891B2" stopOpacity={0.35} />
-                                                    <stop offset="95%" stopColor="#0891B2" stopOpacity={0.02} />
-                                                </linearGradient>
-                                            </defs>
-                                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E4E4E5" />
-                                            <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#71717A', fontSize: 12 }} />
-                                            <YAxis axisLine={false} tickLine={false} tick={{ fill: '#71717A', fontSize: 12 }} tickFormatter={(v) => `₹${v}`} />
-                                            <Tooltip
-                                                contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
-                                                formatter={(v: number | undefined) => [`₹${(v ?? 0).toFixed(2)}`, "Spent"]}
-                                            />
-                                            <Area type="monotone" dataKey="Amount" stroke="#0891B2" strokeWidth={2.5} fill="url(#expenseAreaFill)" />
-                                        </AreaChart>
-                                    )}
-                                </ResponsiveContainer>
-                            ) : (
-                                <div className="h-full flex items-center justify-center text-zinc-400 text-sm">No data for this period</div>
-                            )}
-                        </div>
-
-                        {/* Leak analysis: top spend sources, quantity purchased, share of wallet */}
-                        <div ref={leakChartsRef} className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                            <div className="bg-white p-5 rounded-2xl shadow-sm border border-zinc-100 h-[300px] flex flex-col">
-                                <div className="flex items-center gap-2 mb-1">
-                                    <TrendingUp size={15} className="text-red-500" />
-                                    <h2 className="font-semibold text-zinc-900 text-sm">Top Expense Leaks</h2>
-                                </div>
-                                <p className="text-[11px] text-zinc-400 mb-2">Where the money is really going</p>
-                                {topLeakItems.length > 0 ? (
-                                    <ResponsiveContainer width="100%" height="100%">
-                                        <BarChart data={topLeakItems} layout="vertical" margin={{ left: 8, right: 16 }}>
-                                            <XAxis type="number" hide />
-                                            <YAxis
-                                                type="category"
-                                                dataKey="name"
-                                                axisLine={false}
-                                                tickLine={false}
-                                                width={90}
-                                                tick={{ fill: '#52525B', fontSize: 11 }}
-                                                tickFormatter={(v: string) => v.length > 12 ? `${v.slice(0, 12)}…` : v}
-                                            />
-                                            <Tooltip
-                                                contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
-                                                cursor={{ fill: '#F4F4F5' }}
-                                                formatter={(v: number | undefined, _n, item: any) => [`₹${(v ?? 0).toFixed(2)} (${item?.payload?.percent?.toFixed(0)}%)`, "Spent"]}
-                                            />
-                                            <Bar dataKey="Amount" radius={[0, 4, 4, 0]}>
-                                                {topLeakItems.map((_, idx) => (
-                                                    <Cell key={idx} fill={idx === 0 ? "#DC2626" : "#F97316"} />
-                                                ))}
-                                            </Bar>
-                                        </BarChart>
-                                    </ResponsiveContainer>
-                                ) : (
-                                    <div className="flex-1 flex items-center justify-center text-zinc-400 text-sm">No data</div>
-                                )}
-                            </div>
-
-                            <div className="bg-white p-5 rounded-2xl shadow-sm border border-zinc-100 h-[300px] flex flex-col">
-                                <div className="flex items-center gap-2 mb-1">
-                                    <PieChartIcon size={15} className="text-cyan-600" />
-                                    <h2 className="font-semibold text-zinc-900 text-sm">Spend Distribution</h2>
-                                </div>
-                                <p className="text-[11px] text-zinc-400 mb-2">Share of total spend by item</p>
-                                {pieData.length > 0 ? (
-                                    <ResponsiveContainer width="100%" height="100%">
-                                        <PieChart>
-                                            <Pie
-                                                data={pieData}
-                                                dataKey="value"
-                                                nameKey="name"
-                                                innerRadius="45%"
-                                                outerRadius="75%"
-                                                paddingAngle={2}
-                                            >
-                                                {pieData.map((_, idx) => (
-                                                    <Cell key={idx} fill={PIE_COLORS[idx % PIE_COLORS.length]} />
-                                                ))}
-                                            </Pie>
-                                            <Tooltip
-                                                contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
-                                                formatter={(v: number | undefined, name: string | undefined) => [`₹${(v ?? 0).toFixed(2)}`, name ?? ""]}
-                                            />
-                                            <Legend
-                                                verticalAlign="bottom"
-                                                height={36}
-                                                iconSize={8}
-                                                wrapperStyle={{ fontSize: 11, color: '#71717A' }}
-                                            />
-                                        </PieChart>
-                                    </ResponsiveContainer>
-                                ) : (
-                                    <div className="flex-1 flex items-center justify-center text-zinc-400 text-sm">No data</div>
-                                )}
-                            </div>
-
-                            <div className="bg-white p-5 rounded-2xl shadow-sm border border-zinc-100 h-[300px] flex flex-col">
-                                <div className="flex items-center gap-2 mb-1">
-                                    <PackageSearch size={15} className="text-violet-600" />
-                                    <h2 className="font-semibold text-zinc-900 text-sm">Most Purchased</h2>
-                                </div>
-                                <p className="text-[11px] text-zinc-400 mb-2">Highest quantity items bought</p>
-                                {topQuantityItems.length > 0 ? (
-                                    <ResponsiveContainer width="100%" height="100%">
-                                        <BarChart data={topQuantityItems} layout="vertical" margin={{ left: 8, right: 16 }}>
-                                            <XAxis type="number" hide allowDecimals={false} />
-                                            <YAxis
-                                                type="category"
-                                                dataKey="name"
-                                                axisLine={false}
-                                                tickLine={false}
-                                                width={90}
-                                                tick={{ fill: '#52525B', fontSize: 11 }}
-                                                tickFormatter={(v: string) => v.length > 12 ? `${v.slice(0, 12)}…` : v}
-                                            />
-                                            <Tooltip
-                                                contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
-                                                cursor={{ fill: '#F4F4F5' }}
-                                                formatter={(v: number | undefined) => [`${v} units`, "Purchased"]}
-                                            />
-                                            <Bar dataKey="Qty" fill="#8B5CF6" radius={[0, 4, 4, 0]} />
-                                        </BarChart>
-                                    </ResponsiveContainer>
-                                ) : (
-                                    <div className="flex-1 flex items-center justify-center text-zinc-400 text-sm">No data</div>
-                                )}
-                            </div>
-                        </div>
-
-                        {/* Price Watch: catches items whose unit price has crept up over time, even if it's since come back down */}
-                        <div className="bg-white rounded-2xl shadow-sm border border-zinc-100 overflow-hidden">
-                            <div className="p-5 pb-3 flex items-center gap-3">
-                                <div className="w-9 h-9 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0">
-                                    <TrendingUp size={16} />
+                    ) : (
+                        <div className="bg-white rounded-2xl shadow-sm border border-zinc-100 p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-xl bg-blue-50 border border-blue-200 flex items-center justify-center text-[#2563EB] shrink-0">
+                                    <Tag size={18} />
                                 </div>
                                 <div>
-                                    <h2 className="font-semibold text-zinc-900">Price Watch</h2>
-                                    <p className="text-xs text-zinc-400">Full price history per item — every increase is tracked, even ones that later came back down</p>
+                                    <h3 className="font-semibold text-zinc-900 text-sm flex items-center gap-2">
+                                        Fixed Price Items
+                                        <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800">
+                                            {priceList.length} items
+                                        </span>
+                                        <span className="text-[10px] font-extrabold uppercase px-1.5 py-0.2 rounded bg-zinc-100 text-zinc-600 border border-zinc-200">
+                                            Admin Only
+                                        </span>
+                                    </h3>
+                                    <p className="text-xs text-zinc-400">Locked unit price catalog for quick staff logging (e.g. Milk, Paper Cups).</p>
                                 </div>
                             </div>
-
-                            {priceTimelines.length === 0 ? (
-                                <div className="flex flex-col items-center justify-center py-8 text-center px-5">
-                                    <Check className="w-8 h-8 text-emerald-400 mb-2" />
-                                    <p className="text-zinc-500 text-sm">No price increases detected — prices look stable</p>
-                                </div>
-                            ) : (
-                                <div className="divide-y divide-zinc-50 max-h-[380px] overflow-y-auto">
-                                    {priceTimelines.map((t) => {
-                                        const isExpanded = expandedPriceItems.has(t.key);
-                                        const isAtPeak = t.currentCents >= t.peakCents;
-                                        const peakPercent = t.firstCents > 0 ? ((t.peakCents - t.firstCents) / t.firstCents) * 100 : 0;
-                                        return (
-                                            <div key={t.key} className="px-5 py-3">
-                                                <button onClick={() => togglePriceItem(t.key)} className="w-full flex items-center justify-between gap-3 text-left">
-                                                    <div className="min-w-0">
-                                                        <p className="font-medium text-zinc-900 truncate capitalize">{t.name}</p>
-                                                        <p className="text-[11px] text-zinc-400 mt-0.5">
-                                                            Now ₹{(t.currentCents / 100).toFixed(2)}
-                                                            {!isAtPeak && (
-                                                                <> · peaked at ₹{(t.peakCents / 100).toFixed(2)} on {format(new Date(`${t.peakDate}T00:00:00`), "d MMM yyyy")}</>
-                                                            )}
-                                                        </p>
-                                                    </div>
-                                                    <div className="flex items-center gap-2 shrink-0">
-                                                        <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${isAtPeak ? "text-rose-600 bg-rose-50" : "text-amber-600 bg-amber-50"}`}>
-                                                            +{peakPercent.toFixed(0)}% peak
-                                                        </span>
-                                                        <ChevronDown size={14} className={`text-zinc-400 transition-transform ${isExpanded ? "rotate-180" : ""}`} />
-                                                    </div>
-                                                </button>
-
-                                                {isExpanded && (
-                                                    <div className="mt-2.5 pl-3 border-l-2 border-zinc-100 space-y-1.5">
-                                                        {t.changes.map((c, idx) => (
-                                                            <div key={idx} className="flex items-center gap-1.5 text-[11px] text-zinc-500">
-                                                                {c.percent > 0
-                                                                    ? <TrendingUp size={11} className="text-rose-500 shrink-0" />
-                                                                    : <TrendingDown size={11} className="text-emerald-500 shrink-0" />}
-                                                                <span>{format(new Date(`${c.date}T00:00:00`), "d MMM yyyy")}</span>
-                                                                <span className="text-zinc-300">·</span>
-                                                                <span>₹{(c.fromCents / 100).toFixed(2)}</span>
-                                                                <ArrowRight size={9} />
-                                                                <span className="font-semibold text-zinc-700">₹{(c.toCents / 100).toFixed(2)}</span>
-                                                                <span className={c.percent > 0 ? "text-rose-600 font-medium" : "text-emerald-600 font-medium"}>
-                                                                    ({c.percent > 0 ? "+" : ""}{c.percent.toFixed(0)}%)
-                                                                </span>
-                                                            </div>
-                                                        ))}
-                                                    </div>
-                                                )}
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-                            )}
+                            <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => setShowPriceManager(true)}
+                                className="gap-1.5 shrink-0 self-start sm:self-auto text-blue-700 border-blue-200 hover:bg-blue-50"
+                            >
+                                <Tag size={14} />
+                                Show Fixed Price Items
+                                <ChevronDown size={14} />
+                            </Button>
                         </div>
+                    )}
 
-                        {/* Breakdown + Transactions */}
-                        <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
-                            {/* Item-wise Breakdown */}
-                            <div className="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-zinc-100 overflow-hidden h-fit space-y-4">
-                                <div className="p-5 pb-0">
-                                    <h2 className="font-semibold text-zinc-900">Expense Breakdown</h2>
-                                    <p className="text-xs text-zinc-400 mt-0.5">Daily supply items &amp; monthly fixed overheads</p>
-                                </div>
-
-                                {/* Monthly Overheads Summary if any */}
-                                {monthlyItemSummary.length > 0 && (
-                                    <div className="px-5">
-                                        <div className="flex items-center justify-between mb-2">
-                                            <span className="text-xs font-bold text-violet-700 uppercase tracking-wider flex items-center gap-1.5">
-                                                <Building2 size={13} /> Monthly Fixed Costs
-                                            </span>
-                                            <span className="text-xs font-bold text-violet-700">
-                                                ₹{(overviewMonthlyTotalCents / 100).toFixed(2)}
-                                            </span>
-                                        </div>
-                                        <div className="divide-y divide-zinc-50 rounded-xl border border-violet-100 bg-violet-50/30 overflow-hidden">
-                                            {monthlyItemSummary.map((item, idx) => {
-                                                const c = CATEGORY_COLORS[item.category] || { bg: "bg-zinc-100", text: "text-zinc-700", border: "border-zinc-200" };
-                                                return (
-                                                    <div key={idx} className="px-3.5 py-2.5 flex items-center justify-between gap-3">
-                                                        <div className="min-w-0">
-                                                            <div className="flex items-center gap-1.5">
-                                                                <span className={`text-[9px] uppercase font-bold px-1.5 py-0.2 rounded border ${c.bg} ${c.text} ${c.border}`}>
-                                                                    {item.category}
-                                                                </span>
-                                                                <p className="font-medium text-xs text-zinc-900 truncate">{item.name}</p>
-                                                            </div>
-                                                        </div>
-                                                        <span className="font-bold text-xs text-zinc-900 shrink-0">₹{(item.cents / 100).toFixed(2)}</span>
-                                                    </div>
-                                                );
-                                            })}
-                                        </div>
-                                    </div>
-                                )}
-
-                                {/* Daily Items Summary */}
-                                <div>
-                                    <div className="px-5 pb-2 flex items-center justify-between">
-                                        <span className="text-xs font-bold text-cyan-700 uppercase tracking-wider flex items-center gap-1.5">
-                                            <ClipboardList size={13} /> Daily Supplies
-                                        </span>
-                                        <span className="text-xs font-bold text-cyan-700">
-                                            ₹{(overviewDailyTotalCents / 100).toFixed(2)}
-                                        </span>
-                                    </div>
-
-                                    {overviewItemSummary.length === 0 ? (
-                                        <div className="flex flex-col items-center justify-center py-6 text-center px-5">
-                                            <PackageSearch className="w-8 h-8 text-zinc-300 mb-1" />
-                                            <p className="text-zinc-400 text-xs">No daily supply expenses recorded</p>
-                                        </div>
-                                    ) : (
-                                        <div className="divide-y divide-zinc-50 max-h-[320px] overflow-y-auto">
-                                            {overviewItemSummary.map((item, idx) => (
-                                                <div key={idx} className="px-5 py-2.5 flex items-center justify-between gap-3">
-                                                    <div className="min-w-0">
-                                                        <p className="font-medium text-xs text-zinc-900 truncate capitalize">{item.name}</p>
-                                                        <p className="text-[10px] text-zinc-400">Qty: {item.quantity}</p>
-                                                    </div>
-                                                    <span className="font-semibold text-xs text-zinc-900 shrink-0">₹{(item.cents / 100).toFixed(2)}</span>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-
-                            {/* Transactions Table */}
-                            <div className="lg:col-span-3 bg-white rounded-2xl shadow-sm border border-zinc-100 overflow-hidden">
-                                <div className="p-5 pb-3 flex items-center justify-between">
-                                    <div>
-                                        <h2 className="font-semibold text-zinc-900">All Transactions</h2>
-                                        <p className="text-xs text-zinc-400">Daily expenses and monthly fixed overheads</p>
-                                    </div>
-                                    <div className="flex items-center gap-1 text-xs">
-                                        <button onClick={() => toggleSort("date")} className={`flex items-center gap-1 px-2 py-1 rounded-md ${sortKey === "date" ? "bg-zinc-100 text-zinc-900 font-semibold" : "text-zinc-400"}`}>
-                                            Date <ArrowUpDown size={12} />
-                                        </button>
-                                        <button onClick={() => toggleSort("amount")} className={`flex items-center gap-1 px-2 py-1 rounded-md ${sortKey === "amount" ? "bg-zinc-100 text-zinc-900 font-semibold" : "text-zinc-400"}`}>
-                                            Amount <ArrowUpDown size={12} />
-                                        </button>
-                                    </div>
-                                </div>
-
-                                {sortedTransactions.length === 0 ? (
-                                    <div className="flex flex-col items-center justify-center py-10 text-center px-5">
-                                        <PackageSearch className="w-10 h-10 text-zinc-300 mb-2" />
-                                        <p className="text-zinc-500 text-sm">No transactions match these filters</p>
-                                    </div>
-                                ) : (
-                                    <div className="overflow-x-auto max-h-[440px] overflow-y-auto">
-                                        <table className="w-full text-sm text-left">
-                                            <thead className="bg-zinc-50 border-b border-zinc-100 text-zinc-500 sticky top-0">
-                                                <tr>
-                                                    <th className="px-4 py-2.5 font-medium">Date</th>
-                                                    <th className="px-4 py-2.5 font-medium">Category</th>
-                                                    <th className="px-4 py-2.5 font-medium">Item &amp; Details</th>
-                                                    <th className="px-4 py-2.5 font-medium">Amount</th>
-                                                    {isAdmin && <th className="px-4 py-2.5 font-medium">Added By</th>}
-                                                </tr>
-                                            </thead>
-                                            <tbody className="divide-y divide-zinc-50">
-                                                {sortedTransactions.map(row => {
-                                                    const isMonthly = row.type === "monthly";
-                                                    const c = isMonthly && CATEGORY_COLORS[row.category]
-                                                        ? CATEGORY_COLORS[row.category]
-                                                        : { bg: "bg-cyan-50", text: "text-cyan-700", border: "border-cyan-200" };
-
-                                                    return (
-                                                        <tr key={row.id} className="hover:bg-zinc-50/50">
-                                                            <td className="px-4 py-3 whitespace-nowrap text-zinc-600 text-xs">
-                                                                {format(new Date(`${row.date}T00:00:00`), "d MMM yyyy")}
-                                                            </td>
-                                                            <td className="px-4 py-3 whitespace-nowrap">
-                                                                <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded border ${c.bg} ${c.text} ${c.border}`}>
-                                                                    {row.category}
-                                                                </span>
-                                                            </td>
-                                                            <td className="px-4 py-3">
-                                                                <p className="font-medium text-zinc-900 text-xs">{row.item_name}</p>
-                                                                <p className="text-[11px] text-zinc-400">{row.subtext}</p>
-                                                            </td>
-                                                            <td className="px-4 py-3 font-semibold text-zinc-900 whitespace-nowrap text-xs">
-                                                                ₹{(row.amount_cents / 100).toFixed(2)}
-                                                            </td>
-                                                            {isAdmin && (
-                                                                <td className="px-4 py-3 text-zinc-500 whitespace-nowrap text-xs">
-                                                                    {row.submitted_by && namesById[row.submitted_by] ? namesById[row.submitted_by] : "-"}
-                                                                </td>
-                                                            )}
-                                                        </tr>
-                                                    );
-                                                })}
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                )}
-                            </div>
+                    {/* Stats */}
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                        <div className="bg-white p-5 rounded-2xl shadow-sm border border-zinc-100">
+                            <p className="text-xs text-zinc-400 uppercase tracking-wider">Total Spent</p>
+                            <p className="text-2xl font-bold text-zinc-900 mt-1">₹{(overviewTotalCents / 100).toFixed(2)}</p>
+                            <p className="text-[11px] text-zinc-400 mt-0.5">{totalOverviewEntries} total entries</p>
+                        </div>
+                        <div className="bg-white p-5 rounded-2xl shadow-sm border border-zinc-100">
+                            <p className="text-xs text-zinc-400 uppercase tracking-wider">Daily Expenses</p>
+                            <p className="text-2xl font-bold text-[#2563EB] mt-1">₹{(overviewDailyTotalCents / 100).toFixed(2)}</p>
+                            <p className="text-[11px] text-zinc-400 mt-0.5">{overviewRows.length} daily entries</p>
+                        </div>
+                        <div className="bg-white p-5 rounded-2xl shadow-sm border border-zinc-100">
+                            <p className="text-xs text-zinc-400 uppercase tracking-wider">Monthly Overheads</p>
+                            <p className="text-2xl font-bold text-blue-900 mt-1">₹{(overviewMonthlyTotalCents / 100).toFixed(2)}</p>
+                            <p className="text-[11px] text-zinc-400 mt-0.5">{filteredMonthlyRows.length} recurring entries</p>
+                        </div>
+                        <div className="bg-white p-5 rounded-2xl shadow-sm border border-zinc-100">
+                            <p className="text-xs text-zinc-400 uppercase tracking-wider">Avg / Entry</p>
+                            <p className="text-2xl font-bold text-zinc-900 mt-1">₹{(avgPerEntryCents / 100).toFixed(2)}</p>
+                            <p className="text-[11px] text-zinc-400 mt-0.5">{distinctItemCount} distinct items</p>
                         </div>
                     </div>
-                )}
 
-                {activeTab === "ai-advisor" && isAdmin && (
-                    <ExpenseAIAgent
-                        expenses={overviewRows.length > 0 ? overviewRows : allExpenses}
-                        priceList={priceList}
-                        periodLabel={overviewPeriodLabel}
-                        isAdmin={isAdmin}
-                        monthlyExpenses={activeMonthlyExpenses.length > 0 ? activeMonthlyExpenses : monthlyExpenses}
-                    />
-                )}
-            </div>
+                    {/* Biggest leak insight */}
+                    {biggestLeak && (
+                        <div className="bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200/70 rounded-2xl p-4 sm:p-5 flex items-center gap-4">
+                            <div className="w-11 h-11 rounded-xl bg-amber-100 text-amber-600 flex items-center justify-center shrink-0">
+                                <Flame size={20} />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                                <p className="text-xs font-semibold text-amber-700 uppercase tracking-wider">Biggest Expense Leak</p>
+                                <p className="text-sm text-zinc-700 mt-0.5">
+                                    <span className="font-bold text-zinc-900 capitalize">{biggestLeak.name}</span> cost{" "}
+                                    <span className="font-bold text-zinc-900">₹{(biggestLeak.cents / 100).toFixed(2)}</span> — that&apos;s{" "}
+                                    <span className="font-bold text-amber-700">{biggestLeakPercent.toFixed(0)}%</span> of total spend this period.
+                                </p>
+                                <div className="w-full h-1.5 bg-amber-100 rounded-full mt-2 overflow-hidden">
+                                    <div className="h-full bg-amber-500 rounded-full" style={{ width: `${Math.min(biggestLeakPercent, 100)}%` }} />
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Chart */}
+                    <div ref={trendChartRef} className="bg-white p-5 rounded-2xl shadow-sm border border-zinc-100 h-[320px]">
+                        <div className="flex items-center justify-between mb-4">
+                            <h2 className="font-semibold text-zinc-900">Spending Trend</h2>
+                            <div className="flex items-center gap-1 bg-zinc-100 rounded-lg p-1">
+                                <button
+                                    onClick={() => setTrendChartType("bar")}
+                                    className={`p-1.5 rounded-md transition-colors ${trendChartType === "bar" ? "bg-white shadow-sm text-[#2563EB]" : "text-zinc-400 hover:text-zinc-600"}`}
+                                    title="Bar chart"
+                                >
+                                    <BarChart3 size={14} />
+                                </button>
+                                <button
+                                    onClick={() => setTrendChartType("line")}
+                                    className={`p-1.5 rounded-md transition-colors ${trendChartType === "line" ? "bg-white shadow-sm text-[#2563EB]" : "text-zinc-400 hover:text-zinc-600"}`}
+                                    title="Line chart"
+                                >
+                                    <LineChartIcon size={14} />
+                                </button>
+                                <button
+                                    onClick={() => setTrendChartType("area")}
+                                    className={`p-1.5 rounded-md transition-colors ${trendChartType === "area" ? "bg-white shadow-sm text-[#2563EB]" : "text-zinc-400 hover:text-zinc-600"}`}
+                                    title="Area chart"
+                                >
+                                    <AreaChartIcon size={14} />
+                                </button>
+                            </div>
+                        </div>
+                        {chartData.length > 0 ? (
+                            <ResponsiveContainer width="100%" height="85%">
+                                {trendChartType === "bar" ? (
+                                    <BarChart data={chartData}>
+                                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E4E4E5" />
+                                        <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#71717A', fontSize: 12 }} />
+                                        <YAxis axisLine={false} tickLine={false} tick={{ fill: '#71717A', fontSize: 12 }} tickFormatter={(v) => `₹${v}`} />
+                                        <Tooltip
+                                            contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
+                                            cursor={{ fill: '#F4F4F5' }}
+                                            formatter={(v: number | undefined) => [`₹${(v ?? 0).toFixed(2)}`, "Spent"]}
+                                        />
+                                        <Bar dataKey="Amount" fill="#2563EB" radius={[4, 4, 0, 0]} />
+                                    </BarChart>
+                                ) : trendChartType === "line" ? (
+                                    <LineChart data={chartData}>
+                                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E4E4E5" />
+                                        <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#71717A', fontSize: 12 }} />
+                                        <YAxis axisLine={false} tickLine={false} tick={{ fill: '#71717A', fontSize: 12 }} tickFormatter={(v) => `₹${v}`} />
+                                        <Tooltip
+                                            contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
+                                            formatter={(v: number | undefined) => [`₹${(v ?? 0).toFixed(2)}`, "Spent"]}
+                                        />
+                                        <Line type="monotone" dataKey="Amount" stroke="#2563EB" strokeWidth={2.5} dot={{ r: 3, fill: "#2563EB" }} activeDot={{ r: 5 }} />
+                                    </LineChart>
+                                ) : (
+                                    <AreaChart data={chartData}>
+                                        <defs>
+                                            <linearGradient id="expenseAreaFill" x1="0" y1="0" x2="0" y2="1">
+                                                <stop offset="5%" stopColor="#2563EB" stopOpacity={0.35} />
+                                                <stop offset="95%" stopColor="#2563EB" stopOpacity={0.02} />
+                                            </linearGradient>
+                                        </defs>
+                                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E4E4E5" />
+                                        <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#71717A', fontSize: 12 }} />
+                                        <YAxis axisLine={false} tickLine={false} tick={{ fill: '#71717A', fontSize: 12 }} tickFormatter={(v) => `₹${v}`} />
+                                        <Tooltip
+                                            contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
+                                            formatter={(v: number | undefined) => [`₹${(v ?? 0).toFixed(2)}`, "Spent"]}
+                                        />
+                                        <Area type="monotone" dataKey="Amount" stroke="#2563EB" strokeWidth={2.5} fill="url(#expenseAreaFill)" />
+                                    </AreaChart>
+                                )}
+                            </ResponsiveContainer>
+                        ) : (
+                            <div className="h-full flex items-center justify-center text-zinc-400 text-sm">No data for this period</div>
+                        )}
+                    </div>
+
+                    {/* Leak analysis: top spend sources, quantity purchased, share of wallet */}
+                    <div ref={leakChartsRef} className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        <div className="bg-white p-5 rounded-2xl shadow-sm border border-zinc-100 h-[300px] flex flex-col">
+                            <div className="flex items-center gap-2 mb-1">
+                                <TrendingUp size={15} className="text-red-500" />
+                                <h2 className="font-semibold text-zinc-900 text-sm">Top Expense Leaks</h2>
+                            </div>
+                            <p className="text-[11px] text-zinc-400 mb-2">Where the money is really going</p>
+                            {topLeakItems.length > 0 ? (
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <BarChart data={topLeakItems} layout="vertical" margin={{ left: 8, right: 16 }}>
+                                        <XAxis type="number" hide />
+                                        <YAxis
+                                            type="category"
+                                            dataKey="name"
+                                            axisLine={false}
+                                            tickLine={false}
+                                            width={90}
+                                            tick={{ fill: '#52525B', fontSize: 11 }}
+                                            tickFormatter={(v: string) => v.length > 12 ? `${v.slice(0, 12)}…` : v}
+                                        />
+                                        <Tooltip
+                                            contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
+                                            cursor={{ fill: '#F4F4F5' }}
+                                            formatter={(v: number | undefined, _n, item: any) => [`₹${(v ?? 0).toFixed(2)} (${item?.payload?.percent?.toFixed(0)}%)`, "Spent"]}
+                                        />
+                                        <Bar dataKey="Amount" radius={[0, 4, 4, 0]}>
+                                            {topLeakItems.map((_, idx) => (
+                                                <Cell key={idx} fill={idx === 0 ? "#DC2626" : "#F97316"} />
+                                            ))}
+                                        </Bar>
+                                    </BarChart>
+                                </ResponsiveContainer>
+                            ) : (
+                                <div className="flex-1 flex items-center justify-center text-zinc-400 text-sm">No data</div>
+                            )}
+                        </div>
+
+                        <div className="bg-white p-5 rounded-2xl shadow-sm border border-zinc-100 h-[300px] flex flex-col">
+                            <div className="flex items-center gap-2 mb-1">
+                                <PieChartIcon size={15} className="text-[#2563EB]" />
+                                <h2 className="font-semibold text-zinc-900 text-sm">Spend Distribution</h2>
+                            </div>
+                            <p className="text-[11px] text-zinc-400 mb-2">Share of total spend by item</p>
+                            {pieData.length > 0 ? (
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <PieChart>
+                                        <Pie
+                                            data={pieData}
+                                            dataKey="value"
+                                            nameKey="name"
+                                            innerRadius="45%"
+                                            outerRadius="75%"
+                                            paddingAngle={2}
+                                        >
+                                            {pieData.map((_, idx) => (
+                                                <Cell key={idx} fill={PIE_COLORS[idx % PIE_COLORS.length]} />
+                                            ))}
+                                        </Pie>
+                                        <Tooltip
+                                            contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
+                                            formatter={(v: number | undefined, name: string | undefined) => [`₹${(v ?? 0).toFixed(2)}`, name ?? ""]}
+                                        />
+                                        <Legend
+                                            verticalAlign="bottom"
+                                            height={36}
+                                            iconSize={8}
+                                            wrapperStyle={{ fontSize: 11, color: '#71717A' }}
+                                        />
+                                    </PieChart>
+                                </ResponsiveContainer>
+                            ) : (
+                                <div className="flex-1 flex items-center justify-center text-zinc-400 text-sm">No data</div>
+                            )}
+                        </div>
+
+                        <div className="bg-white p-5 rounded-2xl shadow-sm border border-zinc-100 h-[300px] flex flex-col">
+                            <div className="flex items-center gap-2 mb-1">
+                                <PackageSearch size={15} className="text-[#2563EB]" />
+                                <h2 className="font-semibold text-zinc-900 text-sm">Most Purchased</h2>
+                            </div>
+                            <p className="text-[11px] text-zinc-400 mb-2">Highest quantity items bought</p>
+                            {topQuantityItems.length > 0 ? (
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <BarChart data={topQuantityItems} layout="vertical" margin={{ left: 8, right: 16 }}>
+                                        <XAxis type="number" hide allowDecimals={false} />
+                                        <YAxis
+                                            type="category"
+                                            dataKey="name"
+                                            axisLine={false}
+                                            tickLine={false}
+                                            width={90}
+                                            tick={{ fill: '#52525B', fontSize: 11 }}
+                                            tickFormatter={(v: string) => v.length > 12 ? `${v.slice(0, 12)}…` : v}
+                                        />
+                                        <Tooltip
+                                            contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
+                                            cursor={{ fill: '#F4F4F5' }}
+                                            formatter={(v: number | undefined) => [`${v} units`, "Purchased"]}
+                                        />
+                                        <Bar dataKey="Qty" fill="#3B82F6" radius={[0, 4, 4, 0]} />
+                                    </BarChart>
+                                </ResponsiveContainer>
+                            ) : (
+                                <div className="flex-1 flex items-center justify-center text-zinc-400 text-sm">No data</div>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Price Watch: catches items whose unit price has crept up over time, even if it's since come back down */}
+                    <div className="bg-white rounded-2xl shadow-sm border border-zinc-100 overflow-hidden">
+                        <div className="p-5 pb-3 flex items-center gap-3">
+                            <div className="w-9 h-9 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0">
+                                <TrendingUp size={16} />
+                            </div>
+                            <div>
+                                <h2 className="font-semibold text-zinc-900">Price Watch</h2>
+                                <p className="text-xs text-zinc-400">Full price history per item — every increase is tracked, even ones that later came back down</p>
+                            </div>
+                        </div>
+
+                        {priceTimelines.length === 0 ? (
+                            <div className="flex flex-col items-center justify-center py-8 text-center px-5">
+                                <Check className="w-8 h-8 text-emerald-400 mb-2" />
+                                <p className="text-zinc-500 text-sm">No price increases detected — prices look stable</p>
+                            </div>
+                        ) : (
+                            <div className="divide-y divide-zinc-50 max-h-[380px] overflow-y-auto">
+                                {priceTimelines.map((t) => {
+                                    const isExpanded = expandedPriceItems.has(t.key);
+                                    const isAtPeak = t.currentCents >= t.peakCents;
+                                    const peakPercent = t.firstCents > 0 ? ((t.peakCents - t.firstCents) / t.firstCents) * 100 : 0;
+                                    return (
+                                        <div key={t.key} className="px-5 py-3">
+                                            <button onClick={() => togglePriceItem(t.key)} className="w-full flex items-center justify-between gap-3 text-left">
+                                                <div className="min-w-0">
+                                                    <p className="font-medium text-zinc-900 truncate capitalize">{t.name}</p>
+                                                    <p className="text-[11px] text-zinc-400 mt-0.5">
+                                                        Now ₹{(t.currentCents / 100).toFixed(2)}
+                                                        {!isAtPeak && (
+                                                            <> · peaked at ₹{(t.peakCents / 100).toFixed(2)} on {format(new Date(`${t.peakDate}T00:00:00`), "d MMM yyyy")}</>
+                                                        )}
+                                                    </p>
+                                                </div>
+                                                <div className="flex items-center gap-2 shrink-0">
+                                                    <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${isAtPeak ? "text-rose-600 bg-rose-50" : "text-amber-600 bg-amber-50"}`}>
+                                                        +{peakPercent.toFixed(0)}% peak
+                                                    </span>
+                                                    <ChevronDown size={14} className={`text-zinc-400 transition-transform ${isExpanded ? "rotate-180" : ""}`} />
+                                                </div>
+                                            </button>
+
+                                            {isExpanded && (
+                                                <div className="mt-2.5 pl-3 border-l-2 border-zinc-100 space-y-1.5">
+                                                    {t.changes.map((c, idx) => (
+                                                        <div key={idx} className="flex items-center gap-1.5 text-[11px] text-zinc-500">
+                                                            {c.percent > 0
+                                                                ? <TrendingUp size={11} className="text-rose-500 shrink-0" />
+                                                                : <TrendingDown size={11} className="text-emerald-500 shrink-0" />}
+                                                            <span>{format(new Date(`${c.date}T00:00:00`), "d MMM yyyy")}</span>
+                                                            <span className="text-zinc-300">·</span>
+                                                            <span>₹{(c.fromCents / 100).toFixed(2)}</span>
+                                                            <ArrowRight size={9} />
+                                                            <span className="font-semibold text-zinc-700">₹{(c.toCents / 100).toFixed(2)}</span>
+                                                            <span className={c.percent > 0 ? "text-rose-600 font-medium" : "text-emerald-600 font-medium"}>
+                                                                ({c.percent > 0 ? "+" : ""}{c.percent.toFixed(0)}%)
+                                                            </span>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Breakdown + Transactions */}
+                    <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+                        {/* Item-wise Breakdown */}
+                        <div className="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-zinc-100 overflow-hidden h-fit space-y-4">
+                            <div className="p-5 pb-0">
+                                <h2 className="font-semibold text-zinc-900">Expense Breakdown</h2>
+                                <p className="text-xs text-zinc-400 mt-0.5">Daily supply items &amp; monthly fixed overheads</p>
+                            </div>
+
+                            {/* Monthly Overheads Summary if any */}
+                            {monthlyItemSummary.length > 0 && (
+                                <div className="px-5">
+                                    <div className="flex items-center justify-between mb-2">
+                                        <span className="text-xs font-bold text-blue-700 uppercase tracking-wider flex items-center gap-1.5">
+                                            <Building2 size={13} /> Monthly Fixed Costs
+                                        </span>
+                                        <span className="text-xs font-bold text-blue-700">
+                                            ₹{(overviewMonthlyTotalCents / 100).toFixed(2)}
+                                        </span>
+                                    </div>
+                                    <div className="divide-y divide-zinc-50 rounded-xl border border-blue-100 bg-blue-50/30 overflow-hidden">
+                                        {monthlyItemSummary.map((item, idx) => {
+                                            const c = CATEGORY_COLORS[item.category] || { bg: "bg-zinc-100", text: "text-zinc-700", border: "border-zinc-200" };
+                                            return (
+                                                <div key={idx} className="px-3.5 py-2.5 flex items-center justify-between gap-3">
+                                                    <div className="min-w-0">
+                                                        <div className="flex items-center gap-1.5">
+                                                            <span className={`text-[9px] uppercase font-bold px-1.5 py-0.2 rounded border ${c.bg} ${c.text} ${c.border}`}>
+                                                                {item.category}
+                                                            </span>
+                                                            <p className="font-medium text-xs text-zinc-900 truncate">{item.name}</p>
+                                                        </div>
+                                                    </div>
+                                                    <span className="font-bold text-xs text-zinc-900 shrink-0">₹{(item.cents / 100).toFixed(2)}</span>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Daily Items Summary */}
+                            <div>
+                                <div className="px-5 pb-2 flex items-center justify-between">
+                                    <span className="text-xs font-bold text-blue-700 uppercase tracking-wider flex items-center gap-1.5">
+                                        <ClipboardList size={13} /> Daily Supplies
+                                    </span>
+                                    <span className="text-xs font-bold text-blue-700">
+                                        ₹{(overviewDailyTotalCents / 100).toFixed(2)}
+                                    </span>
+                                </div>
+
+                                {overviewItemSummary.length === 0 ? (
+                                    <div className="flex flex-col items-center justify-center py-6 text-center px-5">
+                                        <PackageSearch className="w-8 h-8 text-zinc-300 mb-1" />
+                                        <p className="text-zinc-400 text-xs">No daily supply expenses recorded</p>
+                                    </div>
+                                ) : (
+                                    <div className="divide-y divide-zinc-50 max-h-[320px] overflow-y-auto">
+                                        {overviewItemSummary.map((item, idx) => (
+                                            <div key={idx} className="px-5 py-2.5 flex items-center justify-between gap-3">
+                                                <div className="min-w-0">
+                                                    <p className="font-medium text-xs text-zinc-900 truncate capitalize">{item.name}</p>
+                                                    <p className="text-[10px] text-zinc-400">Qty: {item.quantity}</p>
+                                                </div>
+                                                <span className="font-semibold text-xs text-zinc-900 shrink-0">₹{(item.cents / 100).toFixed(2)}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Transactions Table */}
+                        <div className="lg:col-span-3 bg-white rounded-2xl shadow-sm border border-zinc-100 overflow-hidden">
+                            <div className="p-5 pb-3 flex items-center justify-between">
+                                <div>
+                                    <h2 className="font-semibold text-zinc-900">All Transactions</h2>
+                                    <p className="text-xs text-zinc-400">Daily expenses and monthly fixed overheads</p>
+                                </div>
+                                <div className="flex items-center gap-1 text-xs">
+                                    <button onClick={() => toggleSort("date")} className={`flex items-center gap-1 px-2 py-1 rounded-md ${sortKey === "date" ? "bg-zinc-100 text-zinc-900 font-semibold" : "text-zinc-400"}`}>
+                                        Date <ArrowUpDown size={12} />
+                                    </button>
+                                    <button onClick={() => toggleSort("amount")} className={`flex items-center gap-1 px-2 py-1 rounded-md ${sortKey === "amount" ? "bg-zinc-100 text-zinc-900 font-semibold" : "text-zinc-400"}`}>
+                                        Amount <ArrowUpDown size={12} />
+                                    </button>
+                                </div>
+                            </div>
+
+                            {sortedTransactions.length === 0 ? (
+                                <div className="flex flex-col items-center justify-center py-10 text-center px-5">
+                                    <PackageSearch className="w-10 h-10 text-zinc-300 mb-2" />
+                                    <p className="text-zinc-500 text-sm">No transactions match these filters</p>
+                                </div>
+                            ) : (
+                                <div className="overflow-x-auto max-h-[440px] overflow-y-auto">
+                                    <table className="w-full text-sm text-left">
+                                        <thead className="bg-zinc-50 border-b border-zinc-100 text-zinc-500 sticky top-0">
+                                            <tr>
+                                                <th className="px-4 py-2.5 font-medium">Date</th>
+                                                <th className="px-4 py-2.5 font-medium">Category</th>
+                                                <th className="px-4 py-2.5 font-medium">Item &amp; Details</th>
+                                                <th className="px-4 py-2.5 font-medium">Amount</th>
+                                                {effectiveIsAdmin && <th className="px-4 py-2.5 font-medium">Added By</th>}
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-zinc-50">
+                                            {sortedTransactions.map(row => {
+                                                const isMonthly = row.type === "monthly";
+                                                const c = isMonthly && CATEGORY_COLORS[row.category]
+                                                    ? CATEGORY_COLORS[row.category]
+                                                    : { bg: "bg-blue-50", text: "text-blue-700", border: "border-blue-200" };
+
+                                                return (
+                                                    <tr key={row.id} className="hover:bg-zinc-50/50">
+                                                        <td className="px-4 py-3 whitespace-nowrap text-zinc-600 text-xs">
+                                                            {format(new Date(`${row.date}T00:00:00`), "d MMM yyyy")}
+                                                        </td>
+                                                        <td className="px-4 py-3 whitespace-nowrap">
+                                                            <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded border ${c.bg} ${c.text} ${c.border}`}>
+                                                                {row.category}
+                                                            </span>
+                                                        </td>
+                                                        <td className="px-4 py-3">
+                                                            <p className="font-medium text-zinc-900 text-xs">{row.item_name}</p>
+                                                            <p className="text-[11px] text-zinc-400">{row.subtext}</p>
+                                                        </td>
+                                                        <td className="px-4 py-3 font-semibold text-zinc-900 whitespace-nowrap text-xs">
+                                                            ₹{(row.amount_cents / 100).toFixed(2)}
+                                                        </td>
+                                                        {effectiveIsAdmin && (
+                                                            <td className="px-4 py-3 text-zinc-500 whitespace-nowrap text-xs">
+                                                                {row.submitted_by && namesById[row.submitted_by] ? namesById[row.submitted_by] : "-"}
+                                                            </td>
+                                                        )}
+                                                    </tr>
+                                                );
+                                            })}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {activeTab === "ai-advisor" && effectiveIsAdmin && (
+                <ExpenseAIAgent
+                    expenses={overviewRows.length > 0 ? overviewRows : allExpenses}
+                    priceList={priceList}
+                    periodLabel={overviewPeriodLabel}
+                    isAdmin={effectiveIsAdmin}
+                    monthlyExpenses={activeMonthlyExpenses.length > 0 ? activeMonthlyExpenses : monthlyExpenses}
+                />
+            )}
         </div>
-    );
+    </div>
+);
 }
 

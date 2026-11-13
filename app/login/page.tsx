@@ -2,51 +2,143 @@
 import { supabaseClient } from "@/lib/supabaseClient";
 import { useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
-import { Loader2, Mail, Lock, Eye, EyeOff, LogIn } from "lucide-react";
+import { Loader2, Mail, Lock, Eye, EyeOff, LogIn, ShieldAlert, ArrowRight } from "lucide-react";
 import { useTenant } from "@/lib/context/TenantContext";
+import { getPlatformAdminUrl, getTenantUrl } from "@/lib/tenant/hostUrls";
+import { resolveCanonicalHostname } from "@/lib/tenant/hostnameResolver";
+import {
+  getBusinessStoreId,
+  resolveLoginIdentifierToEmail,
+} from "@/lib/utils/storeIdGenerator";
 import styles from "./login.module.css";
 
 export default function LoginPage() {
-  const { business } = useTenant();
+  const { business, tenantError } = useTenant();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | undefined>();
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [hasTenantParam, setHasTenantParam] = useState(false);
+
+  const [mismatchInfo, setMismatchInfo] = useState<{
+    email: string;
+    homeBusinessName: string;
+    homeBusinessSlug: string;
+    isExistingSession?: boolean;
+  } | null>(null);
+
+  const [superAdminNotice, setSuperAdminNotice] = useState(false);
   const router = useRouter();
 
+  // Read ?email= from query string if present
   useEffect(() => {
     if (typeof window !== "undefined") {
-      const hasParam = new URLSearchParams(window.location.search).has("tenant");
-      setHasTenantParam(hasParam);
+      const params = new URLSearchParams(window.location.search);
+      const emailParam = params.get("email");
+      if (emailParam) {
+        setEmail(emailParam);
+      }
     }
+  }, []);
 
+  useEffect(() => {
     let isMounted = true;
     (async () => {
-      const { data: { session } } = await supabaseClient.auth.getSession();
+      const {
+        data: { session },
+      } = await supabaseClient.auth.getSession();
       if (session?.user && isMounted) {
+        // Authoritatively check user's assigned workspace before redirecting
+        try {
+          const res = await fetch("/api/user/me", {
+            headers: session.access_token
+              ? { Authorization: `Bearer ${session.access_token}` }
+              : {},
+            cache: "no-store",
+          });
+          if (res.ok) {
+            const data = await res.json();
+            const hostRes =
+              typeof window !== "undefined"
+                ? resolveCanonicalHostname(window.location.host)
+                : null;
+            const currentTenantSlug =
+              hostRes?.kind === "tenant_workspace"
+                ? hostRes.tenantSlug
+                : null;
+
+            if (data?.flags?.isSuperAdmin) {
+              supabaseClient.auth
+                .signOut({ scope: "local" })
+                .catch(() => {});
+              if (isMounted) setSuperAdminNotice(true);
+              return;
+            }
+
+            if (
+              currentTenantSlug &&
+              data?.homeBusiness?.slug &&
+              data.homeBusiness.slug.toLowerCase() !==
+                currentTenantSlug.toLowerCase()
+            ) {
+              // Active session belongs to another store: show mismatch card
+              if (isMounted) {
+                setMismatchInfo({
+                  email: session.user.email || "",
+                  homeBusinessName:
+                    data.homeBusiness.name || "Assigned Store",
+                  homeBusinessSlug: data.homeBusiness.slug,
+                  isExistingSession: true,
+                });
+              }
+              return;
+            }
+          }
+        } catch (e) {
+          console.warn("Session check error:", e);
+        }
+
         try {
           const storedMode = localStorage.getItem("seyalpro_app_mode");
           if (storedMode === "baker") {
             router.replace("/b2b");
             return;
           }
-        } catch { }
+        } catch {}
         router.replace("/");
       }
     })();
 
-    return () => { isMounted = false; };
+    return () => {
+      isMounted = false;
+    };
   }, [router]);
 
   async function onLogin(e: React.FormEvent) {
     e.preventDefault();
-    if (loading) return; // prevent duplicate submissions
+    if (loading) return;
     setError(undefined);
+    setMismatchInfo(null);
+    setSuperAdminNotice(false);
+
+    if (tenantError === "TENANT_NOT_FOUND") {
+      setError("Workspace not found. Please check the shop URL and try again.");
+      return;
+    }
+
     setLoading(true);
 
-    const normalizedEmail = email.toLowerCase().trim();
+    const hostResForLogin =
+      typeof window !== "undefined"
+        ? resolveCanonicalHostname(window.location.host)
+        : null;
+    const activeTenantSlug =
+      business?.slug ||
+      (hostResForLogin?.kind === "tenant_workspace"
+        ? hostResForLogin.tenantSlug
+        : undefined);
+    const normalizedEmail = resolveLoginIdentifierToEmail(email, activeTenantSlug);
+    console.log("[CounterCub Login] Initiating login for:", normalizedEmail);
 
     try {
       const loginPromise = supabaseClient.auth.signInWithPassword({
@@ -54,10 +146,28 @@ export default function LoginPage() {
         password,
       });
       const timeoutPromise = new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error("Login timed out. Please check your internet connection and try again.")), 10000)
+        setTimeout(
+          () =>
+            reject(
+              new Error(
+                "Login timed out. Please check your internet connection and try again."
+              )
+            ),
+          10000
+        )
       );
 
-      const { data: authData, error } = await Promise.race([loginPromise, timeoutPromise]);
+      const { data: authData, error } = await Promise.race([
+        loginPromise,
+        timeoutPromise,
+      ]);
+
+      console.log(
+        "[CounterCub Login] Auth response received. Error:",
+        error?.message,
+        "User ID:",
+        authData?.user?.id
+      );
 
       if (error) {
         setError(error.message);
@@ -65,69 +175,124 @@ export default function LoginPage() {
         return;
       }
 
-      try { localStorage.setItem('bftone_display_email', normalizedEmail); } catch { }
-      try { localStorage.removeItem('bftone_tenant_cache'); } catch { }
+      const token = authData?.session?.access_token;
 
-      // Check if user is Super Admin -> Require 2FA on Super Admin Portal
-      if (normalizedEmail === 'admin@seyalpro.com') {
-        window.location.href = "/super-admin/login";
-        return;
-      }
-
+      // Authoritatively verify user's profile and workspace membership
       if (authData?.user) {
+        let meData: any = null;
         try {
-          const { data: prof } = await supabaseClient
-            .from('profiles')
-            .select('is_super_admin, business_id')
-            .eq('id', authData.user.id)
-            .maybeSingle();
-
-          if (prof?.is_super_admin) {
-            window.location.href = "/super-admin/login";
-            return;
+          const res = await fetch("/api/user/me", {
+            headers: token ? { Authorization: `Bearer ${token}` } : {},
+            cache: "no-store",
+            signal: AbortSignal.timeout(6000),
+          });
+          if (res.ok) {
+            meData = await res.json();
+            console.log("[CounterCub Login] /api/user/me data:", meData);
+          } else {
+            console.warn("[CounterCub Login] /api/user/me returned status:", res.status);
           }
+        } catch (apiErr) {
+          console.warn("[CounterCub Login] Could not query /api/user/me:", apiErr);
+        }
 
-          if (prof?.business_id) {
-            const { data: biz } = await supabaseClient
-              .from('businesses')
-              .select('slug, enabled_modules')
-              .eq('id', prof.business_id)
-              .maybeSingle();
+        const isSuperAdmin = Boolean(meData?.flags?.isSuperAdmin);
 
-            if (biz?.slug) {
-              document.cookie = `tenant_slug=${biz.slug}; path=/; max-age=${60 * 60 * 24 * 30}; SameSite=Lax`;
-            }
+        // 1. Super Admin accounts sign in via the dedicated platform admin portal
+        if (isSuperAdmin) {
+          console.log("[CounterCub Login] Detected Super Admin on store login");
+          supabaseClient.auth
+            .signOut({ scope: "local" })
+            .catch(() => {});
+          try {
+            localStorage.removeItem("bftone_tenant_cache");
+          } catch {}
+          setSuperAdminNotice(true);
+          setLoading(false);
+          return;
+        }
 
-            const isBaker = Boolean(biz?.enabled_modules?.baker_mode);
-            const isBilling = biz?.enabled_modules?.billing !== false;
-            let storedMode = "cafe";
-            try {
-              storedMode = localStorage.getItem("seyalpro_app_mode") || "cafe";
-            } catch { }
+        // 2. Verify tenant membership matches the current workspace hostname
+        const hostRes =
+          typeof window !== "undefined"
+            ? resolveCanonicalHostname(window.location.host)
+            : null;
+        const currentTenantSlug =
+          hostRes?.kind === "tenant_workspace" ? hostRes.tenantSlug : null;
 
-            if (isBaker && (!isBilling || storedMode === "baker")) {
-              window.location.href = "/b2b";
-              return;
-            }
-          }
-        } catch (bizErr) {
-          console.warn("Tenant profile resolve error:", bizErr);
+        const homeBiz = meData?.homeBusiness;
+
+        console.log("[CounterCub Login] Workspace check:", {
+          currentTenantSlug,
+          homeBizSlug: homeBiz?.slug,
+        });
+
+        if (
+          currentTenantSlug &&
+          homeBiz?.slug &&
+          homeBiz.slug.toLowerCase() !== currentTenantSlug.toLowerCase()
+        ) {
+          console.log("[CounterCub Login] Showing Wrong Workspace card for:", homeBiz.slug);
+          // Immediately wipe the session on this store's origin to prevent cross-origin state leakage
+          supabaseClient.auth
+            .signOut({ scope: "local" })
+            .catch(() => {});
+          try {
+            localStorage.removeItem("bftone_tenant_cache");
+          } catch {}
+          try {
+            localStorage.removeItem("bftone_display_email");
+          } catch {}
+          setMismatchInfo({
+            email: normalizedEmail,
+            homeBusinessName: homeBiz.name || "Assigned Store",
+            homeBusinessSlug: homeBiz.slug,
+            isExistingSession: false,
+          });
+          setLoading(false);
+          return;
+        }
+
+        if (currentTenantSlug && !homeBiz) {
+          supabaseClient.auth
+            .signOut({ scope: "local" })
+            .catch(() => {});
+          try {
+            localStorage.removeItem("bftone_tenant_cache");
+          } catch {}
+          setError(
+            "Access denied: Your account is not assigned to any shop workspace."
+          );
+          setLoading(false);
+          return;
         }
       }
 
       try {
-        const storedMode = typeof window !== "undefined" ? localStorage.getItem("seyalpro_app_mode") : null;
+        localStorage.setItem("bftone_display_email", normalizedEmail);
+      } catch {}
+      try {
+        localStorage.removeItem("bftone_tenant_cache");
+      } catch {}
+
+      try {
+        const storedMode =
+          typeof window !== "undefined"
+            ? localStorage.getItem("seyalpro_app_mode")
+            : null;
         if (storedMode === "baker") {
           window.location.href = "/b2b";
           return;
         }
-      } catch { }
+      } catch {}
 
-      // Standard shop user/admin redirect to shop dashboard
       window.location.href = "/";
     } catch (err: unknown) {
       console.error("Login failure:", err);
-      setError((err instanceof Error && err.message) || "An unexpected error occurred during login.");
+      setError(
+        (err instanceof Error && err.message) ||
+          "An unexpected error occurred during login."
+      );
       setLoading(false);
     }
   }
@@ -137,117 +302,250 @@ export default function LoginPage() {
       <section
         className={styles.hero}
         role="img"
-        aria-label="SeyalPro — Smarter Business. Simpler Operations. Manage your shop, team, sales and inventory in one place."
+        aria-label="CounterCub — Smarter Business. Simpler Operations. Manage your shop, team, sales and inventory in one place."
       />
 
       <main className={styles.panel}>
         <div className={styles.inner}>
           <header className={styles.brand}>
             <h1 className={styles.wordmark}>
-              <span className={styles.wordmarkSeyal}>Seyal</span>
-              <span className={styles.wordmarkPro}>Pro</span>
+              <span className={styles.wordmarkSeyal}>Counter</span>
+              <span className={styles.wordmarkPro}>Cub</span>
             </h1>
-            {hasTenantParam && business?.name ? (
+            {business?.id && business?.name ? (
               <div className={styles.workspaceBadge}>
                 <span>Workspace:</span>
                 <span>{business.name}</span>
               </div>
             ) : (
-              <p className={styles.tagline}>Enterprise Business Operating System</p>
+              <p className={styles.tagline}>
+                Enterprise Business Operating System
+              </p>
             )}
           </header>
 
-          <div className={styles.card}>
-            <div className={styles.cardHeader}>
-              <h2 className={styles.cardTitle}>Welcome Back</h2>
-              <p className={styles.cardSubtitle}>Sign in to access your workspace</p>
-            </div>
-
-            <form onSubmit={onLogin} className={styles.form} aria-busy={loading}>
-              <div className={styles.field}>
-                <label htmlFor="login-email" className={styles.label}>Email</label>
-                <div className={styles.control}>
-                  <Mail className={styles.leadingIcon} aria-hidden="true" />
-                  <input
-                    id="login-email"
-                    name="email"
-                    type="email"
-                    inputMode="email"
-                    autoComplete="username"
-                    autoCapitalize="none"
-                    spellCheck={false}
-                    required
-                    placeholder="name@example.com"
-                    value={email}
-                    onChange={e => setEmail(e.target.value)}
-                    aria-invalid={error ? true : undefined}
-                    aria-describedby={error ? "login-error" : undefined}
-                    className={styles.input}
-                  />
+          {/* Cross-Tenant Workspace Mismatch Card */}
+          {mismatchInfo ? (
+            <div className={styles.card}>
+              <div className="flex flex-col items-center text-center space-y-4">
+                <div className="w-14 h-14 rounded-2xl bg-amber-50 border border-amber-200 text-amber-600 flex items-center justify-center shadow-xs">
+                  <ShieldAlert size={28} />
                 </div>
-              </div>
+                <div className="space-y-1.5">
+                  <h2 className="text-xl font-bold text-slate-900">
+                    Wrong Workspace
+                  </h2>
+                  <p className="text-xs text-slate-500 max-w-sm leading-relaxed">
+                    Your account (
+                    <strong className="text-slate-800 font-semibold">
+                      {mismatchInfo.email}
+                    </strong>
+                    ) belongs to{" "}
+                    <strong className="text-blue-600 font-bold">
+                      {mismatchInfo.homeBusinessName}
+                    </strong>
+                    {business?.name ? (
+                      <>
+                        , not{" "}
+                        <strong className="text-slate-800 font-semibold">
+                          {business.name}
+                        </strong>
+                      </>
+                    ) : (
+                      ""
+                    )}
+                    .
+                  </p>
+                </div>
 
-              <div className={styles.field}>
-                <label htmlFor="login-password" className={styles.label}>Password</label>
-                <div className={styles.control}>
-                  <Lock className={styles.leadingIcon} aria-hidden="true" />
-                  <input
-                    id="login-password"
-                    name="password"
-                    type={showPassword ? "text" : "password"}
-                    autoComplete="current-password"
-                    required
-                    placeholder="••••••••"
-                    value={password}
-                    onChange={e => setPassword(e.target.value)}
-                    aria-invalid={error ? true : undefined}
-                    aria-describedby={error ? "login-error" : undefined}
-                    className={`${styles.input} ${styles.inputWithToggle}`}
-                  />
+                <div className="w-full pt-2 space-y-2.5">
+                  <a
+                    href={getTenantUrl(
+                      mismatchInfo.homeBusinessSlug,
+                      `/login?email=${encodeURIComponent(mismatchInfo.email)}`
+                    )}
+                    className="w-full inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 active:scale-[0.99] text-white font-bold text-sm shadow-md transition-all cursor-pointer"
+                  >
+                    <span>Go to {mismatchInfo.homeBusinessName} Login</span>
+                    <ArrowRight size={16} />
+                  </a>
+
                   <button
                     type="button"
-                    id="login-toggle-password"
-                    className={styles.toggle}
-                    onClick={() => setShowPassword(v => !v)}
-                    aria-label={showPassword ? "Hide password" : "Show password"}
-                    aria-pressed={showPassword}
-                    aria-controls="login-password"
+                    onClick={() => {
+                      supabaseClient.auth
+                        .signOut({ scope: "local" })
+                        .catch(() => {});
+                      setMismatchInfo(null);
+                      setPassword("");
+                    }}
+                    className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs border border-slate-200 transition-all cursor-pointer"
                   >
-                    {showPassword ? <EyeOff size={18} aria-hidden="true" /> : <Eye size={18} aria-hidden="true" />}
+                    Try Another Account
                   </button>
                 </div>
               </div>
-
-              {error && (
-                <div id="login-error" role="alert" className={styles.error}>
-                  {error}
+            </div>
+          ) : superAdminNotice ? (
+            /* Super Admin Redirect Card */
+            <div className={styles.card}>
+              <div className="flex flex-col items-center text-center space-y-4">
+                <div className="w-14 h-14 rounded-2xl bg-blue-50 border border-blue-200 text-blue-600 flex items-center justify-center shadow-xs">
+                  <Lock size={28} />
                 </div>
-              )}
+                <div className="space-y-1.5">
+                  <h2 className="text-xl font-bold text-slate-900">
+                    Platform Administrator
+                  </h2>
+                  <p className="text-xs text-slate-500 max-w-sm leading-relaxed">
+                    CounterCub Platform Administrator accounts must sign in
+                    through the centralized Platform Portal with 2FA.
+                  </p>
+                </div>
 
-              <button
-                type="submit"
-                id="login-submit"
-                className={styles.submit}
-                disabled={loading}
+                <div className="w-full pt-2 space-y-2.5">
+                  <a
+                    href={getPlatformAdminUrl("/super-admin-login")}
+                    className="w-full inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 active:scale-[0.99] text-white font-bold text-sm shadow-md transition-all cursor-pointer"
+                  >
+                    <span>Go to Platform Portal (2FA Login)</span>
+                    <ArrowRight size={16} />
+                  </a>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSuperAdminNotice(false);
+                      setPassword("");
+                    }}
+                    className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs border border-slate-200 transition-all cursor-pointer"
+                  >
+                    Back to Store Login
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : (
+            /* Standard Store Login Card */
+            <div className={styles.card}>
+              <div className={styles.cardHeader}>
+                <h2 className={styles.cardTitle}>Welcome Back</h2>
+                <p className={styles.cardSubtitle}>
+                  Sign in to access your workspace
+                </p>
+              </div>
+
+              <form
+                onSubmit={onLogin}
+                className={styles.form}
+                aria-busy={loading}
               >
-                {loading ? (
-                  <>
-                    <Loader2 size={18} className={styles.spinner} aria-hidden="true" />
-                    <span>Signing in…</span>
-                  </>
-                ) : (
-                  <>
-                    <LogIn size={18} aria-hidden="true" />
-                    <span>Access Dashboard</span>
-                  </>
+                <div className={styles.field}>
+                  <label htmlFor="login-email" className={styles.label}>
+                    Employee ID or Email
+                  </label>
+                  <div className={styles.control}>
+                    <Mail className={styles.leadingIcon} aria-hidden="true" />
+                    <input
+                      id="login-email"
+                      name="email"
+                      type="text"
+                      inputMode="text"
+                      autoComplete="username"
+                      autoCapitalize="none"
+                      spellCheck={false}
+                      required
+                      placeholder={`${getBusinessStoreId(business).employeePrefix || "ck"}10121997 or name@example.com`}
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      aria-invalid={error ? true : undefined}
+                      aria-describedby={error ? "login-error" : undefined}
+                      className={styles.input}
+                    />
+                  </div>
+                </div>
+
+                <div className={styles.field}>
+                  <label htmlFor="login-password" className={styles.label}>
+                    Password
+                  </label>
+                  <div className={styles.control}>
+                    <Lock className={styles.leadingIcon} aria-hidden="true" />
+                    <input
+                      id="login-password"
+                      name="password"
+                      type={showPassword ? "text" : "password"}
+                      autoComplete="current-password"
+                      required
+                      placeholder="••••••••"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      aria-invalid={error ? true : undefined}
+                      aria-describedby={error ? "login-error" : undefined}
+                      className={`${styles.input} ${styles.inputWithToggle}`}
+                    />
+                    <button
+                      type="button"
+                      id="login-toggle-password"
+                      className={styles.toggle}
+                      onClick={() => setShowPassword((v) => !v)}
+                      aria-label={
+                        showPassword ? "Hide password" : "Show password"
+                      }
+                      aria-pressed={showPassword}
+                      aria-controls="login-password"
+                    >
+                      {showPassword ? (
+                        <EyeOff size={18} aria-hidden="true" />
+                      ) : (
+                        <Eye size={18} aria-hidden="true" />
+                      )}
+                    </button>
+                  </div>
+                </div>
+
+                {error && (
+                  <div id="login-error" role="alert" className={styles.error}>
+                    {error}
+                  </div>
                 )}
-              </button>
-            </form>
-          </div>
+
+                <button
+                  type="submit"
+                  id="login-submit"
+                  className={styles.submit}
+                  disabled={loading}
+                >
+                  {loading ? (
+                    <>
+                      <Loader2
+                        size={18}
+                        className={styles.spinner}
+                        aria-hidden="true"
+                      />
+                      <span>Signing in…</span>
+                    </>
+                  ) : (
+                    <>
+                      <LogIn size={18} aria-hidden="true" />
+                      <span>Access Dashboard</span>
+                    </>
+                  )}
+                </button>
+              </form>
+            </div>
+          )}
 
           <footer className={styles.footer}>
-            <p>&copy; {new Date().getFullYear()} {business?.name || "SeyalPro"}. All rights reserved.</p>
-            <a href="/super-admin/login" id="login-root-portal" className={styles.rootLink}>
+            <p>
+              &copy; {new Date().getFullYear()} {business?.name || "CounterCub"}.
+              All rights reserved.
+            </p>
+            <a
+              href={getPlatformAdminUrl("/super-admin-login")}
+              id="login-root-portal"
+              className={styles.rootLink}
+            >
               Platform Root Portal (2FA)
             </a>
           </footer>

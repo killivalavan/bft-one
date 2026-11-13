@@ -7,6 +7,7 @@ import { useUser } from "@/lib/hooks/useUser";
 import { useProfile } from "@/lib/hooks/useProfile";
 import { useTenant } from "@/lib/context/TenantContext";
 import { useUnreadNotificationsCount } from "@/lib/hooks/useUnreadNotificationsCount";
+import { resolveCanonicalHostname } from "@/lib/tenant/hostnameResolver";
 import { cn } from "@/lib/utils/cn";
 import {
   Home, CalendarCheck2, CalendarDays, Coffee, Shield,
@@ -79,7 +80,12 @@ export default function Navbar({
 
   const displayName = userEmail ? userEmail.split("@")[0] : null;
   const initial = displayName ? displayName[0].toUpperCase() : "?";
-  const isSuperAdminView = flags?.isSuperAdmin && pathname.startsWith("/super-admin");
+  const hostKind =
+    typeof window !== "undefined"
+      ? resolveCanonicalHostname(window.location.host)?.kind
+      : null;
+  const isSuperAdminView =
+    hostKind === "platform_admin" || pathname.startsWith("/super-admin");
 
   const isAdmin = Boolean(
     flags?.isAdmin ||
@@ -162,23 +168,23 @@ export default function Navbar({
 
                       <Link href="/" className="flex items-center gap-1.5 group shrink-0">
                         <span className="font-extrabold text-lg tracking-tight leading-none text-[#0F172A] group-hover:text-[#2563EB] transition-colors">
-                          Seyal<span className="text-[#2563EB]">Pro</span>
+                          Counter<span className="text-[#2563EB]">Cub</span>
                         </span>
                       </Link>
                     </div>
 
-                    {/* Desktop Admin Brand (>= md): When collapsed, display SeyalPro.
+                    {/* Desktop Admin Brand (>= md): When collapsed, display CounterCub.
                        Store name is prominently kept inside the sidenavbar. */}
                     {isSidebarCollapsed ? (
                       <div className="hidden md:flex items-center gap-2.5 sm:gap-3.5 min-w-0 animate-in fade-in duration-200">
                         <Link
                           href="/"
                           className="flex items-center gap-2 group shrink-0 transition-opacity duration-200"
-                          title="SeyalPro Admin Dashboard"
+                          title="CounterCub Admin Dashboard"
                         >
                           <span className="font-extrabold text-lg sm:text-xl tracking-tight leading-none">
-                            <span className="text-[#0F172A] group-hover:text-[#2563EB] transition-colors">Seyal</span>
-                            <span className="text-[#2563EB]">Pro</span>
+                            <span className="text-[#0F172A] group-hover:text-[#2563EB] transition-colors">Counter</span>
+                            <span className="text-[#2563EB]">Cub</span>
                           </span>
                         </Link>
                       </div>
@@ -193,16 +199,16 @@ export default function Navbar({
                     <div className="flex flex-col justify-center min-w-0">
                       <span className="font-extrabold text-lg sm:text-xl tracking-tight leading-none">
                         {isSuperAdminView ? (
-                          <span className="text-white group-hover:text-blue-400">Seyal<span className="text-[#2563EB]">Pro</span></span>
+                          <span className="text-white group-hover:text-blue-400">Counter<span className="text-[#2563EB]">Cub</span></span>
                         ) : (
                           <span>
-                            <span className="text-[#0F172A]">Seyal</span>
-                            <span className="text-[#2563EB]">Pro</span>
+                            <span className="text-[#0F172A]">Counter</span>
+                            <span className="text-[#2563EB]">Cub</span>
                           </span>
                         )}
                       </span>
 
-                      {/* Mobile: Connected Store Pill Badge underneath SeyalPro */}
+                      {/* Mobile: Connected Store Pill Badge underneath CounterCub */}
                       {isSuperAdminView ? (
                         <div className="sm:hidden mt-1 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[10px] font-semibold bg-blue-950 text-blue-300 border border-blue-800 shadow-2xs max-w-[190px] truncate">
                           <Globe size={11} className="text-blue-400 animate-spin-slow shrink-0" />
@@ -240,8 +246,8 @@ export default function Navbar({
               </div>
             )}
 
-            {/* Middle: Desktop Nav Tabs - Hidden for Admin because side navbar handles navigation */}
-            {(!flags?.isAdmin || isSuperAdminView) && (
+            {/* Middle: Desktop Nav Tabs - Hidden for Admin & Super Admin */}
+            {!flags?.isAdmin && !isSuperAdminView && (
               <div className={cn("flex items-center space-x-1 sm:space-x-1.5", !isFocusMode && "hidden md:flex")}>
                 {visibleLinks.map((link) => {
                   const isActive = pathname === link.href;
@@ -301,7 +307,7 @@ export default function Navbar({
                     <button
                       onClick={() => setIssueModalOpen(true)}
                       className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#EFF6FF] hover:bg-[#DBEAFE] text-[#1E40AF] border border-[#BFDBFE] text-xs font-semibold transition-all shadow-xs active:scale-95"
-                      title="View raised issues or report a new bug to SeyalPro"
+                      title="View raised issues or report a new bug to CounterCub"
                       aria-label="Support and Issues"
                     >
                       <LifeBuoy size={14} className="text-[#2563EB]" />

@@ -15,9 +15,12 @@ export async function GET(request: Request) {
     const requestedUserId = url.searchParams.get("userId");
 
     const businessId = caller.businessId;
-    if (!caller.isSuperAdmin && !businessId) {
+    if (!businessId) {
       return NextResponse.json({ deductions: [] });
     }
+
+    // Non-admin staff may only query their own salary deductions
+    const effectiveUserId = caller.isAdmin ? requestedUserId : caller.id;
 
     let query = supa
       .from("salary_entries")
@@ -31,16 +34,11 @@ export async function GET(request: Request) {
         business_id,
         profiles!inner(id, email, business_id)
       `)
-      .eq("kind", "deduction");
+      .eq("kind", "deduction")
+      .eq("business_id", businessId);
 
-    // Optional employee filter if explicitly requested
-    if (requestedUserId) {
-      query = query.eq("user_id", requestedUserId);
-    }
-
-    // Tenant scoping (Store users see team deductions within their store)
-    if (!caller.isSuperAdmin) {
-      query = query.eq("business_id", businessId);
+    if (effectiveUserId) {
+      query = query.eq("user_id", effectiveUserId);
     }
 
     const { data, error } = await query.order("entry_date", { ascending: false });
@@ -59,14 +57,11 @@ export async function GET(request: Request) {
           business_id,
           profiles!inner(id, email)
         `)
-        .eq("kind", "deduction");
+        .eq("kind", "deduction")
+        .eq("business_id", businessId);
 
-      if (!caller.isSuperAdmin) {
-        fallbackQuery = fallbackQuery.eq("business_id", businessId);
-      }
-
-      if (requestedUserId) {
-        fallbackQuery = fallbackQuery.eq("user_id", requestedUserId);
+      if (effectiveUserId) {
+        fallbackQuery = fallbackQuery.eq("user_id", effectiveUserId);
       }
 
       const { data: fallbackData, error: fbErr } = await fallbackQuery.order("entry_date", { ascending: false });

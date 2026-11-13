@@ -14,8 +14,12 @@ import {
   Coffee, Receipt, Award, PackageCheck, AlertCircle, RefreshCw, Trash2,
   Phone, MapPin, Package, Truck
 } from "lucide-react";
-import { capitalizeWords } from "@/app/(protected)/b2b/products/page";
-import { formatCafeName, DEFAULT_BAKER_SAMPLE_STORES, sanitizeBakerStores } from "@/lib/utils/bakerUtils";
+import {
+  capitalizeWords,
+  formatCafeName,
+  DEFAULT_BAKER_SAMPLE_STORES,
+  sanitizeBakerStores,
+} from "@/lib/utils/bakerUtils";
 import { fetchB2BClients, saveB2BClient, B2B_CUSTOMERS_UPDATED_EVENT } from "@/lib/services/b2bClients";
 import { generateWhatsAppSlipMessage } from "@/lib/utils/b2bSlipWhatsapp";
 import {
@@ -704,7 +708,7 @@ export function SimpleBakerDashboardView({ onSwitchToCafeMode }: SimpleBakerDash
                                 </h3>
                                 {st.business_id && (
                                   <span className="px-1.5 py-0.2 rounded-md text-[8.5px] font-black uppercase tracking-wider bg-blue-100 text-blue-900 border border-blue-200">
-                                    ⚡ SeyalPro
+                                    ⚡ CounterCub
                                   </span>
                                 )}
                               </div>

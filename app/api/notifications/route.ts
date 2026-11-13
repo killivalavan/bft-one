@@ -23,9 +23,14 @@ export async function DELETE(req: Request) {
     const body = await req.json().catch(() => ({}));
     const { id, clear_all, filter } = body;
 
-    const business_id = caller.isSuperAdmin && body.business_id
-      ? body.business_id
-      : caller.businessId;
+    if (body.business_id && body.business_id !== "default" && body.business_id !== caller.businessId) {
+      return NextResponse.json(
+        { error: "Forbidden: Cannot delete notifications belonging to another business." },
+        { status: 403 }
+      );
+    }
+
+    const business_id = caller.businessId;
 
     if (id) {
       // Delete single notification strictly matching this store's business_id
@@ -80,9 +85,14 @@ export async function PATCH(req: Request) {
     const { id, mark_all, status = "read" } = body;
 
     const user_id = caller.id;
-    const business_id = caller.isSuperAdmin && body.business_id
-      ? body.business_id
-      : caller.businessId;
+    if (body.business_id && body.business_id !== "default" && body.business_id !== caller.businessId) {
+      return NextResponse.json(
+        { error: "Forbidden: Cannot delete notifications belonging to another business." },
+        { status: 403 }
+      );
+    }
+
+    const business_id = caller.businessId;
 
     if (id) {
       // Mark single notification as read or unread for this specific user

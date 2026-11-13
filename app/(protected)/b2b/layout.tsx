@@ -76,7 +76,7 @@ export default function BakerLayout({ children }: { children: React.ReactNode })
           </div>
           <h2 className="text-base font-bold text-[#0F172A]">B2B Supply Restricted</h2>
           <p className="text-xs text-slate-500">
-            This module is currently disabled for your store. Super Admins can enable B2B Supply Mode from the SeyalPro Master Dashboard.
+            This module is currently disabled for your store. Super Admins can enable B2B Supply Mode from the CounterCub Master Dashboard.
           </p>
           <Link
             href="/"
