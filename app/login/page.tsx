@@ -28,6 +28,8 @@ export default function LoginPage() {
   } | null>(null);
 
   const [superAdminNotice, setSuperAdminNotice] = useState(false);
+  const [forgotMode, setForgotMode] = useState(false);
+  const [resetSent, setResetSent] = useState(false);
   const router = useRouter();
 
   // Read ?email= from query string if present
@@ -67,7 +69,14 @@ export default function LoginPage() {
                 ? hostRes.tenantSlug
                 : null;
 
-            if (data?.flags?.isSuperAdmin) {
+            const isOwnTenantWorkspace = Boolean(
+              currentTenantSlug &&
+                data?.homeBusiness?.slug &&
+                data.homeBusiness.slug.toLowerCase() ===
+                  currentTenantSlug.toLowerCase()
+            );
+
+            if (data?.flags?.isSuperAdmin && !isOwnTenantWorkspace) {
               supabaseClient.auth
                 .signOut({ scope: "local" })
                 .catch(() => {});
@@ -113,6 +122,33 @@ export default function LoginPage() {
       isMounted = false;
     };
   }, [router]);
+
+  async function onForgotPassword(e: React.FormEvent) {
+    e.preventDefault();
+    if (loading) return;
+    setError(undefined);
+    const trimmed = email.trim();
+    if (!trimmed || !trimmed.includes("@")) {
+      setError("Please enter your account email address to receive a reset link.");
+      return;
+    }
+    setLoading(true);
+    try {
+      const redirectTo = `${window.location.origin}/reset-password`;
+      const { error: resetErr } = await supabaseClient.auth.resetPasswordForEmail(trimmed, {
+        redirectTo,
+      });
+      if (resetErr) {
+        setError(resetErr.message);
+        return;
+      }
+      setResetSent(true);
+    } catch (err: any) {
+      setError(err?.message || "Failed to send password reset email.");
+    } finally {
+      setLoading(false);
+    }
+  }
 
   async function onLogin(e: React.FormEvent) {
     e.preventDefault();
@@ -198,9 +234,25 @@ export default function LoginPage() {
 
         const isSuperAdmin = Boolean(meData?.flags?.isSuperAdmin);
 
-        // 1. Super Admin accounts sign in via the dedicated platform admin portal
-        if (isSuperAdmin) {
-          console.log("[CounterCub Login] Detected Super Admin on store login");
+        // 1. Resolve current workspace hostname & user's home business
+        const hostRes =
+          typeof window !== "undefined"
+            ? resolveCanonicalHostname(window.location.host)
+            : null;
+        const currentTenantSlug =
+          hostRes?.kind === "tenant_workspace" ? hostRes.tenantSlug : null;
+
+        const homeBiz = meData?.homeBusiness;
+        const isOwnTenantWorkspace = Boolean(
+          currentTenantSlug &&
+            homeBiz?.slug &&
+            homeBiz.slug.toLowerCase() === currentTenantSlug.toLowerCase()
+        );
+
+        // 2. Super Admin accounts must sign in via the dedicated platform admin portal
+        // unless they are signing into their own assigned home store workspace.
+        if (isSuperAdmin && !isOwnTenantWorkspace) {
+          console.log("[CounterCub Login] Detected Super Admin on non-home login");
           supabaseClient.auth
             .signOut({ scope: "local" })
             .catch(() => {});
@@ -211,16 +263,6 @@ export default function LoginPage() {
           setLoading(false);
           return;
         }
-
-        // 2. Verify tenant membership matches the current workspace hostname
-        const hostRes =
-          typeof window !== "undefined"
-            ? resolveCanonicalHostname(window.location.host)
-            : null;
-        const currentTenantSlug =
-          hostRes?.kind === "tenant_workspace" ? hostRes.tenantSlug : null;
-
-        const homeBiz = meData?.homeBusiness;
 
         console.log("[CounterCub Login] Workspace check:", {
           currentTenantSlug,
@@ -429,12 +471,68 @@ export default function LoginPage() {
             /* Standard Store Login Card */
             <div className={styles.card}>
               <div className={styles.cardHeader}>
-                <h2 className={styles.cardTitle}>Welcome Back</h2>
+                <h2 className={styles.cardTitle}>{forgotMode ? "Reset Password" : "Welcome Back"}</h2>
                 <p className={styles.cardSubtitle}>
-                  Sign in to access your workspace
+                  {forgotMode ? "Enter your email to receive a reset link" : "Sign in to access your workspace"}
                 </p>
               </div>
 
+              {forgotMode ? (
+                <form onSubmit={onForgotPassword} className={styles.form} aria-busy={loading}>
+                  <div className={styles.field}>
+                    <label htmlFor="reset-email" className={styles.label}>
+                      Account Email
+                    </label>
+                    <div className={styles.control}>
+                      <Mail className={styles.leadingIcon} aria-hidden="true" />
+                      <input
+                        id="reset-email"
+                        type="email"
+                        required
+                        placeholder="name@example.com"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        className={styles.input}
+                      />
+                    </div>
+                  </div>
+
+                  {resetSent && (
+                    <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-medium">
+                      If an account exists for {email.trim()}, a password reset link has been sent.
+                    </div>
+                  )}
+
+                  {error && (
+                    <div id="login-error" role="alert" className={styles.error}>
+                      {error}
+                    </div>
+                  )}
+
+                  <button type="submit" className={styles.submit} disabled={loading}>
+                    {loading ? (
+                      <>
+                        <Loader2 size={18} className={styles.spinner} aria-hidden="true" />
+                        <span>Sending…</span>
+                      </>
+                    ) : (
+                      <span>Send Reset Link</span>
+                    )}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setForgotMode(false);
+                      setResetSent(false);
+                      setError(undefined);
+                    }}
+                    className="w-full text-xs font-semibold text-slate-500 hover:text-slate-800 py-1.5 cursor-pointer"
+                  >
+                    Back to Store Login
+                  </button>
+                </form>
+              ) : (
               <form
                 onSubmit={onLogin}
                 className={styles.form}
@@ -466,9 +564,22 @@ export default function LoginPage() {
                 </div>
 
                 <div className={styles.field}>
-                  <label htmlFor="login-password" className={styles.label}>
-                    Password
-                  </label>
+                  <div className="flex items-center justify-between">
+                    <label htmlFor="login-password" className={styles.label}>
+                      Password
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setForgotMode(true);
+                        setResetSent(false);
+                        setError(undefined);
+                      }}
+                      className="text-xs font-semibold text-blue-600 hover:text-blue-700 cursor-pointer"
+                    >
+                      Forgot password?
+                    </button>
+                  </div>
                   <div className={styles.control}>
                     <Lock className={styles.leadingIcon} aria-hidden="true" />
                     <input
@@ -533,6 +644,7 @@ export default function LoginPage() {
                   )}
                 </button>
               </form>
+              )}
             </div>
           )}
 

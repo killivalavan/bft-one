@@ -23,6 +23,8 @@ export default function SuperAdminLoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [copiedKey, setCopiedKey] = useState(false);
+  const [forgotMode, setForgotMode] = useState(false);
+  const [resetSent, setResetSent] = useState(false);
 
   // MFA State
   const [factorId, setFactorId] = useState<string>("");
@@ -112,6 +114,32 @@ export default function SuperAdminLoginPage() {
       isMounted = false;
     };
   }, []);
+
+  async function handleSendResetEmail(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    const trimmed = email.trim();
+    if (!trimmed || !trimmed.includes("@")) {
+      setError("Please enter your Master Admin email address.");
+      return;
+    }
+    setLoading(true);
+    try {
+      const redirectTo = `${window.location.origin}/reset-password`;
+      const { error: resetErr } = await supabaseClient.auth.resetPasswordForEmail(trimmed, {
+        redirectTo,
+      });
+      if (resetErr) {
+        setError(resetErr.message);
+        return;
+      }
+      setResetSent(true);
+    } catch (err: any) {
+      setError(err?.message || "Failed to send reset link.");
+    } finally {
+      setLoading(false);
+    }
+  }
 
   // Handle standard Email + Password submission
   async function handleCredentialsLogin(e: React.FormEvent) {
@@ -366,7 +394,60 @@ export default function SuperAdminLoginPage() {
           <CardContent className="p-6 sm:p-8 space-y-6">
             
             {/* STEP 1: CREDENTIALS */}
-            {step === "credentials" && (
+            {step === "credentials" && forgotMode && (
+              <form onSubmit={handleSendResetEmail} className="space-y-4">
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-slate-300 ml-1 uppercase tracking-wider">
+                    Master Admin Email
+                  </label>
+                  <Input
+                    type="email"
+                    placeholder="support@countercub.com"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    required
+                    className="h-11 bg-slate-950/70 border-slate-700 text-white placeholder:text-slate-600 focus:border-[#2563EB] focus:ring-1 focus:ring-[#2563EB] rounded-xl transition-all"
+                  />
+                </div>
+
+                {resetSent && (
+                  <div className="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs font-medium flex items-start gap-2.5">
+                    <CheckCircle size={16} className="text-emerald-400 shrink-0 mt-0.5" />
+                    <span>If an account exists for {email.trim()}, a password reset link has been sent.</span>
+                  </div>
+                )}
+
+                {error && (
+                  <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs font-medium flex items-start gap-2.5">
+                    <AlertTriangle size={16} className="text-rose-400 shrink-0 mt-0.5" />
+                    <span className="leading-relaxed">{error}</span>
+                  </div>
+                )}
+
+                <Button
+                  type="submit"
+                  block
+                  disabled={loading}
+                  className="h-11 bg-[#2563EB] hover:bg-[#1D4ED8] text-white font-bold text-sm rounded-xl flex items-center justify-center gap-2"
+                >
+                  {loading ? <Loader2 className="animate-spin" size={18} /> : <span>Send Password Reset Link</span>}
+                </Button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setForgotMode(false);
+                    setResetSent(false);
+                    setError(null);
+                  }}
+                  className="w-full text-xs font-semibold text-slate-400 hover:text-white transition-colors py-1 cursor-pointer"
+                >
+                  Back to Sign In
+                </button>
+              </form>
+            )}
+
+            {step === "credentials" && !forgotMode && (
               <form onSubmit={handleCredentialsLogin} className="space-y-4">
                 <div className="space-y-2">
                   <label className="text-xs font-bold text-slate-300 ml-1 uppercase tracking-wider flex items-center justify-between">
@@ -384,9 +465,22 @@ export default function SuperAdminLoginPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-xs font-bold text-slate-300 ml-1 uppercase tracking-wider">
-                    Master Password
-                  </label>
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-slate-300 ml-1 uppercase tracking-wider">
+                      Master Password
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setForgotMode(true);
+                        setResetSent(false);
+                        setError(null);
+                      }}
+                      className="text-[11px] font-semibold text-[#60A5FA] hover:text-blue-300 cursor-pointer"
+                    >
+                      Forgot password?
+                    </button>
+                  </div>
                   <Input
                     type="password"
                     placeholder="••••••••••••"

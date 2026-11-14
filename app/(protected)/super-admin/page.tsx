@@ -33,6 +33,7 @@ import {
 import { PlanConfigurationPanel } from "@/components/super-admin/PlanConfigurationPanel";
 import { SubscriptionManagementModal } from "@/components/super-admin/SubscriptionManagementModal";
 import { RenewalRequestsPanel } from "@/components/super-admin/RenewalRequestsPanel";
+import { validatePasswordPolicy } from "@/lib/utils/passwordPolicy";
 
 export interface SupportTicket {
   id: string;
@@ -144,6 +145,12 @@ export default function SuperAdminPage() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+
+  // Super Admin self-service password change modal state
+  const [showChangePassModal, setShowChangePassModal] = useState(false);
+  const [saNewPassword, setSaNewPassword] = useState("");
+  const [saConfirmPassword, setSaConfirmPassword] = useState("");
+  const [isUpdatingSaPass, setIsUpdatingSaPass] = useState(false);
 
   // Edit modal state & tab
   const [editingBiz, setEditingBiz] = useState<ClientBusiness | null>(null);
@@ -532,6 +539,32 @@ export default function SuperAdminPage() {
       });
     } finally {
       setIsReauthenticating(false);
+    }
+  }
+
+  async function handleUpdateSuperAdminPassword(e: React.FormEvent) {
+    e.preventDefault();
+    if (saNewPassword !== saConfirmPassword) {
+      toast({ title: "Passwords do not match", variant: "error" });
+      return;
+    }
+    const check = validatePasswordPolicy(saNewPassword, "super_admin");
+    if (!check.valid) {
+      toast({ title: "Weak Password", description: check.errors[0], variant: "error" });
+      return;
+    }
+    setIsUpdatingSaPass(true);
+    try {
+      const { error } = await supabaseClient.auth.updateUser({ password: saNewPassword });
+      if (error) throw error;
+      toast({ title: "Password Updated", description: "Your Super Admin password has been changed.", variant: "success" });
+      setShowChangePassModal(false);
+      setSaNewPassword("");
+      setSaConfirmPassword("");
+    } catch (err: any) {
+      toast({ title: "Update Failed", description: err?.message || "Could not update password.", variant: "error" });
+    } finally {
+      setIsUpdatingSaPass(false);
     }
   }
 
@@ -1570,6 +1603,15 @@ export default function SuperAdminPage() {
             >
               <Download size={15} className="text-sky-400" />
               <span>Export CSV</span>
+            </Button>
+
+            <Button
+              variant="outline"
+              onClick={() => setShowChangePassModal(true)}
+              className="bg-slate-800/80 hover:bg-slate-700 text-slate-200 border-slate-700 text-xs sm:text-sm font-semibold px-4 py-2.5 rounded-xl transition-all flex items-center gap-2 cursor-pointer"
+            >
+              <KeyRound size={15} className="text-emerald-400" />
+              <span>Change Password</span>
             </Button>
 
             <Button
@@ -3583,6 +3625,72 @@ export default function SuperAdminPage() {
             </div>
           </form>
           )}
+        </div>
+      )}
+
+      {showChangePassModal && (
+        <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-4">
+          <form
+            onSubmit={handleUpdateSuperAdminPassword}
+            className="w-full max-w-md bg-white rounded-3xl border border-[#E2E8F0] shadow-2xl p-6 space-y-5"
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-xl bg-blue-50 text-[#2563EB] flex items-center justify-center border border-blue-100">
+                  <KeyRound size={18} />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-[#0F172A]">Change Super Admin Password</h3>
+                  <p className="text-xs text-[#64748B]">At least 10 chars with upper, lower, digit, and symbol.</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-[#334155]">New Password</label>
+                <Input
+                  type="password"
+                  required
+                  value={saNewPassword}
+                  onChange={(e) => setSaNewPassword(e.target.value)}
+                  placeholder="Enter new Super Admin password"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-[#334155]">Confirm New Password</label>
+                <Input
+                  type="password"
+                  required
+                  value={saConfirmPassword}
+                  onChange={(e) => setSaConfirmPassword(e.target.value)}
+                  placeholder="Re-enter new password"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 pt-1">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setShowChangePassModal(false);
+                  setSaNewPassword("");
+                  setSaConfirmPassword("");
+                }}
+                className="flex-1 rounded-xl border-[#E2E8F0] text-[#0F172A] hover:bg-slate-50 cursor-pointer"
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                disabled={isUpdatingSaPass}
+                className="flex-1 bg-[#2563EB] hover:bg-[#1D4ED8] text-white font-bold rounded-xl shadow-md cursor-pointer"
+              >
+                {isUpdatingSaPass ? <Loader2 className="animate-spin" size={16} /> : "Save Password"}
+              </Button>
+            </div>
+          </form>
         </div>
       )}
 

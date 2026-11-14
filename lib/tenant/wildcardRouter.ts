@@ -341,6 +341,7 @@ export function evaluateWildcardTenantRoute(
     }
     if (
       !isPathOrChild(pathname, "/super-admin") &&
+      pathname !== "/reset-password" &&
       !pathname.startsWith("/api/") &&
       !isStaticOrPublicPath(pathname)
     ) {
