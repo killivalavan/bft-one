@@ -10,7 +10,7 @@ import { useUnreadNotificationsCount } from "@/lib/hooks/useUnreadNotificationsC
 import { resolveCanonicalHostname } from "@/lib/tenant/hostnameResolver";
 import { cn } from "@/lib/utils/cn";
 import {
-  Home, CalendarCheck2, CalendarDays, Coffee, Shield,
+  Home, CalendarCheck2, CalendarDays, Coffee, Shield, KeyRound,
   User, LogOut, ChevronDown, Bell, Wallet, TrendingUp, Globe, Sparkles, Store, LifeBuoy, Bug, FileText, Boxes, Banknote, PanelLeftOpen, Menu, Megaphone
 } from "lucide-react";
 import RaiseIssueModal from "@/components/support/RaiseIssueModal";
@@ -364,14 +364,16 @@ export default function Navbar({
                         </div>
 
                         <div className="py-1 space-y-0.5">
-                          <Link
-                            href="/profile"
-                            className="flex items-center gap-2.5 px-3 py-2 text-sm text-[#0F172A] font-medium rounded-lg hover:bg-slate-100 transition-colors"
-                            onClick={() => setMenuOpen(false)}
-                          >
-                            <User size={16} className="text-[#64748B]" />
-                            <span>My Profile</span>
-                          </Link>
+                          {!flags?.isSuperAdmin && (
+                            <Link
+                              href="/profile"
+                              className="flex items-center gap-2.5 px-3 py-2 text-sm text-[#0F172A] font-medium rounded-lg hover:bg-slate-100 transition-colors"
+                              onClick={() => setMenuOpen(false)}
+                            >
+                              <User size={16} className="text-[#64748B]" />
+                              <span>My Profile</span>
+                            </Link>
+                          )}
 
                           {flags?.isAdmin && !flags?.isSuperAdmin && (
                             <button
@@ -387,14 +389,38 @@ export default function Navbar({
                           )}
 
                           {flags?.isSuperAdmin && (
-                            <Link
-                              href="/super-admin"
-                              className="flex items-center gap-2.5 px-3 py-2 text-sm text-[#2563EB] font-semibold rounded-lg hover:bg-[#EFF6FF] transition-colors"
-                              onClick={() => setMenuOpen(false)}
-                            >
-                              <Globe size={16} className="text-[#2563EB]" />
-                              <span>Super Admin Hub</span>
-                            </Link>
+                            <>
+                              <Link
+                                href="/super-admin"
+                                className="flex items-center gap-2.5 px-3 py-2 text-sm text-[#2563EB] font-semibold rounded-lg hover:bg-[#EFF6FF] transition-colors"
+                                onClick={() => setMenuOpen(false)}
+                              >
+                                <Globe size={16} className="text-[#2563EB]" />
+                                <span>Super Admin Hub</span>
+                              </Link>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setMenuOpen(false);
+                                  window.dispatchEvent(new CustomEvent("superadmin:open-change-password"));
+                                }}
+                                className="w-full text-left flex items-center gap-2.5 px-3 py-2 text-sm text-[#0F172A] font-medium rounded-lg hover:bg-slate-100 transition-colors cursor-pointer"
+                              >
+                                <KeyRound size={16} className="text-emerald-600" />
+                                <span>Change Password</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setMenuOpen(false);
+                                  window.dispatchEvent(new CustomEvent("superadmin:open-manage-2fa"));
+                                }}
+                                className="w-full text-left flex items-center gap-2.5 px-3 py-2 text-sm text-[#0F172A] font-medium rounded-lg hover:bg-slate-100 transition-colors cursor-pointer"
+                              >
+                                <Shield size={16} className="text-emerald-600" />
+                                <span>Manage 2FA</span>
+                              </button>
+                            </>
                           )}
                         </div>
 

@@ -33,6 +33,7 @@ import {
 import { PlanConfigurationPanel } from "@/components/super-admin/PlanConfigurationPanel";
 import { SubscriptionManagementModal } from "@/components/super-admin/SubscriptionManagementModal";
 import { RenewalRequestsPanel } from "@/components/super-admin/RenewalRequestsPanel";
+import { ManageMfaModal } from "@/components/super-admin/ManageMfaModal";
 import { validatePasswordPolicy } from "@/lib/utils/passwordPolicy";
 
 export interface SupportTicket {
@@ -151,6 +152,7 @@ export default function SuperAdminPage() {
   const [saNewPassword, setSaNewPassword] = useState("");
   const [saConfirmPassword, setSaConfirmPassword] = useState("");
   const [isUpdatingSaPass, setIsUpdatingSaPass] = useState(false);
+  const [showManageMfaModal, setShowManageMfaModal] = useState(false);
 
   // Edit modal state & tab
   const [editingBiz, setEditingBiz] = useState<ClientBusiness | null>(null);
@@ -953,6 +955,15 @@ export default function SuperAdminPage() {
           return;
         }
 
+        // Enforce mandatory AAL2 MFA before rendering Super Admin dashboard
+        const aalRes = await supabaseClient.auth.mfa.getAuthenticatorAssuranceLevel();
+        if (aalRes.data?.currentLevel !== "aal2") {
+          if (typeof window !== "undefined") {
+            window.location.href = "/super-admin-login";
+          }
+          return;
+        }
+
         if (isMounted) {
           setViewState(SuperAdminView.Ready);
         }
@@ -966,8 +977,15 @@ export default function SuperAdminPage() {
 
     initAuth();
 
+    const onOpenChangePass = () => setShowChangePassModal(true);
+    const onOpenManage2fa = () => setShowManageMfaModal(true);
+    window.addEventListener("superadmin:open-change-password", onOpenChangePass);
+    window.addEventListener("superadmin:open-manage-2fa", onOpenManage2fa);
+
     return () => {
       isMounted = false;
+      window.removeEventListener("superadmin:open-change-password", onOpenChangePass);
+      window.removeEventListener("superadmin:open-manage-2fa", onOpenManage2fa);
     };
   }, []);
 
@@ -1603,15 +1621,6 @@ export default function SuperAdminPage() {
             >
               <Download size={15} className="text-sky-400" />
               <span>Export CSV</span>
-            </Button>
-
-            <Button
-              variant="outline"
-              onClick={() => setShowChangePassModal(true)}
-              className="bg-slate-800/80 hover:bg-slate-700 text-slate-200 border-slate-700 text-xs sm:text-sm font-semibold px-4 py-2.5 rounded-xl transition-all flex items-center gap-2 cursor-pointer"
-            >
-              <KeyRound size={15} className="text-emerald-400" />
-              <span>Change Password</span>
             </Button>
 
             <Button
@@ -3627,6 +3636,8 @@ export default function SuperAdminPage() {
           )}
         </div>
       )}
+
+      {showManageMfaModal && <ManageMfaModal onClose={() => setShowManageMfaModal(false)} />}
 
       {showChangePassModal && (
         <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-4">

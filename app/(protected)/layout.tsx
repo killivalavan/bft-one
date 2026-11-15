@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
+import { supabaseClient } from "@/lib/supabaseClient";
 import { useUser } from "@/lib/hooks/useUser";
 import { useProfile } from "@/lib/hooks/useProfile";
 import { useTenant } from "@/lib/context/TenantContext";
@@ -15,8 +16,15 @@ export default function ProtectedLayout({ children }: { children: React.ReactNod
   const { status: tenantStatus } = useTenant();
   const router = useRouter();
   const pathname = usePathname();
+  const [superAdminMfaVerified, setSuperAdminMfaVerified] = useState(false);
 
   const isLoading = userLoading || (user ? profileLoading : false) || tenantStatus === "resolving";
+
+  const isSuperAdminRoute = Boolean(
+    (typeof window !== "undefined" &&
+      resolveCanonicalHostname(window.location.host)?.kind === "platform_admin") ||
+      (pathname?.startsWith("/super-admin") && pathname !== "/super-admin-login")
+  );
 
   useEffect(() => {
     if (isLoading) return;
@@ -42,17 +50,40 @@ export default function ProtectedLayout({ children }: { children: React.ReactNod
       return;
     }
 
-    // 2. Super Admin route protection
+    // 2. Super Admin route protection + Mandatory AAL2 MFA check
     // Only verify flags after profileLoading has finished and flags object is populated
     if (isPlatformAdminHost || (pathname?.startsWith("/super-admin") && pathname !== "/super-admin-login")) {
       if (!profileLoading && flags && !flags.isSuperAdmin) {
         router.replace("/super-admin-login?error=not_super_admin");
         return;
       }
-    }
-  }, [user, flags, isLoading, pathname, router]);
 
-  if (isLoading) {
+      if (!profileLoading && flags?.isSuperAdmin) {
+        let active = true;
+        supabaseClient.auth.mfa
+          .getAuthenticatorAssuranceLevel()
+          .then((aalRes) => {
+            if (!active) return;
+            if (aalRes.data?.currentLevel !== "aal2") {
+              setSuperAdminMfaVerified(false);
+              router.replace("/super-admin-login");
+            } else {
+              setSuperAdminMfaVerified(true);
+            }
+          })
+          .catch(() => {
+            if (!active) return;
+            setSuperAdminMfaVerified(false);
+            router.replace("/super-admin-login");
+          });
+        return () => {
+          active = false;
+        };
+      }
+    }
+  }, [user, flags, isLoading, profileLoading, pathname, router]);
+
+  if (isLoading || (isSuperAdminRoute && user && !superAdminMfaVerified)) {
     return (
       <div className="min-h-[70vh] flex flex-col items-center justify-center gap-3">
         <Loader2 className="w-8 h-8 text-[#2563EB] animate-spin" />

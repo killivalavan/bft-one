@@ -91,8 +91,23 @@ export default function SuperAdminLoginPage() {
         const verifiedFactor = totpFactors.find((f) => f.status === "verified");
 
         if (!verifiedFactor) {
-          // If no TOTP enrolled yet, user can stay or proceed
-          window.location.href = "/";
+          // Mandatory 2FA: clean up any abandoned unverified factors and start TOTP enrollment
+          // Note: listFactors().totp only contains verified factors; use .all to find abandoned ones
+          for (const f of factorsData?.all || []) {
+            if (f.factor_type === "totp" && f.status !== "verified") {
+              await supabaseClient.auth.mfa.unenroll({ factorId: f.id }).catch(() => {});
+            }
+          }
+          const { data: enrollData, error: enrollErr } = await supabaseClient.auth.mfa.enroll({
+            factorType: "totp",
+            friendlyName: "CounterCub Command Authenticator",
+          });
+          if (!enrollErr && enrollData && isMounted) {
+            setFactorId(enrollData.id);
+            setQrCodeUrl(enrollData.totp?.qr_code || "");
+            setSecretKey(enrollData.totp?.secret || "");
+            setStep("mfa_enroll");
+          }
           return;
         }
 
@@ -218,7 +233,13 @@ export default function SuperAdminLoginPage() {
         setFactorId(verifiedFactor.id);
         setStep("mfa_challenge");
       } else {
-        // First time 2FA setup -> Enroll new TOTP factor & present QR Code
+        // First time 2FA setup -> Clean up any stale unverified factors, then enroll new TOTP factor & present QR Code
+        // Note: listFactors().totp only contains verified factors; use .all to find abandoned ones
+        for (const f of factorsData?.all || []) {
+          if (f.factor_type === "totp" && f.status !== "verified") {
+            await supabaseClient.auth.mfa.unenroll({ factorId: f.id }).catch(() => {});
+          }
+        }
         const { data: enrollData, error: enrollErr } = await supabaseClient.auth.mfa.enroll({
           factorType: "totp",
           friendlyName: "CounterCub Command Authenticator",
