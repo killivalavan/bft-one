@@ -23,7 +23,8 @@ export type AuditAction =
   | "SMART_IMPORT_ROLLED_BACK"
   | "SUPPORT_IMPERSONATION_STARTED"
   | "SUPPORT_IMPERSONATION_REVOKED"
-  | "BUSINESS_SLUG_CHANGED";
+  | "BUSINESS_SLUG_CHANGED"
+  | "SUPER_ADMIN_TEST_EMAIL_SENT";
 
 export interface AuditEventParams {
   businessId?: string | null;
