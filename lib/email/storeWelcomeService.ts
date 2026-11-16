@@ -71,7 +71,7 @@ async function generatePasswordSetupLink(
   slug: string,
   request?: Request
 ): Promise<string> {
-  const baseResetUrl = `${resolveTenantOrigin(slug, request)}/reset-password`;
+  const baseResetUrl = `${resolveTenantOrigin(slug, request)}/set-password`;
   try {
     const { data, error } = await supa.auth.admin.generateLink({
       type: "recovery",
