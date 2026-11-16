@@ -290,7 +290,10 @@ export function EmailCentrePanel() {
 
   const SAMPLE_TEMPLATE_VARS: Record<string, string> = {
     storeName: "Royal Chai House",
-    adminLoginId: "owner@royalchai.com",
+    subdomain: "royal-chai.countercub.com",
+    storePrefix: "KBS",
+    storeId: "KBS74713",
+    adminLoginId: "KBS74713",
     contactEmail: "owner@royalchai.com",
     adminName: "Aarav",
     planName: "Pro Plan",

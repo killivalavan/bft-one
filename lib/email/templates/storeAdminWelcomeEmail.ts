@@ -1,5 +1,7 @@
 export interface StoreAdminWelcomeEmailParams {
   storeName: string;
+  slug?: string;
+  storeId?: string;
   adminLoginId: string;
   contactEmail: string;
   planName: string;
@@ -13,6 +15,10 @@ export interface StoreAdminWelcomeEmailParams {
   passwordSetupUrl: string;
 }
 
+const BODY_FONT =
+  "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
+const LINK_STYLE = `font-family:${BODY_FONT};font-size:13px;font-weight:600;color:#2563eb;text-decoration:none;word-break:break-all;`;
+
 function escapeHtml(value: string): string {
   return value
     .replace(/&/g, "&amp;")
@@ -24,8 +30,8 @@ function escapeHtml(value: string): string {
 
 function detailRow(label: string, valueHtml: string): string {
   return `<tr>
-    <td style="padding:5px 12px 5px 0;color:#64748b;width:128px;white-space:nowrap;vertical-align:top;">${escapeHtml(label)}</td>
-    <td style="padding:5px 0;color:#0f172a;font-weight:600;word-break:break-word;">${valueHtml}</td>
+    <td style="padding:5px 12px 5px 0;font-family:${BODY_FONT};font-size:13px;color:#64748b;width:152px;vertical-align:top;">${escapeHtml(label)}</td>
+    <td style="padding:5px 0;font-family:${BODY_FONT};font-size:13px;color:#0f172a;font-weight:600;word-break:break-word;">${valueHtml}</td>
   </tr>`;
 }
 
@@ -35,19 +41,37 @@ export function buildStoreAdminWelcomeEmail(params: StoreAdminWelcomeEmailParams
   text: string;
 } {
   const subject = `Welcome to CounterCub — ${params.storeName} is Ready`;
-  const sameLoginAndContact =
-    params.adminLoginId.trim().toLowerCase() === params.contactEmail.trim().toLowerCase();
+  const cleanSlug = (params.slug || "").trim();
+  const cleanContactEmail = params.contactEmail.trim();
+  const cleanAdminLoginId = params.adminLoginId.trim();
+  const storeRefId = (
+    params.storeId ||
+    (!cleanAdminLoginId.includes("@") ? cleanAdminLoginId : "") ||
+    ""
+  )
+    .trim()
+    .toUpperCase();
+  const hasSeparateAdminLoginId = Boolean(
+    cleanAdminLoginId &&
+      cleanAdminLoginId.toLowerCase() !== cleanContactEmail.toLowerCase() &&
+      cleanAdminLoginId.toUpperCase() !== storeRefId
+  );
 
   const expiryLineText = params.expiryDateLabel
     ? `Expiry Date: ${params.expiryDateLabel}`
     : null;
 
-  const accountLinesText = sameLoginAndContact
-    ? [`Login Email: ${params.contactEmail}`]
-    : [
-        `Admin Login ID: ${params.adminLoginId}`,
-        `Registered Contact Email: ${params.contactEmail}`,
-      ];
+  const accountLinesText = [
+    `Store Name: ${params.storeName}`,
+    ...(cleanSlug ? [`Subdomain: ${cleanSlug}.countercub.com`] : []),
+    ...(storeRefId ? [`Store Reference ID: ${storeRefId}`] : []),
+    ...(hasSeparateAdminLoginId ? [`Admin Login ID: ${cleanAdminLoginId}`] : []),
+    `Store Admin Mail ID: ${cleanContactEmail}`,
+    `Login URL: ${params.loginUrl}`,
+    ...(storeRefId
+      ? [`Login Tip: Sign in using your Store Reference ID (${storeRefId}) or Store Admin Mail ID (${cleanContactEmail}).`]
+      : []),
+  ];
 
   const text = [
     "Hello,",
@@ -55,9 +79,7 @@ export function buildStoreAdminWelcomeEmail(params: StoreAdminWelcomeEmailParams
     `Your CounterCub store workspace "${params.storeName}" has been provisioned and is ready to use.`,
     "",
     "Account & Workspace Details:",
-    `Store Name: ${params.storeName}`,
     ...accountLinesText,
-    `Login URL: ${params.loginUrl}`,
     "",
     "Subscription & Plan Details:",
     `Plan Name: ${params.planName}`,
@@ -78,12 +100,32 @@ export function buildStoreAdminWelcomeEmail(params: StoreAdminWelcomeEmailParams
     "CounterCub Support Team",
   ].join("\n");
 
-  const accountRowsHtml = sameLoginAndContact
-    ? detailRow("Login Email", escapeHtml(params.contactEmail))
-    : detailRow(
-        "Admin Login ID",
-        `<span style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace;">${escapeHtml(params.adminLoginId)}</span>`
-      ) + detailRow("Contact Email", escapeHtml(params.contactEmail));
+  const subdomainUrl = cleanSlug ? `https://${cleanSlug}.countercub.com` : "";
+  const accountRowsHtml = [
+    detailRow("Store Name", escapeHtml(params.storeName)),
+    cleanSlug
+      ? detailRow(
+          "Subdomain",
+          `<a href="${escapeHtml(subdomainUrl)}" style="${LINK_STYLE}">${escapeHtml(cleanSlug)}.countercub.com</a>`
+        )
+      : "",
+    storeRefId ? detailRow("Store Reference ID", escapeHtml(storeRefId)) : "",
+    hasSeparateAdminLoginId
+      ? detailRow("Admin Login ID", escapeHtml(cleanAdminLoginId))
+      : "",
+    detailRow(
+      "Store Admin Mail ID",
+      `<a href="mailto:${escapeHtml(cleanContactEmail)}" style="${LINK_STYLE}">${escapeHtml(cleanContactEmail)}</a>`
+    ),
+    detailRow(
+      "Login URL",
+      `<a href="${escapeHtml(params.loginUrl)}" style="${LINK_STYLE}">${escapeHtml(params.loginUrl)}</a>`
+    ),
+  ].join("");
+
+  const accountLoginTipHtml = storeRefId
+    ? `<p style="margin:10px 0 0;padding-top:8px;border-top:1px dashed #cbd5e1;font-family:${BODY_FONT};font-size:12px;color:#475569;">Sign in to your store dashboard using your Store Reference ID (<strong>${escapeHtml(storeRefId)}</strong>) or your Store Admin Mail ID (<a href="mailto:${escapeHtml(cleanContactEmail)}" style="font-family:${BODY_FONT};font-size:12px;font-weight:600;color:#2563eb;text-decoration:none;">${escapeHtml(cleanContactEmail)}</a>).</p>`
+    : "";
 
   const expiryRowHtml = params.expiryDateLabel
     ? detailRow("Expiry Date", escapeHtml(params.expiryDateLabel))
@@ -119,13 +161,9 @@ export function buildStoreAdminWelcomeEmail(params: StoreAdminWelcomeEmailParams
                     Account &amp; Workspace Details
                   </div>
                   <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="font-size:13px;">
-                    ${detailRow("Store Name", escapeHtml(params.storeName))}
                     ${accountRowsHtml}
-                    ${detailRow(
-                      "Login URL",
-                      `<a href="${escapeHtml(params.loginUrl)}" style="color:#2563eb;font-weight:600;text-decoration:none;word-break:break-all;">${escapeHtml(params.loginUrl)}</a>`
-                    )}
                   </table>
+                  ${accountLoginTipHtml}
                 </div>
 
                 <div style="margin:18px 0;padding:14px 16px;background-color:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;">

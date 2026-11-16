@@ -6,12 +6,15 @@ import {
 } from "@/lib/email/resendClient";
 import { buildStoreAdminWelcomeEmail } from "@/lib/email/templates/storeAdminWelcomeEmail";
 import { extractClientMetadata, logAuditEvent } from "@/lib/services/auditLogger";
+import { getBusinessStoreId } from "@/lib/utils/storeIdGenerator";
 
 export interface StoreWelcomePayload {
   businessId: string;
   userId: string;
   storeName: string;
   slug: string;
+  storeId?: string;
+  storePrefix?: string;
   adminLoginId: string;
   authEmail: string;
   contactEmail: string;
@@ -119,8 +122,22 @@ async function executeWelcomeSend(
       ? `${payload.currencySymbol}0 (Free)`
       : `${payload.currencySymbol}${payload.planAmount.toLocaleString("en-IN")}`;
 
+  let resolvedStoreId = payload.storeId?.trim() || "";
+  if (!resolvedStoreId && payload.businessId) {
+    const { data: bizRow } = await supa
+      .from("businesses")
+      .select("id, name, slug, enabled_modules")
+      .eq("id", payload.businessId)
+      .maybeSingle();
+    if (bizRow) {
+      resolvedStoreId = getBusinessStoreId(bizRow).storeId;
+    }
+  }
+
   const { subject, html, text } = buildStoreAdminWelcomeEmail({
     storeName: payload.storeName,
+    slug: payload.slug,
+    storeId: resolvedStoreId || undefined,
     adminLoginId: payload.adminLoginId,
     contactEmail: payload.contactEmail,
     planName: payload.planName,

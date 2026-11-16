@@ -149,8 +149,8 @@ export function ChangePasswordCard() {
                   <div
                     key={step}
                     className={`h-full flex-1 rounded-full transition-all ${policy.score >= step
-                        ? strengthColorMap[policy.strength].split(" ")[0]
-                        : "bg-zinc-200"
+                      ? strengthColorMap[policy.strength].split(" ")[0]
+                      : "bg-zinc-200"
                       }`}
                   />
                 ))}
@@ -196,8 +196,8 @@ export function ChangePasswordCard() {
         {message && (
           <div
             className={`p-3 rounded-lg text-xs font-medium flex items-center gap-2 ${message.type === "success"
-                ? "bg-[#F0FDF4] text-[#15803D] border border-[#BBF7D0]"
-                : "bg-slate-100 text-slate-800 border border-slate-200"
+              ? "bg-[#F0FDF4] text-[#15803D] border border-[#BBF7D0]"
+              : "bg-slate-100 text-slate-800 border border-slate-200"
               }`}
           >
             {message.type === "success" ? (

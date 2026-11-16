@@ -1,5 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import path from "node:path";
 import {
   extractStorePrefix,
   generateStoreReferenceId,
@@ -81,4 +83,44 @@ test("resolveLoginIdentifierToEmail & formatDisplayUserIdentifier round-trip cle
     formatDisplayUserIdentifier("owner@chaikings.com", null),
     "owner@chaikings.com"
   );
+});
+
+test("onboarding UI, API, and /api/public/login support Store Admin Mail ID and Store Reference ID login", () => {
+  const rootDir = process.cwd();
+  const saPage = fs.readFileSync(
+    path.join(rootDir, "app", "(protected)", "super-admin", "page.tsx"),
+    "utf8"
+  );
+  const bizApi = fs.readFileSync(
+    path.join(rootDir, "app", "api", "super-admin", "businesses", "route.ts"),
+    "utf8"
+  );
+  const loginPage = fs.readFileSync(
+    path.join(rootDir, "app", "login", "page.tsx"),
+    "utf8"
+  );
+  const loginApi = fs.readFileSync(
+    path.join(rootDir, "app", "api", "public", "login", "route.ts"),
+    "utf8"
+  );
+
+  // Onboarding UI replaces Contact Email with Store Admin Mail ID *
+  assert.match(saPage, /Store Admin Mail ID \*/);
+  assert.doesNotMatch(saPage, /Store Admin Contact Email/);
+  assert.doesNotMatch(saPage, /Store Admin Email or ID/);
+
+  // Business creation API binds adminLoginId to Store Reference ID and sends storeId/storePrefix to welcome email
+  assert.match(bizApi, /adminLoginId = finalStoreId/);
+  assert.match(bizApi, /storeId:\s*finalStoreId/);
+  assert.match(bizApi, /storePrefix:\s*finalStorePrefix/);
+
+  // Store login uses /api/public/login and supports Store Reference ID, Employee ID, or Mail ID
+  assert.match(loginPage, /\/api\/public\/login/);
+  assert.match(loginPage, /Store Reference ID, Employee ID, or Mail ID/);
+  assert.match(loginApi, /verifySameOriginCsrf\(request\)/);
+  assert.match(loginApi, /checkRateLimit\(/);
+  assert.match(loginApi, /resolveRequestHostname\(request/);
+  assert.match(loginApi, /getBusinessStoreId\(biz\)/);
+  assert.match(loginApi, /upperIdentifier === storeId/);
+  assert.match(loginApi, /contact_email/);
 });

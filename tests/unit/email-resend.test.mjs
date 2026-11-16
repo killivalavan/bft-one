@@ -2,6 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
+import { buildStoreAdminWelcomeEmail } from "../../lib/email/templates/storeAdminWelcomeEmail.ts";
 
 const rootDir = process.cwd();
 
@@ -33,8 +34,9 @@ describe("Resend Email Integration Security & Configuration (Phases 1–8)", () 
     const content = fs.readFileSync(tplPath, "utf8");
 
     assert.match(content, /Store Name:/);
-    assert.match(content, /Admin Login ID:/);
-    assert.match(content, /Registered Contact Email:/);
+    assert.match(content, /Subdomain:/);
+    assert.match(content, /Store Reference ID:/);
+    assert.match(content, /Store Admin Mail ID:/);
     assert.match(content, /Login URL:/);
     assert.match(content, /Plan Name:/);
     assert.match(content, /Plan Amount:/);
@@ -44,6 +46,40 @@ describe("Resend Email Integration Security & Configuration (Phases 1–8)", () 
     assert.match(content, /Activation Date:/);
     assert.match(content, /Expiry Date:/);
     assert.match(content, /never send passwords by email/i);
+
+    const rendered = buildStoreAdminWelcomeEmail({
+      storeName: "Royal Chai House",
+      slug: "royal-chai",
+      storeId: "KBS74713",
+      adminLoginId: "KBS74713",
+      contactEmail: "owner@royalchai.com",
+      planName: "Pro Plan",
+      planAmountFormatted: "₹299",
+      billingCycle: "Monthly (1 month)",
+      productLimitLabel: "250",
+      employeeLimitLabel: "25",
+      activationDateLabel: "16 Nov 2026",
+      expiryDateLabel: "16 Dec 2026",
+      loginUrl: "https://royal-chai.countercub.com/login",
+      passwordSetupUrl: "https://royal-chai.countercub.com/set-password?token_hash=abc&type=recovery",
+    });
+
+    assert.match(rendered.text, /Store Name: Royal Chai House/);
+    assert.match(rendered.text, /Subdomain: royal-chai\.countercub\.com/);
+    assert.match(rendered.text, /Store Reference ID: KBS74713/);
+    assert.doesNotMatch(rendered.text, /Store Prefix/);
+    assert.doesNotMatch(rendered.text, /\(Admin Login ID\)/);
+    assert.match(rendered.text, /Store Admin Mail ID: owner@royalchai\.com/);
+    assert.match(rendered.text, /Login URL: https:\/\/royal-chai\.countercub\.com\/login/);
+    assert.match(rendered.html, /Account &amp; Workspace Details/);
+    assert.match(rendered.html, /royal-chai\.countercub\.com/);
+    assert.match(rendered.html, /KBS74713/);
+    assert.doesNotMatch(rendered.html, /Store Prefix/);
+    assert.doesNotMatch(rendered.html, /\(Admin Login ID\)/);
+    assert.doesNotMatch(rendered.html, /ui-monospace/);
+    assert.match(rendered.html, /owner@royalchai\.com/);
+    assert.doesNotMatch(rendered.html, /\bpassword\s*:/i);
+    assert.doesNotMatch(rendered.text, /\bpassword\s*:/i);
   });
 
   it("enforces contact_email, idempotent welcome dispatch, and retry endpoint security", () => {

@@ -6,10 +6,7 @@ import { Loader2, Mail, Lock, Eye, EyeOff, LogIn, ShieldAlert, ArrowRight } from
 import { useTenant } from "@/lib/context/TenantContext";
 import { getPlatformAdminUrl, getTenantUrl } from "@/lib/tenant/hostUrls";
 import { resolveCanonicalHostname } from "@/lib/tenant/hostnameResolver";
-import {
-  getBusinessStoreId,
-  resolveLoginIdentifierToEmail,
-} from "@/lib/utils/storeIdGenerator";
+import { getBusinessStoreId } from "@/lib/utils/storeIdGenerator";
 import styles from "./login.module.css";
 
 export default function LoginPage() {
@@ -171,23 +168,10 @@ export default function LoginPage() {
 
     setLoading(true);
 
-    const hostResForLogin =
-      typeof window !== "undefined"
-        ? resolveCanonicalHostname(window.location.host)
-        : null;
-    const activeTenantSlug =
-      business?.slug ||
-      (hostResForLogin?.kind === "tenant_workspace"
-        ? hostResForLogin.tenantSlug
-        : undefined);
-    const normalizedEmail = resolveLoginIdentifierToEmail(email, activeTenantSlug);
-    console.log("[CounterCub Login] Initiating login for:", normalizedEmail);
+    const trimmedIdentifier = email.trim();
+    console.log("[CounterCub Login] Initiating login for:", trimmedIdentifier);
 
     try {
-      const loginPromise = supabaseClient.auth.signInWithPassword({
-        email: normalizedEmail,
-        password,
-      });
       const timeoutPromise = new Promise<never>((_, reject) =>
         setTimeout(
           () =>
@@ -200,8 +184,30 @@ export default function LoginPage() {
         )
       );
 
+      const loginResponse = await Promise.race([
+        fetch("/api/public/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            identifier: trimmedIdentifier,
+            password,
+          }),
+        }),
+        timeoutPromise,
+      ]);
+
+      const loginPayload = await loginResponse.json().catch(() => ({}));
+      if (!loginResponse.ok || !loginPayload?.session?.access_token || !loginPayload?.session?.refresh_token) {
+        setError(loginPayload?.error || "Invalid login credentials");
+        setLoading(false);
+        return;
+      }
+
       const { data: authData, error } = await Promise.race([
-        loginPromise,
+        supabaseClient.auth.setSession({
+          access_token: loginPayload.session.access_token,
+          refresh_token: loginPayload.session.refresh_token,
+        }),
         timeoutPromise,
       ]);
 
@@ -212,12 +218,14 @@ export default function LoginPage() {
         authData?.user?.id
       );
 
-      if (error) {
-        setError(error.message);
+      if (error || !authData?.user) {
+        setError(error?.message || "Invalid login credentials");
         setLoading(false);
         return;
       }
 
+      const resolvedDisplayEmail =
+        authData.user.email || loginPayload.displayIdentifier || trimmedIdentifier;
       const token = authData?.session?.access_token;
 
       // Authoritatively verify user's profile and workspace membership
@@ -293,7 +301,7 @@ export default function LoginPage() {
             localStorage.removeItem("bftone_display_email");
           } catch {}
           setMismatchInfo({
-            email: normalizedEmail,
+            email: resolvedDisplayEmail,
             homeBusinessName: homeBiz.name || "Assigned Store",
             homeBusinessSlug: homeBiz.slug,
             isExistingSession: false,
@@ -318,7 +326,7 @@ export default function LoginPage() {
       }
 
       try {
-        localStorage.setItem("bftone_display_email", normalizedEmail);
+        localStorage.setItem("bftone_display_email", resolvedDisplayEmail);
       } catch {}
       try {
         localStorage.removeItem("bftone_tenant_cache");
@@ -547,7 +555,7 @@ export default function LoginPage() {
               >
                 <div className={styles.field}>
                   <label htmlFor="login-email" className={styles.label}>
-                    Employee ID or Email
+                    Store Reference ID, Employee ID, or Mail ID
                   </label>
                   <div className={styles.control}>
                     <Mail className={styles.leadingIcon} aria-hidden="true" />
@@ -560,7 +568,7 @@ export default function LoginPage() {
                       autoCapitalize="none"
                       spellCheck={false}
                       required
-                      placeholder={`${getBusinessStoreId(business).employeePrefix || "ck"}10121997 or name@example.com`}
+                      placeholder={`e.g. KBS74713, ${getBusinessStoreId(business).employeePrefix || "ck"}10121997, or owner@store.com`}
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       aria-invalid={error ? true : undefined}

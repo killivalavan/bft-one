@@ -257,37 +257,7 @@ export async function POST(request: Request) {
     const isEmailIdentifier = rawAdminIdentifier.includes("@");
     const emailFormatRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-    let contactEmail = "";
-    let adminLoginId = "";
-
-    if (isEmailIdentifier) {
-      const lowerEmail = rawAdminIdentifier.toLowerCase();
-      if (!emailFormatRegex.test(lowerEmail)) {
-        return NextResponse.json({ error: "Please enter a valid Store Admin email address." }, { status: 400 });
-      }
-      contactEmail = lowerEmail;
-      adminLoginId = lowerEmail;
-    } else {
-      if (!isValidEmployeeLoginId(rawAdminIdentifier)) {
-        return NextResponse.json(
-          { error: "Custom Admin ID must be 2-49 alphanumeric characters (letters, numbers, ., _, -)." },
-          { status: 400 }
-        );
-      }
-      const lowerContact = typeof adminContactEmail === "string" ? adminContactEmail.trim().toLowerCase() : "";
-      if (!lowerContact || !emailFormatRegex.test(lowerContact)) {
-        return NextResponse.json(
-          { error: "Store Admin Contact Email is required when using a custom Admin ID." },
-          { status: 400 }
-        );
-      }
-      contactEmail = lowerContact;
-      adminLoginId = rawAdminIdentifier.toLowerCase();
-    }
-
-    const normalizedEmail = resolveLoginIdentifierToEmail(rawAdminIdentifier, normalizedSlug);
-
-    // Resolve & validate Store Reference ID and Prefix (e.g., BFT32523, CK2342)
+    // Resolve & validate Store Reference ID and Prefix (e.g., BFT32523, KBS74713)
     const generatedRef = generateStoreReferenceId(name.trim(), rawStorePrefix?.trim() || undefined);
     const finalStorePrefix = rawStorePrefix?.trim()
       ? normalizeStorePrefix(rawStorePrefix)
@@ -316,6 +286,43 @@ export async function POST(request: Request) {
         attempts++;
       }
     }
+
+    let contactEmail = "";
+    let adminLoginId = "";
+
+    if (isEmailIdentifier) {
+      const lowerEmail = rawAdminIdentifier.toLowerCase();
+      if (!emailFormatRegex.test(lowerEmail)) {
+        return NextResponse.json({ error: "Please enter a valid Store Admin Mail ID." }, { status: 400 });
+      }
+      contactEmail = lowerEmail;
+      adminLoginId = finalStoreId;
+    } else if (typeof adminContactEmail === "string" && adminContactEmail.trim()) {
+      if (!isValidEmployeeLoginId(rawAdminIdentifier)) {
+        return NextResponse.json(
+          { error: "Custom Admin ID must be 2-49 alphanumeric characters (letters, numbers, ., _, -)." },
+          { status: 400 }
+        );
+      }
+      const lowerContact = adminContactEmail.trim().toLowerCase();
+      if (!emailFormatRegex.test(lowerContact)) {
+        return NextResponse.json(
+          { error: "Please enter a valid Store Admin Mail ID." },
+          { status: 400 }
+        );
+      }
+      contactEmail = lowerContact;
+      adminLoginId = rawAdminIdentifier.toLowerCase();
+    } else {
+      return NextResponse.json(
+        { error: "Please enter a valid Store Admin Mail ID." },
+        { status: 400 }
+      );
+    }
+
+    const normalizedEmail = isEmailIdentifier
+      ? contactEmail
+      : resolveLoginIdentifierToEmail(rawAdminIdentifier, normalizedSlug);
 
     if (existingBiz) {
       return NextResponse.json(
@@ -573,6 +580,8 @@ export async function POST(request: Request) {
       details: {
         businessName: name,
         slug: normalizedSlug,
+        storeId: finalStoreId,
+        storePrefix: finalStorePrefix,
         adminEmail: normalizedEmail,
         adminLoginId,
         contactEmail,
@@ -592,6 +601,8 @@ export async function POST(request: Request) {
         userId: newUserId,
         storeName: newBiz.name,
         slug: normalizedSlug,
+        storeId: finalStoreId,
+        storePrefix: finalStorePrefix,
         adminLoginId,
         authEmail: normalizedEmail,
         contactEmail,

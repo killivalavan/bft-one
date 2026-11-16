@@ -230,7 +230,6 @@ export default function SuperAdminPage() {
     storePrefix: "",
     storeId: "",
     adminEmail: "",
-    adminContactEmail: "",
     adminPassword: "",
     planType: "pro",
     maxUsers: 25,
@@ -1087,17 +1086,14 @@ export default function SuperAdminPage() {
       return;
     }
 
-    const isCustomAdminId = !formData.adminEmail.trim().includes("@");
-    if (isCustomAdminId) {
-      const contact = formData.adminContactEmail.trim();
-      if (!contact || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contact)) {
-        toast({
-          title: "Contact Email Required",
-          description: "Please enter a valid Store Admin Contact Email when using a custom Admin ID.",
-          variant: "error",
-        });
-        return;
-      }
+    const adminMailId = formData.adminEmail.trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(adminMailId)) {
+      toast({
+        title: "Valid Mail ID Required",
+        description: "Please enter a valid Store Admin Mail ID.",
+        variant: "error",
+      });
+      return;
     }
 
     setIsSubmitting(true);
@@ -1119,8 +1115,7 @@ export default function SuperAdminPage() {
             slug: formData.slug,
             storeId: formData.storeId,
             storePrefix: formData.storePrefix,
-            adminEmail: formData.adminEmail,
-            adminContactEmail: isCustomAdminId ? formData.adminContactEmail.trim() : undefined,
+            adminEmail: adminMailId,
             planType: formData.planType,
             maxUsers: Number(formData.maxUsers),
             billingDurationMonths: formData.planType === "free" ? null : Number(formData.billingDurationMonths),
@@ -1181,7 +1176,6 @@ export default function SuperAdminPage() {
         storePrefix: "",
         storeId: "",
         adminEmail: "",
-        adminContactEmail: "",
         adminPassword: "",
         planType: "pro",
         maxUsers: 25,
@@ -2769,42 +2763,19 @@ export default function SuperAdminPage() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-[#0F172A]">Store Admin Email or ID *</label>
-                    <Input
-                      type="text"
-                      placeholder="owner@royalchai.com or ckadmin"
-                      value={formData.adminEmail}
-                      onChange={(e) => setFormData((prev) => ({ ...prev, adminEmail: e.target.value }))}
-                      required
-                      className="h-10 bg-white border-[#E2E8F0] text-[#0F172A] focus:border-[#2563EB] text-xs"
-                    />
-                    {formData.adminEmail.trim().includes("@") && (
-                      <p className="text-[11px] text-[#64748B]">
-                        Welcome &amp; password setup email will be sent to this address.
-                      </p>
-                    )}
-                  </div>
-
-                  {formData.adminEmail.trim().length > 0 && !formData.adminEmail.trim().includes("@") && (
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-bold text-[#0F172A]">Store Admin Contact Email *</label>
-                      <Input
-                        type="email"
-                        placeholder="owner@royalchai.com"
-                        value={formData.adminContactEmail}
-                        onChange={(e) =>
-                          setFormData((prev) => ({ ...prev, adminContactEmail: e.target.value }))
-                        }
-                        required
-                        className="h-10 bg-white border-[#E2E8F0] text-[#0F172A] focus:border-[#2563EB] text-xs"
-                      />
-                      <p className="text-[11px] text-[#64748B]">
-                        Required for welcome &amp; password setup email when logging in with a custom ID.
-                      </p>
-                    </div>
-                  )}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-[#0F172A]">Store Admin Mail ID *</label>
+                  <Input
+                    type="email"
+                    placeholder="owner@royalchai.com"
+                    value={formData.adminEmail}
+                    onChange={(e) => setFormData((prev) => ({ ...prev, adminEmail: e.target.value }))}
+                    required
+                    className="h-10 bg-white border-[#E2E8F0] text-[#0F172A] focus:border-[#2563EB] text-xs"
+                  />
+                  <p className="text-[11px] text-[#64748B]">
+                    Welcome &amp; password setup email will be sent to this address. Admin can sign in using Store Reference ID ({formData.storeId || "e.g. KBS74713"}) or this Mail ID.
+                  </p>
                 </div>
 
                 <div className="space-y-3 pt-1 p-3.5 rounded-2xl border border-[#E2E8F0] bg-slate-50/60">
