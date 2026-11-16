@@ -45,7 +45,7 @@ export function HomeHeader({ name }: HomeHeaderProps) {
                     {/* Headline */}
                     <div>
                         <h1 className="text-3xl sm:text-4xl lg:text-[40px] font-extrabold text-[#0F172A] tracking-tight leading-tight">
-                            {greeting}, <span className="text-[#2563EB] capitalize">{name ? name.split('@')[0] : 'Workspace'}</span>
+                            {greeting}, <span className="text-[#2563EB] capitalize">{name ? (name.includes("@") ? "Admin" : name) : "Workspace"}</span>
                         </h1>
                         <p className="text-[#64748B] text-sm sm:text-base font-normal mt-1 max-w-xl">
                             Enterprise operations overview. Access billing, staff attendance, sales, and analytics below.

@@ -221,13 +221,21 @@ export default function UsersAndRolesPage() {
     try {
       const { data: { session } } = await supabaseClient.auth.getSession();
       const token = session?.access_token;
+      const targetUser = users.find((u) => u.email.toLowerCase() === email.toLowerCase());
       const res = await fetch("/api/seed-admin", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           ...(token ? { Authorization: `Bearer ${token}` } : {})
         },
-        body: JSON.stringify({ email, password: newPassword, isAdmin: false, businessId: business?.id })
+        body: JSON.stringify({
+          email,
+          password: newPassword,
+          isAdmin: Boolean(targetUser?.is_admin),
+          isStockManager: Boolean(targetUser?.is_stock_manager),
+          preserveRole: true,
+          businessId: business?.id,
+        })
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {

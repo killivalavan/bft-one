@@ -5,6 +5,7 @@ import { supabaseClient } from "@/lib/supabaseClient";
 import { ProfileHeader } from "@/components/profile/ProfileHeader";
 import { ProfileStats } from "@/components/profile/ProfileStats";
 import { ProfileDetailsSection, UserProfileData } from "@/components/profile/ProfileDetailsSection";
+import { ChangePasswordCard } from "@/components/profile/ChangePasswordCard";
 import { ChevronLeft, Loader2, Sparkles, UserCheck, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 
@@ -166,6 +167,11 @@ export default function ProfilePage() {
             profile={profile}
             onProfileUpdated={handleProfileUpdated}
           />
+        </div>
+
+        {/* Change Password Section directly below User Profile */}
+        <div className="mt-6 bg-white rounded-2xl sm:rounded-3xl shadow-sm border border-slate-200/90 overflow-hidden">
+          <ChangePasswordCard />
         </div>
       </div>
     </div>

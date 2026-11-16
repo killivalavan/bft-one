@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
 import { authenticateRequest } from "@/lib/auth/serverAuth";
 import { supabaseAdmin } from "@/lib/supabaseServer";
 import { validatePasswordPolicy } from "@/lib/utils/passwordPolicy";
@@ -19,13 +20,49 @@ export async function POST(request: Request) {
 
     const caller = auth.user;
     const body = await request.json().catch(() => ({})) as {
+      currentPassword?: string;
       newPassword?: string;
     };
 
+    const currentPassword = body.currentPassword || "";
     const newPassword = body.newPassword || "";
     const userRole = caller.isSuperAdmin ? "super_admin" : caller.isAdmin ? "admin" : "staff";
 
-    // 2. Validate Password Against Role-Based Security Policy
+    if (!currentPassword) {
+      return NextResponse.json(
+        { error: "Current password is required." },
+        { status: 400 }
+      );
+    }
+
+    if (currentPassword === newPassword) {
+      return NextResponse.json(
+        { error: "New password must be different from your current password." },
+        { status: 400 }
+      );
+    }
+
+    // 2. Verify Current Password using an ephemeral client
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    if (!url || !anonKey) {
+      return NextResponse.json({ error: "Auth service not configured." }, { status: 500 });
+    }
+    const verifyClient = createClient(url, anonKey, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+    const { error: verifyErr } = await verifyClient.auth.signInWithPassword({
+      email: caller.email,
+      password: currentPassword,
+    });
+    if (verifyErr) {
+      return NextResponse.json(
+        { error: "Current password is incorrect." },
+        { status: 401 }
+      );
+    }
+
+    // 3. Validate Password Against Role-Based Security Policy
     const policy = validatePasswordPolicy(newPassword, userRole);
     if (!policy.valid) {
       return NextResponse.json(

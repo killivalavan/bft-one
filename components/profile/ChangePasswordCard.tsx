@@ -7,6 +7,7 @@ import { Lock, Eye, EyeOff, Check, AlertCircle, ShieldCheck, Loader2 } from "luc
 
 export function ChangePasswordCard() {
   const { flags } = useProfile();
+  const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -27,8 +28,18 @@ export function ChangePasswordCard() {
     e.preventDefault();
     setMessage(null);
 
+    if (!currentPassword) {
+      setMessage({ type: "error", text: "Please enter your current password." });
+      return;
+    }
+
     if (!newPassword) {
       setMessage({ type: "error", text: "Please enter a new password." });
+      return;
+    }
+
+    if (currentPassword === newPassword) {
+      setMessage({ type: "error", text: "New password must be different from your current password." });
       return;
     }
 
@@ -57,7 +68,7 @@ export function ChangePasswordCard() {
           "Content-Type": "application/json",
           Authorization: `Bearer ${session.access_token}`,
         },
-        body: JSON.stringify({ newPassword }),
+        body: JSON.stringify({ currentPassword, newPassword }),
       });
 
       const data = await res.json();
@@ -65,6 +76,7 @@ export function ChangePasswordCard() {
         setMessage({ type: "error", text: data.error || "Failed to update password." });
       } else {
         setMessage({ type: "success", text: "Your password has been changed successfully!" });
+        setCurrentPassword("");
         setNewPassword("");
         setConfirmPassword("");
       }
@@ -88,6 +100,17 @@ export function ChangePasswordCard() {
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-3.5">
+        {/* Current Password Input */}
+        <div className="space-y-1">
+          <label className="text-xs font-semibold text-zinc-600">Current Password</label>
+          <input
+            type={showPassword ? "text" : "password"}
+            value={currentPassword}
+            onChange={(e) => setCurrentPassword(e.target.value)}
+            placeholder="Enter your current password"
+            className="w-full px-3 py-2 rounded-xl bg-white border border-zinc-200 text-sm text-zinc-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 shadow-sm"
+          />
+        </div>
         {/* New Password Input */}
         <div className="space-y-1">
           <label className="text-xs font-semibold text-zinc-600">New Password</label>
@@ -119,11 +142,10 @@ export function ChangePasswordCard() {
                 {[1, 2, 3, 4].map((step) => (
                   <div
                     key={step}
-                    className={`h-full flex-1 rounded-full transition-all ${
-                      policy.score >= step
+                    className={`h-full flex-1 rounded-full transition-all ${policy.score >= step
                         ? strengthColorMap[policy.strength].split(" ")[0]
                         : "bg-zinc-200"
-                    }`}
+                      }`}
                   />
                 ))}
               </div>
@@ -146,11 +168,10 @@ export function ChangePasswordCard() {
         {/* Status Feedback */}
         {message && (
           <div
-            className={`p-3 rounded-lg text-xs font-medium flex items-center gap-2 ${
-              message.type === "success"
+            className={`p-3 rounded-lg text-xs font-medium flex items-center gap-2 ${message.type === "success"
                 ? "bg-[#F0FDF4] text-[#15803D] border border-[#BBF7D0]"
                 : "bg-slate-100 text-slate-800 border border-slate-200"
-            }`}
+              }`}
           >
             {message.type === "success" ? (
               <ShieldCheck size={16} className="text-[#16A34A] shrink-0" />

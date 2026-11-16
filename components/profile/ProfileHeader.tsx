@@ -15,12 +15,15 @@ export function ProfileHeader({ email, profile }: ProfileHeaderProps) {
   const displayEmail = profile?.email || email || "";
   const firstName = profile?.first_name || (profile?.full_name ? profile.full_name.split(" ")[0] : "");
   const lastName = profile?.last_name || (profile?.full_name ? profile.full_name.split(" ").slice(1).join(" ") : "");
-  
-  const displayName = [firstName, lastName].filter(Boolean).join(" ") 
-    || profile?.full_name 
-    || (displayEmail ? displayEmail.split("@")[0].replace(/[._-]/g, " ") : "Team Member");
 
-  const initial = (firstName?.[0] || displayName?.[0] || displayEmail?.[0] || "U").toUpperCase();
+  const isAdminAccount = Boolean(profile?.is_admin || profile?.is_super_admin);
+  const displayName = isAdminAccount
+    ? "Admin"
+    : ([firstName, lastName].filter(Boolean).join(" ")
+      || profile?.full_name
+      || (displayEmail ? displayEmail.split("@")[0].replace(/[._-]/g, " ") : "Team Member"));
+
+  const initial = isAdminAccount ? "A" : (firstName?.[0] || displayName?.[0] || displayEmail?.[0] || "U").toUpperCase();
 
   function copyEmail() {
     if (!displayEmail) return;
@@ -33,18 +36,18 @@ export function ProfileHeader({ email, profile }: ProfileHeaderProps) {
   const roleLabel = profile?.is_super_admin
     ? "Super Admin"
     : profile?.is_admin
-    ? "Store Admin"
-    : profile?.is_stock_manager
-    ? "Stock Manager"
-    : "Staff Member";
+      ? "Store Admin"
+      : profile?.is_stock_manager
+        ? "Stock Manager"
+        : "Staff Member";
 
   const roleBadgeStyle = profile?.is_super_admin
     ? "bg-purple-50 text-purple-700 border-purple-200"
     : profile?.is_admin
-    ? "bg-blue-50 text-blue-700 border-blue-200"
-    : profile?.is_stock_manager
-    ? "bg-amber-50 text-amber-700 border-amber-200"
-    : "bg-slate-100 text-slate-700 border-slate-200";
+      ? "bg-blue-50 text-blue-700 border-blue-200"
+      : profile?.is_stock_manager
+        ? "bg-amber-50 text-amber-700 border-amber-200"
+        : "bg-slate-100 text-slate-700 border-slate-200";
 
   return (
     <div className="relative overflow-hidden bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900 text-white pt-7 sm:pt-10 pb-6 sm:pb-8 px-4 sm:px-8 border-b border-slate-700/60">

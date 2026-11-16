@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { validatePasswordPolicy } from "@/lib/utils/passwordPolicy";
+import { SeyalLogo } from "@/components/ui/SeyalLogo";
 import { AlertTriangle, CheckCircle, Eye, EyeOff, KeyRound, Loader2 } from "lucide-react";
 
 export default function SetPasswordPage() {
@@ -91,6 +92,9 @@ export default function SetPasswordPage() {
   return (
     <div className="min-h-screen bg-[#F8FAFC] text-[#0F172A] flex flex-col items-center justify-center p-4">
       <div className="w-full max-w-md bg-white border border-[#E2E8F0] rounded-3xl p-6 sm:p-8 shadow-sm space-y-6">
+        <div className="flex justify-center">
+          <SeyalLogo size={36} showWordmark theme="light" />
+        </div>
         <div className="flex items-center gap-3">
           <div className="w-11 h-11 rounded-2xl bg-[#EFF6FF] border border-blue-200 text-[#2563EB] flex items-center justify-center">
             <KeyRound size={20} />

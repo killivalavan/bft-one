@@ -29,6 +29,7 @@ export async function POST(request: Request) {
       password?: string;
       isAdmin?: boolean;
       isStockManager?: boolean;
+      preserveRole?: boolean;
       businessId?: string;
       sendInvite?: boolean;
     };
@@ -182,9 +183,23 @@ export async function POST(request: Request) {
       // User exists: verify tenant permission before modifying
       const { data: existingProfile } = await supa
         .from("profiles")
-        .select("business_id, is_super_admin")
+        .select("business_id, is_super_admin, is_admin, is_stock_manager")
         .eq("id", userId)
         .maybeSingle();
+
+      // Prevent accidental self-demotion or role overwrite during password-only resets
+      if (userId === caller.id && !isAdmin) {
+        return NextResponse.json(
+          { error: "Store Admins cannot demote themselves or change their own password here. Use My Profile." },
+          { status: 403 }
+        );
+      }
+
+      if (body.preserveRole && existingProfile) {
+        // Preserve existing role flags when only resetting password
+        (body as any)._preservedIsAdmin = Boolean(existingProfile.is_admin);
+        (body as any)._preservedIsStockManager = Boolean(existingProfile.is_stock_manager);
+      }
 
       // Protected: Super Admin accounts can never be altered via tenant user management
       if (existingProfile?.is_super_admin) {
@@ -232,11 +247,18 @@ export async function POST(request: Request) {
     }
 
     // 4. Upsert profile with proper business_id and role flags (never grant is_super_admin via this endpoint)
+    const finalIsAdmin =
+      (body as any)._preservedIsAdmin !== undefined ? (body as any)._preservedIsAdmin : isAdmin;
+    const finalIsStockManager =
+      (body as any)._preservedIsStockManager !== undefined
+        ? (body as any)._preservedIsStockManager
+        : isStockManager;
+
     const profilePayload: any = {
       id: userId,
       email,
-      is_admin: isAdmin,
-      is_stock_manager: isStockManager,
+      is_admin: finalIsAdmin,
+      is_stock_manager: finalIsStockManager,
       is_super_admin: false,
       business_id: assignedBusinessId,
     };
