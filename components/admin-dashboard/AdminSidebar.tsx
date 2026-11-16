@@ -1325,6 +1325,15 @@ export function AdminSidebar({
               {isAdmin ? (
                 <>
                   <Link
+                    href="/profile"
+                    onClick={() => setProfileMenuOpen(false)}
+                    className="flex items-center gap-2.5 px-2.5 py-2 text-xs font-semibold text-slate-200 hover:text-white rounded-xl hover:bg-slate-800/90 transition-colors"
+                  >
+                    <Shield size={15} className="text-emerald-400 shrink-0" />
+                    <span>My Profile & Password</span>
+                  </Link>
+
+                  <Link
                     href={isBakerActive ? "/b2b/store" : "/admin/store"}
                     onClick={() => setProfileMenuOpen(false)}
                     className="flex items-center gap-2.5 px-2.5 py-2 text-xs font-semibold text-slate-200 hover:text-white rounded-xl hover:bg-slate-800/90 transition-colors"
