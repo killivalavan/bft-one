@@ -58,7 +58,14 @@ export default function LoginPage() {
               : {},
             cache: "no-store",
           });
-          if (res.ok) {
+          if (!res.ok) {
+            if (res.status === 401 || res.status === 403) {
+              await supabaseClient.auth
+                .signOut({ scope: "local" })
+                .catch(() => {});
+              return;
+            }
+          } else {
             const data = await res.json();
             const hostRes =
               typeof window !== "undefined"

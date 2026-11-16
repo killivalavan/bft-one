@@ -16,6 +16,42 @@ export interface PasswordValidationResult {
   score: number; // 0 to 4
 }
 
+const COMMON_WEAK_BASES = new Set([
+  "password",
+  "pass",
+  "hello",
+  "welcome",
+  "admin",
+  "administrator",
+  "superadmin",
+  "qwerty",
+  "letmein",
+  "changeme",
+  "iloveyou",
+  "test",
+  "testing",
+  "user",
+  "staff",
+  "default",
+  "abc",
+  "abcd",
+  "login",
+]);
+
+function isCommonOrPredictable(password: string): boolean {
+  const lower = password.toLowerCase();
+  const lettersOnly = lower.replace(/[^a-z]/g, "");
+  if (lettersOnly && COMMON_WEAK_BASES.has(lettersOnly)) {
+    return true;
+  }
+  // Purely numeric or obvious keyboard/sequential runs
+  if (/^[0-9]+$/.test(lower)) return true;
+  if (/(0123|1234|2345|3456|4567|5678|6789|abcd|qwert)/.test(lower) && password.length < 12) {
+    return true;
+  }
+  return false;
+}
+
 export function validatePasswordPolicy(
   password: string,
   role: UserRoleType = "staff"
@@ -32,20 +68,26 @@ export function validatePasswordPolicy(
     };
   }
 
-  // Calculate generic password strength
+  const predictable = isCommonOrPredictable(trimmed);
+
+  // Calculate generic password strength (0-5 internal, 0-4 UI scale)
   let score = 0;
-  if (trimmed.length >= 6) score++;
   if (trimmed.length >= 8) score++;
+  if (trimmed.length >= 12) score++;
   if (/[A-Z]/.test(trimmed) && /[a-z]/.test(trimmed)) score++;
   if (/[0-9]/.test(trimmed)) score++;
   if (/[^A-Za-z0-9]/.test(trimmed)) score++;
+
+  if (predictable) {
+    score = Math.min(score, 1);
+  }
 
   const strengthMap: ("weak" | "fair" | "good" | "strong")[] = [
     "weak",
     "weak",
     "fair",
     "good",
-    "strong",
+    "good",
     "strong",
   ];
   const strength = strengthMap[Math.min(score, 5)];
@@ -67,18 +109,24 @@ export function validatePasswordPolicy(
     if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(trimmed)) {
       errors.push("Must contain at least one special character (!@#$%^&*...).");
     }
+    if (predictable) {
+      errors.push("Password is too common or predictable. Avoid common words with simple numbers.");
+    }
   } else if (role === "admin") {
-    if (trimmed.length < 8) {
-      errors.push("Store Admin password must be at least 8 characters long.");
+    if (trimmed.length <= 4) {
+      errors.push("Store Admin password must be more than 4 characters (at least 5 characters).");
     }
     if (!/[A-Z]/.test(trimmed)) {
       errors.push("Must contain at least one uppercase letter (A-Z).");
     }
-    if (!/[a-z]/.test(trimmed)) {
-      errors.push("Must contain at least one lowercase letter (a-z).");
+    if (!/[0-9]/.test(trimmed)) {
+      errors.push("Must contain at least one number (0-9).");
     }
-    if (!/[0-9]/.test(trimmed) && !/[^A-Za-z0-9]/.test(trimmed)) {
-      errors.push("Must contain at least one number or special character.");
+    if (!/[^A-Za-z0-9]/.test(trimmed)) {
+      errors.push("Must contain at least one special character (@, #, !, $, etc.).");
+    }
+    if (predictable) {
+      errors.push("Password is too common or predictable. Avoid common words with simple numbers.");
     }
   } else {
     // Staff (Employee) - Flexible (e.g. DOB or 6+ char pin)

@@ -118,6 +118,8 @@ export default function ProfilePage() {
     );
   }
 
+  const isAdminAccount = Boolean(profile.is_admin || profile.is_super_admin);
+
   return (
     <div>
       {/* Top Breadcrumb & Status Navigation - Fully Responsive */}
@@ -159,14 +161,19 @@ export default function ProfilePage() {
           {/* Header Banner */}
           <ProfileHeader profile={profile} email={profile.email} />
 
-          {/* Quick Metrics Bar */}
-          <ProfileStats profile={profile} inTime={profile.in_time || ""} />
+          {/* Employee Stats & Details (Staff / Stock Manager only) */}
+          {!isAdminAccount && (
+            <>
+              {/* Quick Metrics Bar */}
+              <ProfileStats profile={profile} inTime={profile.in_time || ""} />
 
-          {/* Comprehensive Tabbed Details Section */}
-          <ProfileDetailsSection
-            profile={profile}
-            onProfileUpdated={handleProfileUpdated}
-          />
+              {/* Comprehensive Tabbed Details Section */}
+              <ProfileDetailsSection
+                profile={profile}
+                onProfileUpdated={handleProfileUpdated}
+              />
+            </>
+          )}
         </div>
 
         {/* Change Password Section directly below User Profile */}

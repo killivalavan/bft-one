@@ -135,8 +135,8 @@ export async function performClientLogout(
 ): Promise<void> {
   try {
     await Promise.race([
-      supabaseClient.auth.signOut(),
-      new Promise((resolve) => setTimeout(resolve, 2000)),
+      supabaseClient.auth.signOut({ scope: "local" }),
+      new Promise((resolve) => setTimeout(resolve, 1500)),
     ]);
   } catch (e) {
     console.warn("Supabase signOut error/timeout:", e);
@@ -144,6 +144,21 @@ export async function performClientLogout(
     resetUserCache();
     resetProfileCache();
     try {
+      // Guarantee Supabase auth tokens are removed even if signOut timed out or errored
+      if (typeof window !== "undefined" && window.localStorage) {
+        const sbKeys: string[] = [];
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i);
+          if (k && (k.startsWith("sb-") || k.includes("supabase.auth"))) {
+            sbKeys.push(k);
+          }
+        }
+        for (const k of sbKeys) {
+          try {
+            localStorage.removeItem(k);
+          } catch {}
+        }
+      }
       await clearTenantBrowserStorage(options.currentTenantId, {
         preserveSharedSettings: options.preserveSharedSettings ?? true,
       });

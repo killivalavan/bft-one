@@ -119,7 +119,13 @@ export function ChangePasswordCard() {
               type={showPassword ? "text" : "password"}
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
-              placeholder={roleType === "staff" ? "Min 6 chars (e.g. DOB or PIN)" : "Min 8-10 chars with uppercase & numbers"}
+              placeholder={
+                roleType === "staff"
+                  ? "Min 6 chars (e.g. DOB or PIN)"
+                  : roleType === "super_admin"
+                    ? "Min 10 chars with uppercase, lowercase, number & special char"
+                    : "More than 4 chars, 1 uppercase, 1 number & 1 special char (e.g. @)"
+              }
               className="w-full pr-10 pl-3 py-2 rounded-xl bg-white border border-zinc-200 text-sm text-zinc-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 shadow-sm"
             />
             <button
@@ -149,6 +155,27 @@ export function ChangePasswordCard() {
                   />
                 ))}
               </div>
+              {roleType !== "staff" && (
+                <div className="grid grid-cols-2 gap-1 pt-1 text-[11px]">
+                  {[
+                    {
+                      ok: roleType === "super_admin" ? newPassword.trim().length >= 10 : newPassword.trim().length > 4,
+                      label: roleType === "super_admin" ? "10+ characters" : "More than 4 characters",
+                    },
+                    { ok: /[A-Z]/.test(newPassword), label: "1 uppercase (A-Z)" },
+                    { ok: /[0-9]/.test(newPassword), label: "1 number (0-9)" },
+                    { ok: /[^A-Za-z0-9]/.test(newPassword.trim()), label: "1 special char (@, #, !...)" },
+                  ].map((rule) => (
+                    <div
+                      key={rule.label}
+                      className={`flex items-center gap-1 ${rule.ok ? "text-emerald-700 font-semibold" : "text-zinc-500"}`}
+                    >
+                      <Check size={11} className={rule.ok ? "text-emerald-600 shrink-0" : "text-zinc-300 shrink-0"} />
+                      <span>{rule.label}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>

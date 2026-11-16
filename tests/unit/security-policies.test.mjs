@@ -38,15 +38,37 @@ describe("Security Policies Suite", () => {
       assert.strictEqual(validAdmin.score, 4);
     });
 
-    it("enforces Store Admin complexity (>=8 chars, upper, lower, digit or special)", () => {
-      // Short (<8 chars)
-      const shortAdmin = validatePasswordPolicy("Admin1!", "admin");
+    it("enforces Store Admin complexity (>4 chars, 1 upper, 1 number, 1 special char)", () => {
+      // Too short (<=4 chars)
+      const shortAdmin = validatePasswordPolicy("Ab1@", "admin");
       assert.strictEqual(shortAdmin.valid, false);
+      assert.ok(shortAdmin.errors.some((e) => e.includes("more than 4 characters")));
 
-      // Valid Store Admin password
-      const validStoreAdmin = validatePasswordPolicy("ShopManager99", "admin");
+      // Missing special character
+      const noSpecialAdmin = validatePasswordPolicy("ShopManager99", "admin");
+      assert.strictEqual(noSpecialAdmin.valid, false);
+      assert.ok(noSpecialAdmin.errors.some((e) => e.includes("special character")));
+
+      // Missing number
+      const noNumberAdmin = validatePasswordPolicy("Admin@Pass", "admin");
+      assert.strictEqual(noNumberAdmin.valid, false);
+      assert.ok(noNumberAdmin.errors.some((e) => e.includes("number")));
+
+      // Missing uppercase
+      const noUpperAdmin = validatePasswordPolicy("admin@123", "admin");
+      assert.strictEqual(noUpperAdmin.valid, false);
+      assert.ok(noUpperAdmin.errors.some((e) => e.includes("uppercase")));
+
+      // Valid Store Admin password (>4 chars, upper, number, special)
+      const validStoreAdmin = validatePasswordPolicy("Shop@99", "admin");
       assert.strictEqual(validStoreAdmin.valid, true);
       assert.strictEqual(validStoreAdmin.errors.length, 0);
+
+      // Common/predictable password like Hello123 must be marked weak and rejected for admin
+      const predictableAdmin = validatePasswordPolicy("Hello123", "admin");
+      assert.strictEqual(predictableAdmin.valid, false);
+      assert.strictEqual(predictableAdmin.strength, "weak");
+      assert.ok(predictableAdmin.errors.some((e) => e.includes("common or predictable")));
     });
 
     it("permits Staff flexible onboarding passwords (>=6 chars)", () => {
