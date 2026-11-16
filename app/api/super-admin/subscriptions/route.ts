@@ -6,6 +6,11 @@ import {
   deriveSubscriptionState,
   getTenantUsageCounts,
 } from "@/lib/subscription/plans";
+import {
+  classifyPlanChange,
+  notifyPlanLifecycleEvent,
+  syncExpiryRemindersForSubscription,
+} from "@/lib/email/subscriptionNotificationService";
 
 export const dynamic = "force-dynamic";
 
@@ -243,6 +248,26 @@ export async function POST(request: Request) {
         }),
       ]);
 
+      const lifecycleEvent = isSamePlanRenewal
+        ? "renewed"
+        : !currentSub
+          ? "activated"
+          : classifyPlanChange(
+              currentSub.plan_key_snapshot,
+              Number(currentSub.price_snapshot ?? 0),
+              targetPlan.plan_key,
+              Number(targetPlan.monthly_price ?? 0)
+            ) === "downgraded"
+            ? "downgraded"
+            : "upgraded";
+
+      await notifyPlanLifecycleEvent(supa, {
+        event: lifecycleEvent,
+        subscription: newSub,
+        previousSubscription: currentSub,
+        eventId: requestId,
+      });
+
       return NextResponse.json({ ok: true, status: "approved", subscription: newSub });
     }
 
@@ -374,6 +399,20 @@ export async function POST(request: Request) {
         }),
       ]);
 
+      const changeKind = classifyPlanChange(
+        currentSub?.plan_key_snapshot,
+        currentSub ? Number(currentSub.price_snapshot ?? 0) : null,
+        plan.plan_key,
+        customPrice
+      );
+
+      await notifyPlanLifecycleEvent(supa, {
+        event: changeKind === "changed" ? "activated" : changeKind,
+        subscription: newSub,
+        previousSubscription: currentSub,
+        eventId: newSub.id,
+      });
+
       return NextResponse.json({ ok: true, subscription: newSub });
     }
 
@@ -442,6 +481,13 @@ export async function POST(request: Request) {
         }),
       ]);
 
+      await notifyPlanLifecycleEvent(supa, {
+        event: "renewed",
+        subscription: updated,
+        previousSubscription: currentSub,
+        eventId: `extend_${nowIso}`,
+      });
+
       return NextResponse.json({ ok: true, subscription: updated });
     }
 
@@ -486,6 +532,15 @@ export async function POST(request: Request) {
         reason,
       });
 
+      await notifyPlanLifecycleEvent(supa, {
+        event: "renewed",
+        subscription: updated,
+        previousSubscription: currentSub,
+        eventId: `extend_${nowIso}`,
+      });
+
+      await syncExpiryRemindersForSubscription(supa, updated);
+
       return NextResponse.json({ ok: true, subscription: updated });
     }
 
@@ -527,6 +582,15 @@ export async function POST(request: Request) {
           reason,
         }),
       ]);
+
+      await notifyPlanLifecycleEvent(supa, {
+        event: "renewed",
+        subscription: updated,
+        previousSubscription: currentSub,
+        eventId: `extend_${nowIso}`,
+      });
+
+      await syncExpiryRemindersForSubscription(supa, updated);
 
       return NextResponse.json({ ok: true, subscription: updated });
     }

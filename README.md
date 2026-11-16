@@ -88,6 +88,36 @@ node --test tests/security/phase7-super-admin-mfa.test.mjs tests/security/phase1
 cmd /c "npm run typecheck"
 ```
 
+## Email Notification System (Resend)
+
+CounterCub uses a centralized server-side **Resend** email architecture (`CounterCub Support <support@countercub.com>`).
+
+### Core Email Services (`lib/email/`)
+
+| Module | Purpose |
+|---|---|
+| `lib/email/resendClient.ts` | Server-only Resend SDK singleton (`getResendClient()`), reads `process.env.RESEND_API_KEY` exclusively. |
+| `lib/email/emailService.ts` | Shared `sendTransactionalEmail()` dispatcher, `checkUsageAndPriorityGate()` (`P0`–`P3`), `isPermanentEmailFailure()`, and `computeNextRetryAt()`. |
+| `lib/email/contactResolver.ts` | Authoritatively resolves verified Store Admin `contact_email` from `businesses` + `profiles` (excludes `.internal` addresses). |
+| `lib/email/storeWelcomeService.ts` | Idempotent Store Admin welcome email + single-use Supabase `generateLink({ type: "recovery" })` password setup + `retryStoreWelcomeEmail()`. |
+| `lib/email/subscriptionNotificationService.ts` | Event-triggered subscription lifecycle emails (activation, upgrade, downgrade, renewal, payment success/failure). Scheduled expiry reminders are currently deferred (`SCHEDULED_EMAIL_PROCESSING_ENABLED = false`). |
+| `lib/email/subscriptionAlertService.ts` | Manual Super Admin Subscription Alerts (`Asia/Kolkata` days-remaining calculation, live preview, confirmation, resend protection, per-store history). |
+| `lib/email/supportNotificationService.ts` | Sends Support Issue Resolved email only on Super Admin `non-resolved → resolved` ticket transitions. |
+| `lib/email/marketingToken.ts` | HMAC-SHA256 signed tokens for one-click unsubscribe & marketing preference management (`/email-preferences`). |
+| `lib/email/templates/*` | Branded HTML & plain-text builders (`testEmail.ts`, `storeAdminWelcomeEmail.ts`, `subscriptionEmails.ts`, `supportEmails.ts`). |
+
+### API Routes & UI
+
+- **Super Admin UI:** `Email Centre` and `Subscription Alerts` tabs in `app/(protected)/super-admin/page.tsx` (`components/super-admin/EmailCentrePanel.tsx`, `components/super-admin/SubscriptionAlertsPanel.tsx`).
+- **Super Admin APIs:** `/api/super-admin/email/{test,retry,overview,logs,templates,settings,audit,campaigns,payment-event}` and `/api/super-admin/subscription-alerts`.
+- **Webhooks & Preferences:** `/api/webhooks/resend` (Svix HMAC-SHA256 verified, deduplicated via `email_webhook_events`) and `/api/marketing/preferences`.
+- **Cron Endpoint:** `/api/cron/email-scheduler` is intentionally disabled (`disabled: true`) for the current release; no Vercel/Supabase Cron or `CRON_SECRET` is required.
+
+### Database Migrations & Env Vars
+
+- **Migrations:** `supabase/migrations/202611160001_store_welcome_email_outbox.up.sql` (`profiles.contact_email`, `email_dispatches`) and `202611160002_email_platform_complete.up.sql` (`email_templates`, `email_settings`, `email_webhook_events`, `marketing_preferences`, `email_campaigns`).
+- **Vercel Production Env Vars:** `RESEND_API_KEY` (required), `RESEND_WEBHOOK_SECRET` (required for `/api/webhooks/resend`).
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { authenticateRequest } from "@/lib/auth/serverAuth";
 import { logAuditEvent, extractClientMetadata } from "@/lib/services/auditLogger";
+import { notifySupportTicketResolved } from "@/lib/email/supportNotificationService";
 
 export const dynamic = "force-dynamic";
 
@@ -166,7 +167,18 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: "ticketId is required." }, { status: 400 });
     }
 
-    const updates: any = { updated_at: new Date().toISOString() };
+    // Fetch prior ticket state to detect non-resolved -> resolved transitions accurately
+    let priorQuery = supa
+      .from("support_tickets")
+      .select("id, status, ticket_number, title, business_id, resolution_notes")
+      .eq("id", ticketId);
+    if (!caller.isSuperAdmin) {
+      priorQuery = priorQuery.eq("business_id", caller.businessId);
+    }
+    const { data: priorTicket } = await priorQuery.maybeSingle();
+
+    const nowIso = new Date().toISOString();
+    const updates: any = { updated_at: nowIso };
     if (status) updates.status = status;
     if (resolutionNotes !== undefined) updates.resolution_notes = resolutionNotes;
 
@@ -184,6 +196,24 @@ export async function PATCH(request: Request) {
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    // Send Support Issue Resolved email ONLY when Super Admin transitions non-resolved -> resolved
+    if (
+      caller.isSuperAdmin &&
+      priorTicket &&
+      priorTicket.status !== "resolved" &&
+      status === "resolved"
+    ) {
+      await notifySupportTicketResolved(supa, {
+        ticketId: data.id,
+        ticketNumber: data.ticket_number || priorTicket.ticket_number || data.id,
+        businessId: data.business_id,
+        title: data.title || priorTicket.title || "Support Request",
+        resolutionNotes:
+          resolutionNotes !== undefined ? resolutionNotes : data.resolution_notes,
+        resolvedAtIso: nowIso,
+      });
     }
 
     return NextResponse.json({ ok: true, ticket: data });

@@ -8,6 +8,7 @@ import { Lock, CheckCircle, AlertTriangle, Loader2, ArrowLeft, Eye, EyeOff } fro
 export default function ResetPasswordPage() {
   const [ready, setReady] = useState(false);
   const [hasSession, setHasSession] = useState(false);
+  const [pendingTokenHash, setPendingTokenHash] = useState<string | null>(null);
   const [role, setRole] = useState<UserRoleType>("admin");
   const [isSuperAdminHost, setIsSuperAdminHost] = useState(false);
   const [newPassword, setNewPassword] = useState("");
@@ -35,6 +36,14 @@ export default function ResetPasswordPage() {
       try {
         if (typeof window !== "undefined") {
           const params = new URLSearchParams(window.location.search);
+          const tokenHash = params.get("token_hash");
+          const otpType = params.get("type");
+          if (tokenHash && otpType === "recovery") {
+            setPendingTokenHash(tokenHash);
+            setHasSession(true);
+            setReady(true);
+            return;
+          }
           const code = params.get("code");
           if (code) {
             await supabaseClient.auth.exchangeCodeForSession(code).catch(() => {});
@@ -85,6 +94,16 @@ export default function ResetPasswordPage() {
 
     setSubmitting(true);
     try {
+      if (pendingTokenHash) {
+        const { error: otpErr } = await supabaseClient.auth.verifyOtp({
+          token_hash: pendingTokenHash,
+          type: "recovery",
+        });
+        if (otpErr) {
+          setError(otpErr.message || "This password setup link has expired or already been used.");
+          return;
+        }
+      }
       const { error: updateErr } = await supabaseClient.auth.updateUser({
         password: newPassword,
       });
@@ -110,7 +129,9 @@ export default function ResetPasswordPage() {
             <Lock size={20} />
           </div>
           <div>
-            <h1 className="text-lg font-bold text-white">Reset Password</h1>
+            <h1 className="text-lg font-bold text-white">
+              {pendingTokenHash ? "Set Your Password" : "Reset Password"}
+            </h1>
             <p className="text-xs text-slate-400">
               {isSuperAdminHost ? "CounterCub Platform Portal" : "CounterCub Workspace"}
             </p>

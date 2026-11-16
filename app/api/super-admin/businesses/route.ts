@@ -4,10 +4,12 @@ import { formatCafeName } from "@/lib/utils/bakerUtils";
 import { validateTenantSlug } from "@/lib/utils/slugValidator";
 import {
   generateStoreReferenceId,
+  isValidEmployeeLoginId,
   normalizeStorePrefix,
   resolveLoginIdentifierToEmail,
 } from "@/lib/utils/storeIdGenerator";
 import { addCalendarMonths, normalizeLegacyPlanKey } from "@/lib/subscription/plans";
+import { dispatchStoreWelcomeEmail } from "@/lib/email/storeWelcomeService";
 
 export const dynamic = "force-dynamic";
 
@@ -200,6 +202,7 @@ export async function POST(request: Request) {
       storeId: rawStoreId,
       storePrefix: rawStorePrefix,
       adminEmail,
+      adminContactEmail,
       adminPassword,
       planId,
       planType = "pro",
@@ -230,9 +233,12 @@ export async function POST(request: Request) {
     if (!name?.trim()) return NextResponse.json({ error: "Business name is required" }, { status: 400 });
     if (!slug?.trim()) return NextResponse.json({ error: "Subdomain slug is required" }, { status: 400 });
     if (!adminEmail?.trim()) return NextResponse.json({ error: "Owner/Admin email is required" }, { status: 400 });
-    if (!adminPassword || adminPassword.length < 6) {
-      return NextResponse.json({ error: "Admin password must be at least 6 characters" }, { status: 400 });
-    }
+
+    const { randomBytes } = await import("node:crypto");
+    const effectiveAdminPassword =
+      typeof adminPassword === "string" && adminPassword.trim().length > 0
+        ? adminPassword
+        : `${randomBytes(18).toString("base64url")}Aa1!`;
 
     // Authoritative DNS-safe & reserved subdomain validation (SEC-12)
     const slugValidation = validateTenantSlug(slug);
@@ -247,7 +253,39 @@ export async function POST(request: Request) {
     }
 
     const normalizedSlug = slugValidation.normalizedSlug;
-    const normalizedEmail = resolveLoginIdentifierToEmail(adminEmail, normalizedSlug);
+    const rawAdminIdentifier = adminEmail.trim();
+    const isEmailIdentifier = rawAdminIdentifier.includes("@");
+    const emailFormatRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+    let contactEmail = "";
+    let adminLoginId = "";
+
+    if (isEmailIdentifier) {
+      const lowerEmail = rawAdminIdentifier.toLowerCase();
+      if (!emailFormatRegex.test(lowerEmail)) {
+        return NextResponse.json({ error: "Please enter a valid Store Admin email address." }, { status: 400 });
+      }
+      contactEmail = lowerEmail;
+      adminLoginId = lowerEmail;
+    } else {
+      if (!isValidEmployeeLoginId(rawAdminIdentifier)) {
+        return NextResponse.json(
+          { error: "Custom Admin ID must be 2-49 alphanumeric characters (letters, numbers, ., _, -)." },
+          { status: 400 }
+        );
+      }
+      const lowerContact = typeof adminContactEmail === "string" ? adminContactEmail.trim().toLowerCase() : "";
+      if (!lowerContact || !emailFormatRegex.test(lowerContact)) {
+        return NextResponse.json(
+          { error: "Store Admin Contact Email is required when using a custom Admin ID." },
+          { status: 400 }
+        );
+      }
+      contactEmail = lowerContact;
+      adminLoginId = rawAdminIdentifier.toLowerCase();
+    }
+
+    const normalizedEmail = resolveLoginIdentifierToEmail(rawAdminIdentifier, normalizedSlug);
 
     // Resolve & validate Store Reference ID and Prefix (e.g., BFT32523, CK2342)
     const generatedRef = generateStoreReferenceId(name.trim(), rawStorePrefix?.trim() || undefined);
@@ -294,11 +332,13 @@ export async function POST(request: Request) {
       await supa.from("retired_slugs").delete().eq("slug", normalizedSlug);
     }
 
-    // Enforce Industry Standard Password Policy for Shop Admin
-    const { validatePasswordPolicy } = await import("@/lib/utils/passwordPolicy");
-    const policy = validatePasswordPolicy(adminPassword, "admin");
-    if (!policy.valid) {
-      return NextResponse.json({ error: policy.errors.join(" ") }, { status: 400 });
+    // Enforce Industry Standard Password Policy when a password is explicitly provided
+    if (typeof adminPassword === "string" && adminPassword.trim().length > 0) {
+      const { validatePasswordPolicy } = await import("@/lib/utils/passwordPolicy");
+      const policy = validatePasswordPolicy(adminPassword, "admin");
+      if (!policy.valid) {
+        return NextResponse.json({ error: policy.errors.join(" ") }, { status: 400 });
+      }
     }
 
     const enrichedModules = {
@@ -381,7 +421,7 @@ export async function POST(request: Request) {
     let newUserId: string | undefined;
     const { data: userAuth, error: authErr } = await supa.auth.admin.createUser({
       email: normalizedEmail,
-      password: adminPassword,
+      password: effectiveAdminPassword,
       email_confirm: true,
     });
 
@@ -424,7 +464,7 @@ export async function POST(request: Request) {
         );
         if (orphanAuth) {
           const { error: upErr } = await supa.auth.admin.updateUserById(orphanAuth.id, {
-            password: adminPassword,
+            password: effectiveAdminPassword,
             email_confirm: true,
           });
           if (!upErr) {
@@ -441,10 +481,11 @@ export async function POST(request: Request) {
       newUserId = userAuth.user.id;
     }
 
-    // 3. Create Admin Profile in profiles table with business_id
+    // 3. Create Admin Profile in profiles table with business_id and contact_email
     const { error: profErr } = await supa.from("profiles").upsert({
       id: newUserId,
       email: normalizedEmail,
+      contact_email: contactEmail,
       is_admin: true,
       is_stock_manager: true,
       business_id: businessId,
@@ -458,6 +499,7 @@ export async function POST(request: Request) {
     }
 
     // 3b. Create initial Tenant Subscription snapshot & audit event
+    let createdSubscription: any = null;
     if (selectedPlan) {
       const startDt = startDate ? new Date(startDate) : new Date();
       const validStart = Number.isNaN(startDt.getTime()) ? new Date() : startDt;
@@ -497,6 +539,7 @@ export async function POST(request: Request) {
         .single();
 
       if (createdSub) {
+        createdSubscription = createdSub;
         await supa.from("subscription_events").insert({
           business_id: businessId,
           subscription_id: createdSub.id,
@@ -527,14 +570,62 @@ export async function POST(request: Request) {
       action: "BUSINESS_CREATED",
       targetType: "business",
       targetId: businessId,
-      details: { businessName: name, slug: normalizedSlug, adminEmail: normalizedEmail },
+      details: {
+        businessName: name,
+        slug: normalizedSlug,
+        adminEmail: normalizedEmail,
+        adminLoginId,
+        contactEmail,
+      },
       ...clientMeta,
     });
+
+    // 5. Idempotently dispatch Store Admin Welcome Email (never rolls back store creation)
+    const fallbackStartIso = startDate
+      ? (Number.isNaN(new Date(startDate).getTime()) ? new Date().toISOString() : new Date(startDate).toISOString())
+      : new Date().toISOString();
+
+    const welcomeEmailResult = await dispatchStoreWelcomeEmail(
+      supa,
+      {
+        businessId,
+        userId: newUserId,
+        storeName: newBiz.name,
+        slug: normalizedSlug,
+        adminLoginId,
+        authEmail: normalizedEmail,
+        contactEmail,
+        planName: createdSubscription?.plan_name_snapshot || selectedPlan?.plan_name || effectivePlanKey,
+        planAmount: Number(createdSubscription?.price_snapshot ?? effectivePrice ?? 0),
+        currencySymbol: newBiz.currency_symbol || currencySymbol || "₹",
+        billingDurationMonths:
+          createdSubscription?.billing_duration_months !== undefined
+            ? createdSubscription.billing_duration_months
+            : effectivePlanKey === "free"
+              ? null
+              : Number(billingDurationMonths) || 1,
+        productLimit:
+          createdSubscription?.product_limit_snapshot !== undefined
+            ? createdSubscription.product_limit_snapshot
+            : effectiveProductLimit,
+        employeeLimit: Number(createdSubscription?.employee_limit_snapshot ?? effectiveEmployeeLimit ?? 0),
+        activationDateIso: createdSubscription?.start_date || fallbackStartIso,
+        expiryDateIso: createdSubscription?.expiry_date ?? null,
+      },
+      { id: auth.user.id, email: auth.user.email },
+      request
+    );
 
     return NextResponse.json({
       ok: true,
       business: newBiz,
-      adminUser: { id: newUserId, email: normalizedEmail },
+      adminUser: {
+        id: newUserId,
+        email: normalizedEmail,
+        loginId: adminLoginId,
+        contactEmail,
+      },
+      welcomeEmail: welcomeEmailResult,
       subdomainUrl: `https://${normalizedSlug}.countercub.com`,
     });
   } catch (e: any) {

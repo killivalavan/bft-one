@@ -34,6 +34,8 @@ import { PlanConfigurationPanel } from "@/components/super-admin/PlanConfigurati
 import { SubscriptionManagementModal } from "@/components/super-admin/SubscriptionManagementModal";
 import { RenewalRequestsPanel } from "@/components/super-admin/RenewalRequestsPanel";
 import { ManageMfaModal } from "@/components/super-admin/ManageMfaModal";
+import { EmailCentrePanel } from "@/components/super-admin/EmailCentrePanel";
+import { SubscriptionAlertsPanel } from "@/components/super-admin/SubscriptionAlertsPanel";
 import { validatePasswordPolicy } from "@/lib/utils/passwordPolicy";
 
 export interface SupportTicket {
@@ -206,7 +208,7 @@ export default function SuperAdminPage() {
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
   // Plans & Subscriptions state
-  const [superAdminSection, setSuperAdminSection] = useState<"tenants" | "plans">("tenants");
+  const [superAdminSection, setSuperAdminSection] = useState<"tenants" | "plans" | "alerts" | "email">("tenants");
   const [subscriptionPlans, setSubscriptionPlans] = useState<SubscriptionPlan[]>(() =>
     DEFAULT_PLAN_DEFINITIONS.map((p, idx) => ({ ...p, id: `default-${idx}` }))
   );
@@ -220,6 +222,7 @@ export default function SuperAdminPage() {
     storePrefix: "",
     storeId: "",
     adminEmail: "",
+    adminContactEmail: "",
     adminPassword: "",
     planType: "pro",
     maxUsers: 25,
@@ -1071,9 +1074,22 @@ export default function SuperAdminPage() {
 
   async function handleCreateBusiness(e: React.FormEvent) {
     e.preventDefault();
-    if (!formData.name || !formData.slug || !formData.adminEmail || !formData.adminPassword) {
+    if (!formData.name || !formData.slug || !formData.adminEmail) {
       toast({ title: "Please fill all required fields", variant: "error" });
       return;
+    }
+
+    const isCustomAdminId = !formData.adminEmail.trim().includes("@");
+    if (isCustomAdminId) {
+      const contact = formData.adminContactEmail.trim();
+      if (!contact || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contact)) {
+        toast({
+          title: "Contact Email Required",
+          description: "Please enter a valid Store Admin Contact Email when using a custom Admin ID.",
+          variant: "error",
+        });
+        return;
+      }
     }
 
     setIsSubmitting(true);
@@ -1082,7 +1098,7 @@ export default function SuperAdminPage() {
       const token = session?.access_token;
 
       // Try server API first
-      let apiSuccess = false;
+      let createdPayload: any = null;
       try {
         const res = await fetch("/api/super-admin/businesses", {
           method: "POST",
@@ -1096,7 +1112,7 @@ export default function SuperAdminPage() {
             storeId: formData.storeId,
             storePrefix: formData.storePrefix,
             adminEmail: formData.adminEmail,
-            adminPassword: formData.adminPassword,
+            adminContactEmail: isCustomAdminId ? formData.adminContactEmail.trim() : undefined,
             planType: formData.planType,
             maxUsers: Number(formData.maxUsers),
             billingDurationMonths: formData.planType === "free" ? null : Number(formData.billingDurationMonths),
@@ -1123,7 +1139,7 @@ export default function SuperAdminPage() {
         });
 
         if (res.ok) {
-          apiSuccess = true;
+          createdPayload = await res.json().catch(() => null);
         } else {
           const errData = await res.json().catch(() => ({}));
           throw new Error(errData.error || "Onboarding request failed.");
@@ -1132,11 +1148,23 @@ export default function SuperAdminPage() {
         throw apiErr;
       }
 
-      toast({
-        title: "Client Onboarded Successfully!",
-        description: `${formData.name} is ready at ${formData.slug}.countercub.com`,
-        variant: "success",
-      });
+      const welcomeStatus = createdPayload?.welcomeEmail?.status;
+      const welcomeRecipient = createdPayload?.welcomeEmail?.recipientEmail;
+      if (welcomeStatus === "failed") {
+        toast({
+          title: "Client Onboarded (Welcome Email Queued)",
+          description: `${formData.name} is ready at ${formData.slug}.countercub.com, but the welcome email to ${welcomeRecipient || "admin"} failed and is queued for retry.`,
+          variant: "info",
+        });
+      } else {
+        toast({
+          title: "Client Onboarded Successfully!",
+          description: welcomeRecipient
+            ? `${formData.name} is ready at ${formData.slug}.countercub.com. Welcome email sent to ${welcomeRecipient}.`
+            : `${formData.name} is ready at ${formData.slug}.countercub.com`,
+          variant: "success",
+        });
+      }
 
       setShowAddModal(false);
       setFormData({
@@ -1145,6 +1173,7 @@ export default function SuperAdminPage() {
         storePrefix: "",
         storeId: "",
         adminEmail: "",
+        adminContactEmail: "",
         adminPassword: "",
         planType: "pro",
         maxUsers: 25,
@@ -1797,7 +1826,36 @@ export default function SuperAdminPage() {
             </span>
           )}
         </button>
+        <button
+          type="button"
+          onClick={() => setSuperAdminSection("alerts")}
+          className={cn(
+            "px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2",
+            superAdminSection === "alerts"
+              ? "bg-[#2563EB] text-white shadow-xs"
+              : "bg-white text-[#64748B] border border-[#E2E8F0] hover:text-[#0F172A]"
+          )}
+        >
+          <AlertTriangle size={14} />
+          <span>Subscription Alerts</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setSuperAdminSection("email")}
+          className={cn(
+            "px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2",
+            superAdminSection === "email"
+              ? "bg-[#2563EB] text-white shadow-xs"
+              : "bg-white text-[#64748B] border border-[#E2E8F0] hover:text-[#0F172A]"
+          )}
+        >
+          <Send size={14} />
+          <span>Email Centre</span>
+        </button>
       </div>
+
+      {superAdminSection === "alerts" && <SubscriptionAlertsPanel />}
+      {superAdminSection === "email" && <EmailCentrePanel />}
 
       {superAdminSection === "plans" && (
         <div className="space-y-8">
@@ -2714,37 +2772,31 @@ export default function SuperAdminPage() {
                     required
                     className="h-10 bg-white border-[#E2E8F0] text-[#0F172A] focus:border-[#2563EB] text-xs"
                   />
+                  {formData.adminEmail.trim().includes("@") && (
+                    <p className="text-[11px] text-[#64748B]">
+                      Welcome &amp; password setup email will be sent to this address.
+                    </p>
+                  )}
                 </div>
 
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <label className="text-xs font-bold text-[#0F172A]">Initial Password *</label>
-                    <button
-                      type="button"
-                      onClick={() => generateSecurePassword(false)}
-                      className="text-[11px] font-bold text-[#2563EB] hover:underline flex items-center gap-1 cursor-pointer"
-                    >
-                      <Sparkle size={12} /> Auto-Generate
-                    </button>
-                  </div>
-                  <div className="relative">
+                {formData.adminEmail.trim().length > 0 && !formData.adminEmail.trim().includes("@") && (
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-[#0F172A]">Store Admin Contact Email *</label>
                     <Input
-                      type={showPassword ? "text" : "password"}
-                      placeholder="Min 6 characters"
-                      value={formData.adminPassword}
-                      onChange={(e) => setFormData((prev) => ({ ...prev, adminPassword: e.target.value }))}
+                      type="email"
+                      placeholder="owner@royalchai.com"
+                      value={formData.adminContactEmail}
+                      onChange={(e) =>
+                        setFormData((prev) => ({ ...prev, adminContactEmail: e.target.value }))
+                      }
                       required
-                      className="h-10 bg-white border-[#E2E8F0] text-[#0F172A] focus:border-[#2563EB] pr-10 font-mono text-xs"
+                      className="h-10 bg-white border-[#E2E8F0] text-[#0F172A] focus:border-[#2563EB] text-xs"
                     />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-[#94A3B8] hover:text-[#0F172A] cursor-pointer"
-                    >
-                      {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
-                    </button>
+                    <p className="text-[11px] text-[#64748B]">
+                      Required for welcome &amp; password setup email when logging in with a custom ID.
+                    </p>
                   </div>
-                </div>
+                )}
               </div>
 
               <div className="space-y-3 pt-1 p-3.5 rounded-2xl border border-[#E2E8F0] bg-slate-50/60">
