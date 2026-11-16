@@ -15,15 +15,32 @@ export default function SetPasswordPage() {
   const [done, setDone] = useState(false);
 
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      const params = new URLSearchParams(window.location.search);
-      const hash = params.get("token_hash");
-      const type = params.get("type");
-      if (hash && type === "recovery") {
-        setTokenHash(hash);
+    let active = true;
+    (async () => {
+      if (typeof window !== "undefined") {
+        const params = new URLSearchParams(window.location.search);
+        const hash = params.get("token_hash");
+        const type = params.get("type");
+        if (hash && type === "recovery") {
+          try {
+            const res = await fetch(
+              `/api/public/set-password?token_hash=${encodeURIComponent(hash)}&type=recovery`,
+              { cache: "no-store" }
+            );
+            const data = await res.json().catch(() => ({ valid: true, used: false }));
+            if (active && data.valid && !data.used) {
+              setTokenHash(hash);
+            }
+          } catch {
+            if (active) setTokenHash(hash);
+          }
+        }
       }
-    }
-    setReady(true);
+      if (active) setReady(true);
+    })();
+    return () => {
+      active = false;
+    };
   }, []);
 
   async function handleSubmit(e: React.FormEvent) {

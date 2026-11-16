@@ -75,11 +75,14 @@ export default function Navbar({
     return () => document.removeEventListener('mousedown', onDocClick);
   }, []);
 
-  // Hide on login pages
-  if (pathname === "/login" || pathname === "/super-admin/login") return null;
+  // Hide on login and password setup pages
+  if (
+    pathname === "/login" ||
+    pathname === "/set-password" ||
+    pathname === "/reset-password" ||
+    pathname === "/super-admin/login"
+  ) return null;
 
-  const displayName = userEmail ? userEmail.split("@")[0] : null;
-  const initial = displayName ? displayName[0].toUpperCase() : "?";
   const hostKind =
     typeof window !== "undefined"
       ? resolveCanonicalHostname(window.location.host)?.kind
@@ -95,6 +98,9 @@ export default function Navbar({
     (userEmail && userEmail.toLowerCase().includes("admin")) ||
     (user && user.email && user.email.toLowerCase().includes("admin"))
   );
+
+  const displayName = isAdmin ? "Admin" : (userEmail ? userEmail.split("@")[0] : null);
+  const initial = isAdmin ? "A" : (displayName ? displayName[0].toUpperCase() : "?");
 
   // Standard Desktop / Mobile Navigation Links
   const allLinks = isSuperAdminView

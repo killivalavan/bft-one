@@ -254,8 +254,8 @@ export function AdminSidebar({
     ? "Stock Manager"
     : "Staff Member";
 
-  const displayName = userEmail ? userEmail.split("@")[0] : null;
-  const initial = displayName ? displayName[0].toUpperCase() : (isAdmin ? "A" : "S");
+  const displayName = isAdmin ? "Admin" : (userEmail ? userEmail.split("@")[0] : null);
+  const initial = isAdmin ? "A" : (displayName ? displayName[0].toUpperCase() : "S");
   const { storeId: storeReferenceId } = getBusinessStoreId(business);
   const displayUserIdentifier = formatDisplayUserIdentifier(userEmail);
 
