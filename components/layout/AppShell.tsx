@@ -113,6 +113,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       !userLoading &&
       !user &&
       pathname !== "/login" &&
+      pathname !== "/set-password" &&
+      pathname !== "/reset-password" &&
       pathname !== "/super-admin-login" &&
       pathname !== "/tenant-not-found"
     ) {
@@ -124,6 +126,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     hostKind === "marketing" || pathname === "/site";
   const isPublicAuthPage =
     pathname === "/login" ||
+    pathname === "/set-password" ||
+    pathname === "/reset-password" ||
     pathname === "/super-admin-login" ||
     pathname.startsWith("/super-admin/login") ||
     pathname === "/tenant-not-found" ||
