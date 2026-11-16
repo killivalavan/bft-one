@@ -106,7 +106,7 @@ interface DeletedBusinessRecord {
   deleted_at: string;
 }
 
-const MODULE_DEFINITIONS = [
+const CORE_MODULE_DEFINITIONS = [
   { key: "billing", label: "Billing / POS", icon: Coffee, desc: "Cashier orders, table receipts & POS" },
   { key: "invoices", label: "Generate Invoices", icon: FileText, desc: "B2B tax invoices, custom rates, PDF generation & history" },
   { key: "sales", label: "Daily Sales", icon: TrendingUp, desc: "Cash & UPI register settlements" },
@@ -116,7 +116,15 @@ const MODULE_DEFINITIONS = [
   { key: "salary", label: "Payroll & Salary", icon: Wallet, desc: "Staff compensation & payslips" },
   { key: "contacts", label: "Contacts Directory", icon: Contact, desc: "Staff, emergency & vendor database" },
   { key: "b2b_bridge", label: "B2B Supply Bridge", icon: ArrowRightLeft, desc: "Inter-tenant supplier delivery, auto-stock-in & payment sync" },
+];
+
+const SPECIALIZED_MODULE_DEFINITIONS = [
   { key: "baker_mode", label: "B2B Supply & Wholesale", icon: PackageCheck, desc: "Enable wholesale supplier dispatches, product catalog & store ledgers" },
+];
+
+const MODULE_DEFINITIONS = [
+  ...CORE_MODULE_DEFINITIONS,
+  ...SPECIALIZED_MODULE_DEFINITIONS,
 ];
 
 enum SuperAdminView {
@@ -313,12 +321,12 @@ export default function SuperAdminPage() {
   useEffect(() => {
     const anyModalOpen = Boolean(
       showAddModal ||
-        editingBiz ||
-        deletingBiz ||
-        statusConfirmBiz ||
-        impersonatingBiz ||
-        selectedBizForIssues ||
-        showAllTicketsModal
+      editingBiz ||
+      deletingBiz ||
+      statusConfirmBiz ||
+      impersonatingBiz ||
+      selectedBizForIssues ||
+      showAllTicketsModal
     );
     if (!anyModalOpen || typeof document === "undefined") return;
     const prevHtmlOverflow = document.documentElement.style.overflow;
@@ -426,7 +434,7 @@ export default function SuperAdminPage() {
       try {
         const { clearTenantClientState } = await import("@/lib/auth/clientLogout");
         await clearTenantClientState();
-      } catch {}
+      } catch { }
 
       const targetSlug = impersonatingBiz.slug;
       const targetName = impersonatingBiz.name;
@@ -475,7 +483,7 @@ export default function SuperAdminPage() {
         });
         handoffHash = `#cc_support_handoff=${encodeURIComponent(btoa(payload))}`;
       }
-    } catch {}
+    } catch { }
 
     window.location.href = `${baseUrl}${handoffHash}`;
   }
@@ -942,7 +950,7 @@ export default function SuperAdminPage() {
             const data = await res.json();
             isSuper = Boolean(data?.flags?.isSuperAdmin);
           }
-        } catch {}
+        } catch { }
 
         if (!isSuper) {
           const { data: profile } = await supabaseClient
@@ -1121,12 +1129,12 @@ export default function SuperAdminPage() {
             subscriptionStatus: formData.subscriptionStatus,
             customOverrides: formData.useCustomConfig
               ? {
-                  monthly_price: formData.monthlyPrice,
-                  max_active_products: formData.maxActiveProducts,
-                  is_unlimited_products: formData.isUnlimitedProducts,
-                  max_employee_seats: formData.maxUsers,
-                  support_level: formData.supportLevel,
-                }
+                monthly_price: formData.monthlyPrice,
+                max_active_products: formData.maxActiveProducts,
+                is_unlimited_products: formData.isUnlimitedProducts,
+                max_employee_seats: formData.maxUsers,
+                support_level: formData.supportLevel,
+              }
               : undefined,
             currencySymbol: formData.currencySymbol,
             timezone: formData.timezone,
@@ -1319,7 +1327,7 @@ export default function SuperAdminPage() {
         variant: "success",
       });
 
-      try { localStorage.removeItem("bftone_tenant_cache"); } catch {}
+      try { localStorage.removeItem("bftone_tenant_cache"); } catch { }
       setEditingBiz(null);
       await loadBusinessesData(true);
     } catch (e: any) {
@@ -1872,562 +1880,562 @@ export default function SuperAdminPage() {
 
       {/* Main Client Table & Cards Section */}
       {superAdminSection === "tenants" && (
-      <Card className="border border-[#E2E8F0] shadow-xs bg-white rounded-2xl overflow-hidden">
-        {/* Table Toolbar / Filters */}
-        <div className="p-5 sm:p-6 border-b border-[#E2E8F0] space-y-4">
-          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-            <div>
-              <h2 className="text-lg sm:text-xl font-extrabold text-[#0F172A] flex items-center gap-2">
-                <span>Client Organizations &amp; Workspaces</span>
-                <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-[#EFF6FF] text-[#1E3A8A] border border-[#DBEAFE]">
-                  {filteredBusinesses.length} {filteredBusinesses.length === 1 ? "store" : "stores"}
+        <Card className="border border-[#E2E8F0] shadow-xs bg-white rounded-2xl overflow-hidden">
+          {/* Table Toolbar / Filters */}
+          <div className="p-5 sm:p-6 border-b border-[#E2E8F0] space-y-4">
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+              <div>
+                <h2 className="text-lg sm:text-xl font-extrabold text-[#0F172A] flex items-center gap-2">
+                  <span>Client Organizations &amp; Workspaces</span>
+                  <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-[#EFF6FF] text-[#1E3A8A] border border-[#DBEAFE]">
+                    {filteredBusinesses.length} {filteredBusinesses.length === 1 ? "store" : "stores"}
+                  </span>
+                </h2>
+                <p className="text-xs text-[#64748B] mt-0.5">
+                  Every store is fully isolated with dedicated POS, daily ledgers, products, staff roster, GPS geofencing, and permissions.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-3">
+                {/* View Switcher Toggle */}
+                <div className="inline-flex rounded-xl bg-slate-100 p-1 border border-[#E2E8F0]">
+                  <button
+                    onClick={() => setViewMode("table")}
+                    className={cn(
+                      "p-1.5 rounded-lg transition-all text-xs font-bold flex items-center gap-1.5 cursor-pointer",
+                      viewMode === "table" ? "bg-white text-[#0F172A] shadow-xs" : "text-[#64748B] hover:text-[#0F172A]"
+                    )}
+                    title="Table View"
+                  >
+                    <List size={16} />
+                    <span className="hidden sm:inline">Table</span>
+                  </button>
+                  <button
+                    onClick={() => setViewMode("cards")}
+                    className={cn(
+                      "p-1.5 rounded-lg transition-all text-xs font-bold flex items-center gap-1.5 cursor-pointer",
+                      viewMode === "cards" ? "bg-white text-[#0F172A] shadow-xs" : "text-[#64748B] hover:text-[#0F172A]"
+                    )}
+                    title="Grid Cards View"
+                  >
+                    <LayoutGrid size={16} />
+                    <span className="hidden sm:inline">Cards</span>
+                  </button>
+                </div>
+
+                {/* Quick Search */}
+                <div className="relative w-full sm:w-72">
+                  <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#94A3B8]" />
+                  <input
+                    type="text"
+                    placeholder="Search store name, slug, email..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full pl-10 pr-4 py-2 text-xs sm:text-sm bg-white border border-[#E2E8F0] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2563EB]/20 focus:border-[#2563EB] transition-all text-[#0F172A] placeholder:text-[#94A3B8]"
+                  />
+                  {searchQuery && (
+                    <button
+                      onClick={() => setSearchQuery("")}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-[#94A3B8] hover:text-[#0F172A] text-xs font-bold cursor-pointer"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Filter Pills Bar */}
+            <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="flex items-center gap-1.5 text-xs font-bold text-[#64748B] mr-1">
+                  <Filter size={13} />
+                  <span>Filters:</span>
+                </div>
+
+                {/* Plan Filter */}
+                <div className="inline-flex rounded-xl bg-slate-100 p-1 border border-[#E2E8F0] text-xs">
+                  {["all", "free", "basic", "pro", "business"].map((plan) => (
+                    <button
+                      key={plan}
+                      onClick={() => setPlanFilter(plan)}
+                      className={cn(
+                        "px-2.5 py-1 rounded-lg font-semibold capitalize transition-all cursor-pointer",
+                        planFilter === plan
+                          ? "bg-white text-[#0F172A] shadow-xs"
+                          : "text-[#64748B] hover:text-[#0F172A]"
+                      )}
+                    >
+                      {plan}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Status Filter */}
+                <div className="inline-flex rounded-xl bg-slate-100 p-1 border border-[#E2E8F0] text-xs">
+                  {[
+                    { key: "all", label: "All Status" },
+                    { key: "active", label: "Active" },
+                    { key: "suspended", label: "Suspended" },
+                    {
+                      key: "deleted",
+                      label: deletedBusinesses.length > 0 ? `Deleted (${deletedBusinesses.length})` : "Deleted",
+                    },
+                  ].map((st) => (
+                    <button
+                      key={st.key}
+                      onClick={() => setStatusFilter(st.key)}
+                      className={cn(
+                        "px-2.5 py-1 rounded-lg font-semibold transition-all cursor-pointer",
+                        statusFilter === st.key
+                          ? "bg-white text-[#0F172A] shadow-xs"
+                          : "text-[#64748B] hover:text-[#0F172A]"
+                      )}
+                    >
+                      {st.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Sort Dropdown */}
+              <div className="flex items-center gap-2 text-xs">
+                <span className="font-bold text-[#64748B]">Sort By:</span>
+                <select
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value)}
+                  className="bg-white border border-[#E2E8F0] rounded-xl px-3 py-1.5 font-semibold text-[#0F172A] focus:outline-none focus:ring-2 focus:ring-[#2563EB]/20 focus:border-[#2563EB] cursor-pointer"
+                >
+                  <option value="revenue">Gross Sales (Highest)</option>
+                  <option value="profit">Net Profit (Highest)</option>
+                  <option value="issues">Open Issues (Highest)</option>
+                  <option value="users">Staff Count</option>
+                  <option value="newest">Newly Created</option>
+                  <option value="name">Store Name (A-Z)</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          {/* VIEW 0: DELETED STORES ARCHIVE (READ-ONLY REFERENCE) */}
+          {statusFilter === "deleted" ? (
+            <div className="p-6">
+              <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-2xl bg-slate-50 border border-[#E2E8F0] px-4 py-3">
+                <div className="text-xs text-[#475569]">
+                  <span className="font-bold text-[#0F172A]">Deleted Stores Archive (Read-Only Reference):</span>{" "}
+                  Historical log of offboarded stores. Subdomain slugs &amp; emails remain free to re-register anytime.
+                </div>
+                <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-slate-200/80 text-slate-700">
+                  {filteredDeletedBusinesses.length} {filteredDeletedBusinesses.length === 1 ? "record" : "records"}
                 </span>
-              </h2>
-              <p className="text-xs text-[#64748B] mt-0.5">
-                Every store is fully isolated with dedicated POS, daily ledgers, products, staff roster, GPS geofencing, and permissions.
-              </p>
-            </div>
-
-            <div className="flex items-center gap-3">
-              {/* View Switcher Toggle */}
-              <div className="inline-flex rounded-xl bg-slate-100 p-1 border border-[#E2E8F0]">
-                <button
-                  onClick={() => setViewMode("table")}
-                  className={cn(
-                    "p-1.5 rounded-lg transition-all text-xs font-bold flex items-center gap-1.5 cursor-pointer",
-                    viewMode === "table" ? "bg-white text-[#0F172A] shadow-xs" : "text-[#64748B] hover:text-[#0F172A]"
-                  )}
-                  title="Table View"
-                >
-                  <List size={16} />
-                  <span className="hidden sm:inline">Table</span>
-                </button>
-                <button
-                  onClick={() => setViewMode("cards")}
-                  className={cn(
-                    "p-1.5 rounded-lg transition-all text-xs font-bold flex items-center gap-1.5 cursor-pointer",
-                    viewMode === "cards" ? "bg-white text-[#0F172A] shadow-xs" : "text-[#64748B] hover:text-[#0F172A]"
-                  )}
-                  title="Grid Cards View"
-                >
-                  <LayoutGrid size={16} />
-                  <span className="hidden sm:inline">Cards</span>
-                </button>
               </div>
 
-              {/* Quick Search */}
-              <div className="relative w-full sm:w-72">
-                <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#94A3B8]" />
-                <input
-                  type="text"
-                  placeholder="Search store name, slug, email..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 text-xs sm:text-sm bg-white border border-[#E2E8F0] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2563EB]/20 focus:border-[#2563EB] transition-all text-[#0F172A] placeholder:text-[#94A3B8]"
-                />
-                {searchQuery && (
-                  <button
-                    onClick={() => setSearchQuery("")}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-[#94A3B8] hover:text-[#0F172A] text-xs font-bold cursor-pointer"
-                  >
-                    ✕
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* Filter Pills Bar */}
-          <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
-            <div className="flex flex-wrap items-center gap-2">
-              <div className="flex items-center gap-1.5 text-xs font-bold text-[#64748B] mr-1">
-                <Filter size={13} />
-                <span>Filters:</span>
-              </div>
-
-              {/* Plan Filter */}
-              <div className="inline-flex rounded-xl bg-slate-100 p-1 border border-[#E2E8F0] text-xs">
-                {["all", "free", "basic", "pro", "business"].map((plan) => (
-                  <button
-                    key={plan}
-                    onClick={() => setPlanFilter(plan)}
-                    className={cn(
-                      "px-2.5 py-1 rounded-lg font-semibold capitalize transition-all cursor-pointer",
-                      planFilter === plan
-                        ? "bg-white text-[#0F172A] shadow-xs"
-                        : "text-[#64748B] hover:text-[#0F172A]"
-                    )}
-                  >
-                    {plan}
-                  </button>
-                ))}
-              </div>
-
-              {/* Status Filter */}
-              <div className="inline-flex rounded-xl bg-slate-100 p-1 border border-[#E2E8F0] text-xs">
-                {[
-                  { key: "all", label: "All Status" },
-                  { key: "active", label: "Active" },
-                  { key: "suspended", label: "Suspended" },
-                  {
-                    key: "deleted",
-                    label: deletedBusinesses.length > 0 ? `Deleted (${deletedBusinesses.length})` : "Deleted",
-                  },
-                ].map((st) => (
-                  <button
-                    key={st.key}
-                    onClick={() => setStatusFilter(st.key)}
-                    className={cn(
-                      "px-2.5 py-1 rounded-lg font-semibold transition-all cursor-pointer",
-                      statusFilter === st.key
-                        ? "bg-white text-[#0F172A] shadow-xs"
-                        : "text-[#64748B] hover:text-[#0F172A]"
-                    )}
-                  >
-                    {st.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Sort Dropdown */}
-            <div className="flex items-center gap-2 text-xs">
-              <span className="font-bold text-[#64748B]">Sort By:</span>
-              <select
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value)}
-                className="bg-white border border-[#E2E8F0] rounded-xl px-3 py-1.5 font-semibold text-[#0F172A] focus:outline-none focus:ring-2 focus:ring-[#2563EB]/20 focus:border-[#2563EB] cursor-pointer"
-              >
-                <option value="revenue">Gross Sales (Highest)</option>
-                <option value="profit">Net Profit (Highest)</option>
-                <option value="issues">Open Issues (Highest)</option>
-                <option value="users">Staff Count</option>
-                <option value="newest">Newly Created</option>
-                <option value="name">Store Name (A-Z)</option>
-              </select>
-            </div>
-          </div>
-        </div>
-
-        {/* VIEW 0: DELETED STORES ARCHIVE (READ-ONLY REFERENCE) */}
-        {statusFilter === "deleted" ? (
-          <div className="p-6">
-            <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-2xl bg-slate-50 border border-[#E2E8F0] px-4 py-3">
-              <div className="text-xs text-[#475569]">
-                <span className="font-bold text-[#0F172A]">Deleted Stores Archive (Read-Only Reference):</span>{" "}
-                Historical log of offboarded stores. Subdomain slugs &amp; emails remain free to re-register anytime.
-              </div>
-              <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-slate-200/80 text-slate-700">
-                {filteredDeletedBusinesses.length} {filteredDeletedBusinesses.length === 1 ? "record" : "records"}
-              </span>
-            </div>
-
-            {filteredDeletedBusinesses.length === 0 ? (
-              <div className="py-12 text-center text-[#64748B] text-sm">
-                No deleted stores found in archive.
-              </div>
-            ) : (
-              <div className="table-scroll-container">
-                <table className="w-full text-left border-collapse min-w-[780px]">
-                  <thead>
-                    <tr className="bg-slate-100 text-slate-600 text-[11px] uppercase tracking-wider font-bold border-b border-[#E2E8F0]">
-                      <th className="py-3 px-4">Store Name &amp; ID</th>
-                      <th className="py-3 px-4">Former Subdomain</th>
-                      <th className="py-3 px-4">Admin Email</th>
-                      <th className="py-3 px-4">Plan</th>
-                      <th className="py-3 px-4">Deleted By</th>
-                      <th className="py-3 px-4">Deleted At</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-[#E2E8F0] text-sm">
-                    {filteredDeletedBusinesses.map((d) => (
-                      <tr key={d.id} className="hover:bg-slate-50/80">
-                        <td className="py-3.5 px-4 font-bold text-[#0F172A]">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span>{d.name}</span>
-                            {d.store_id && (
-                              <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-slate-100 text-slate-700 border border-slate-200">
-                                ID: {d.store_id}
-                              </span>
-                            )}
-                          </div>
-                        </td>
-                        <td className="py-3.5 px-4 font-mono text-xs text-slate-600">
-                          {d.slug ? `${d.slug}.countercub.com` : "—"}
-                        </td>
-                        <td className="py-3.5 px-4 text-xs text-slate-700">{d.admin_email}</td>
-                        <td className="py-3.5 px-4">
-                          <span className="px-2 py-0.5 rounded text-[10px] font-extrabold uppercase bg-slate-100 text-slate-700">
-                            {d.plan_type}
-                          </span>
-                        </td>
-                        <td className="py-3.5 px-4 text-xs text-slate-600">{d.deleted_by}</td>
-                        <td className="py-3.5 px-4 text-xs text-slate-500">
-                          {d.deleted_at ? new Date(d.deleted_at).toLocaleString() : "—"}
-                        </td>
+              {filteredDeletedBusinesses.length === 0 ? (
+                <div className="py-12 text-center text-[#64748B] text-sm">
+                  No deleted stores found in archive.
+                </div>
+              ) : (
+                <div className="table-scroll-container">
+                  <table className="w-full text-left border-collapse min-w-[780px]">
+                    <thead>
+                      <tr className="bg-slate-100 text-slate-600 text-[11px] uppercase tracking-wider font-bold border-b border-[#E2E8F0]">
+                        <th className="py-3 px-4">Store Name &amp; ID</th>
+                        <th className="py-3 px-4">Former Subdomain</th>
+                        <th className="py-3 px-4">Admin Email</th>
+                        <th className="py-3 px-4">Plan</th>
+                        <th className="py-3 px-4">Deleted By</th>
+                        <th className="py-3 px-4">Deleted At</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-        ) : viewMode === "table" ? (
-          <div className="table-scroll-container">
-            <table className="w-full text-left border-collapse min-w-[920px]">
-              <thead>
-                <tr className="bg-[#EFF6FF] text-[#1E3A8A] text-[11px] uppercase tracking-wider font-bold border-b border-[#DBEAFE]">
-                  <th className="py-3.5 px-6">Store &amp; Subdomain</th>
-                  <th className="py-3.5 px-4">Plan &amp; Seats</th>
-                  <th className="py-3.5 px-4">Admin Email</th>
-                  <th className="py-3.5 px-4">Financial Volume</th>
-                  <th className="py-3.5 px-4">Reported Issues</th>
-                  <th className="py-3.5 px-4">Active Modules</th>
-                  <th className="py-3.5 px-4 text-center">Status</th>
-                  <th className="py-3.5 px-6 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[#E2E8F0] text-xs sm:text-sm bg-white">
-                {filteredBusinesses.map((biz) => {
-                  const isProtectedRoot = biz.id === "a0000000-0000-0000-0000-000000000001";
-                  const enabledCount = Object.entries(biz.enabled_modules || {}).filter(([k, v]) => !k.startsWith('_') && Boolean(v)).length;
-                  const totalModules = MODULE_DEFINITIONS.length;
-                  const openCount = biz.open_issues_count || 0;
-                  const totalCount = biz.total_issues_count || 0;
-
-                  return (
-                    <tr key={biz.id} className="hover:bg-[#F8FAFC] transition-colors group border-b border-[#E2E8F0]">
-                      
-                      {/* Store & Subdomain */}
-                      <td className="py-4 px-6">
-                        <div className="flex items-center gap-3">
-                          <div className={cn(
-                            "w-10 h-10 rounded-2xl flex items-center justify-center font-black text-sm text-white shrink-0 shadow-xs",
-                            biz.is_active
-                              ? "bg-[#2563EB]"
-                              : "bg-slate-400"
-                          )}>
-                            {biz.name[0]?.toUpperCase() || "S"}
-                          </div>
-                          <div>
-                            <div className="font-extrabold text-[#0F172A] flex items-center gap-1.5 flex-wrap">
-                              <span>{biz.name}</span>
-                              <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-extrabold bg-blue-50 text-blue-700 border border-blue-200">
-                                ID: {getBusinessStoreId(biz).storeId}
-                              </span>
-                              {isProtectedRoot && (
-                                <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-[#FFFBEB] text-[#B45309] border border-[#FDE68A]">
-                                  Default Root
+                    </thead>
+                    <tbody className="divide-y divide-[#E2E8F0] text-sm">
+                      {filteredDeletedBusinesses.map((d) => (
+                        <tr key={d.id} className="hover:bg-slate-50/80">
+                          <td className="py-3.5 px-4 font-bold text-[#0F172A]">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span>{d.name}</span>
+                              {d.store_id && (
+                                <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-slate-100 text-slate-700 border border-slate-200">
+                                  ID: {d.store_id}
                                 </span>
                               )}
                             </div>
-                            <div className="flex items-center gap-1 text-xs text-[#64748B] mt-0.5 font-mono">
-                              <span>{biz.slug}.countercub.com</span>
-                              <button
-                                onClick={() => copyToClipboard(`${biz.slug}.countercub.com`, `sub_${biz.id}`, "Subdomain")}
-                                className="hover:text-[#0F172A] p-0.5 cursor-pointer"
-                                title="Copy Subdomain"
-                              >
-                                {copiedKey === `sub_${biz.id}` ? <Check size={12} className="text-[#16A34A]" /> : <Copy size={12} />}
-                              </button>
+                          </td>
+                          <td className="py-3.5 px-4 font-mono text-xs text-slate-600">
+                            {d.slug ? `${d.slug}.countercub.com` : "—"}
+                          </td>
+                          <td className="py-3.5 px-4 text-xs text-slate-700">{d.admin_email}</td>
+                          <td className="py-3.5 px-4">
+                            <span className="px-2 py-0.5 rounded text-[10px] font-extrabold uppercase bg-slate-100 text-slate-700">
+                              {d.plan_type}
+                            </span>
+                          </td>
+                          <td className="py-3.5 px-4 text-xs text-slate-600">{d.deleted_by}</td>
+                          <td className="py-3.5 px-4 text-xs text-slate-500">
+                            {d.deleted_at ? new Date(d.deleted_at).toLocaleString() : "—"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          ) : viewMode === "table" ? (
+            <div className="table-scroll-container">
+              <table className="w-full text-left border-collapse min-w-[920px]">
+                <thead>
+                  <tr className="bg-[#EFF6FF] text-[#1E3A8A] text-[11px] uppercase tracking-wider font-bold border-b border-[#DBEAFE]">
+                    <th className="py-3.5 px-6">Store &amp; Subdomain</th>
+                    <th className="py-3.5 px-4">Plan &amp; Seats</th>
+                    <th className="py-3.5 px-4">Admin Email</th>
+                    <th className="py-3.5 px-4">Financial Volume</th>
+                    <th className="py-3.5 px-4">Reported Issues</th>
+                    <th className="py-3.5 px-4">Active Modules</th>
+                    <th className="py-3.5 px-4 text-center">Status</th>
+                    <th className="py-3.5 px-6 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#E2E8F0] text-xs sm:text-sm bg-white">
+                  {filteredBusinesses.map((biz) => {
+                    const isProtectedRoot = biz.id === "a0000000-0000-0000-0000-000000000001";
+                    const enabledCount = Object.entries(biz.enabled_modules || {}).filter(([k, v]) => !k.startsWith('_') && Boolean(v)).length;
+                    const totalModules = MODULE_DEFINITIONS.length;
+                    const openCount = biz.open_issues_count || 0;
+                    const totalCount = biz.total_issues_count || 0;
+
+                    return (
+                      <tr key={biz.id} className="hover:bg-[#F8FAFC] transition-colors group border-b border-[#E2E8F0]">
+
+                        {/* Store & Subdomain */}
+                        <td className="py-4 px-6">
+                          <div className="flex items-center gap-3">
+                            <div className={cn(
+                              "w-10 h-10 rounded-2xl flex items-center justify-center font-black text-sm text-white shrink-0 shadow-xs",
+                              biz.is_active
+                                ? "bg-[#2563EB]"
+                                : "bg-slate-400"
+                            )}>
+                              {biz.name[0]?.toUpperCase() || "S"}
+                            </div>
+                            <div>
+                              <div className="font-extrabold text-[#0F172A] flex items-center gap-1.5 flex-wrap">
+                                <span>{biz.name}</span>
+                                <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-extrabold bg-blue-50 text-blue-700 border border-blue-200">
+                                  ID: {getBusinessStoreId(biz).storeId}
+                                </span>
+                                {isProtectedRoot && (
+                                  <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-[#FFFBEB] text-[#B45309] border border-[#FDE68A]">
+                                    Default Root
+                                  </span>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-1 text-xs text-[#64748B] mt-0.5 font-mono">
+                                <span>{biz.slug}.countercub.com</span>
+                                <button
+                                  onClick={() => copyToClipboard(`${biz.slug}.countercub.com`, `sub_${biz.id}`, "Subdomain")}
+                                  className="hover:text-[#0F172A] p-0.5 cursor-pointer"
+                                  title="Copy Subdomain"
+                                >
+                                  {copiedKey === `sub_${biz.id}` ? <Check size={12} className="text-[#16A34A]" /> : <Copy size={12} />}
+                                </button>
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      </td>
+                        </td>
 
-                      {/* Plan & Users */}
-                      <td className="py-4 px-4">
-                        <div className="space-y-1">
-                          <span className={cn(
-                            "inline-block px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider",
-                            biz.plan_type === "enterprise" ? "bg-[#EFF6FF] text-[#1E3A8A] border border-[#DBEAFE]" :
-                            biz.plan_type === "pro" ? "bg-[#EFF6FF] text-[#1E3A8A] border border-[#DBEAFE]" :
-                            "bg-slate-100 text-[#64748B] border border-[#E2E8F0]"
-                          )}>
-                            {biz.plan_type}
-                          </span>
-                          <div className="text-xs text-[#64748B] flex items-center gap-1 font-medium">
-                            <Users size={12} className="text-[#94A3B8]" />
-                            <span>{biz.user_count} / {biz.max_users} seats</span>
+                        {/* Plan & Users */}
+                        <td className="py-4 px-4">
+                          <div className="space-y-1">
+                            <span className={cn(
+                              "inline-block px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider",
+                              biz.plan_type === "enterprise" ? "bg-[#EFF6FF] text-[#1E3A8A] border border-[#DBEAFE]" :
+                                biz.plan_type === "pro" ? "bg-[#EFF6FF] text-[#1E3A8A] border border-[#DBEAFE]" :
+                                  "bg-slate-100 text-[#64748B] border border-[#E2E8F0]"
+                            )}>
+                              {biz.plan_type}
+                            </span>
+                            <div className="text-xs text-[#64748B] flex items-center gap-1 font-medium">
+                              <Users size={12} className="text-[#94A3B8]" />
+                              <span>{biz.user_count} / {biz.max_users} seats</span>
+                            </div>
                           </div>
-                        </div>
-                      </td>
+                        </td>
 
-                      {/* Admin Email */}
-                      <td className="py-4 px-4">
-                        <div className="font-mono text-xs text-[#0F172A] max-w-[180px] truncate flex items-center gap-1">
-                          <span className="truncate">{biz.admin_email}</span>
-                          <button
-                            onClick={() => copyToClipboard(biz.admin_email, `email_${biz.id}`, "Admin Email")}
-                            className="text-[#94A3B8] hover:text-[#0F172A] shrink-0 cursor-pointer"
-                            title="Copy Email"
-                          >
-                            {copiedKey === `email_${biz.id}` ? <Check size={12} className="text-[#16A34A]" /> : <Copy size={12} />}
-                          </button>
-                        </div>
-                        <div className="text-[11px] text-[#64748B] mt-0.5 flex items-center gap-1">
-                          <KeyRound size={11} className="text-[#94A3B8]" />
-                          <span>Standard Password Policy</span>
-                        </div>
-                      </td>
-
-                      {/* Financials */}
-                      <td className="py-4 px-4">
-                        <div className="space-y-0.5">
-                          <div className="font-bold text-[#16A34A] font-mono text-xs">
-                            ₹{(biz.total_sales || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                          </div>
-                          <div className="text-[11px] text-[#64748B] font-mono">
-                            Cost: ₹{(biz.total_expenses || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                          </div>
-                          <div className={cn(
-                            "text-[10px] font-bold font-mono",
-                            (biz.net_profit || 0) >= 0 ? "text-[#2563EB]" : "text-[#D97706]"
-                          )}>
-                            Net: ₹{(biz.net_profit || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                          </div>
-                        </div>
-                      </td>
-
-                      {/* Reported Issues Badge */}
-                      <td className="py-4 px-4">
-                        <button
-                          onClick={() => {
-                            setSelectedBizForIssues(biz);
-                            setTicketStatusFilter("all");
-                          }}
-                          className={cn(
-                            "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-bold transition-all border cursor-pointer",
-                            openCount > 0
-                              ? "bg-[#FFFBEB] text-[#B45309] hover:bg-[#FEF3C7] border-[#FDE68A]"
-                              : totalCount > 0
-                              ? "bg-slate-100 text-[#64748B] hover:bg-slate-200 border-[#E2E8F0]"
-                              : "bg-[#F0FDF4] text-[#15803D] hover:bg-[#DCFCE7] border-[#BBF7D0]"
-                          )}
-                          title="Click to view all reported tickets for this store"
-                        >
-                          {openCount > 0 ? (
-                            <>
-                              <LifeBuoy size={13} className="text-[#B45309] animate-spin-slow" />
-                              <span>{openCount} Open ({totalCount})</span>
-                            </>
-                          ) : (
-                            <>
-                              <CheckCircle size={13} className="text-[#16A34A]" />
-                              <span>{totalCount > 0 ? `${totalCount} Solved` : "0 Issues"}</span>
-                            </>
-                          )}
-                        </button>
-                      </td>
-
-                      {/* Active Modules */}
-                      <td className="py-4 px-4">
-                        <div className="space-y-1">
-                          <div className="flex items-center gap-1 text-xs font-bold text-[#0F172A]">
-                            <Sliders size={13} className="text-[#2563EB]" />
-                            <span>{enabledCount} / {totalModules} active</span>
-                          </div>
-                          <div className="w-24 h-1.5 rounded-full bg-slate-100 overflow-hidden">
-                            <div
-                              className="h-full bg-[#2563EB] rounded-full"
-                              style={{ width: `${(enabledCount / totalModules) * 100}%` }}
-                            />
-                          </div>
-                        </div>
-                      </td>
-
-                      {/* Status Toggle */}
-                      <td className="py-4 px-4 text-center">
-                        <button
-                          onClick={() => setStatusConfirmBiz(biz)}
-                          className={cn(
-                            "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold transition-all cursor-pointer",
-                            biz.is_active
-                              ? "bg-[#F0FDF4] text-[#15803D] hover:bg-[#DCFCE7] border border-[#BBF7D0]"
-                              : "bg-[#FFF1F2] text-[#BE123C] hover:bg-[#FFE4E6] border border-[#FECDD3]"
-                          )}
-                          title="Click to toggle status"
-                        >
-                          <span className={cn("w-1.5 h-1.5 rounded-full", biz.is_active ? "bg-[#16A34A]" : "bg-[#E11D48]")} />
-                          <span>{biz.is_active ? "Active" : "Suspended"}</span>
-                        </button>
-                      </td>
-
-                      {/* Action Buttons */}
-                      <td className="py-4 px-6 text-right">
-                        <div className="flex items-center justify-end gap-1.5">
-                          {/* Manage Subscription */}
-                          <button
-                            onClick={() => setManagingSubBiz(biz)}
-                            className="p-2 rounded-xl text-[#0F172A] hover:bg-blue-50 hover:text-[#2563EB] border border-[#E2E8F0] transition-all text-xs font-semibold flex items-center gap-1 cursor-pointer"
-                            title="Manage Plan, Expiry & Subscription History"
-                          >
-                            <Wallet size={14} />
-                            <span className="hidden xl:inline">Subscription</span>
-                          </button>
-
-                          {/* Audited Support Impersonation Launcher */}
-                          <button
-                            onClick={() => handleSwitchWorkspace(biz.slug, biz.name, biz.id)}
-                            className="p-2 rounded-xl text-[#2563EB] hover:bg-[#EFF6FF] border border-transparent hover:border-[#DBEAFE] transition-all font-bold text-xs flex items-center gap-1 cursor-pointer"
-                            title={`Start audited support session for ${biz.name}`}
-                          >
-                            <ArrowRightLeft size={14} />
-                            <span className="hidden xl:inline">Support Access</span>
-                          </button>
-
-                          {/* Configure / Edit */}
-                          <button
-                            onClick={() => openEditModal(biz)}
-                            className="p-2 rounded-xl text-[#0F172A] hover:bg-slate-100 border border-[#E2E8F0] transition-all text-xs font-semibold flex items-center gap-1 cursor-pointer"
-                            title="Edit Settings & Modules"
-                          >
-                            <Edit3 size={14} />
-                            <span className="hidden xl:inline">Configure</span>
-                          </button>
-
-                          {/* Delete Store (Danger Zone) */}
-                          {!isProtectedRoot && (
+                        {/* Admin Email */}
+                        <td className="py-4 px-4">
+                          <div className="font-mono text-xs text-[#0F172A] max-w-[180px] truncate flex items-center gap-1">
+                            <span className="truncate">{biz.admin_email}</span>
                             <button
-                              onClick={() => {
-                                setDeletingBiz(biz);
-                                setConfirmDeleteInput("");
-                              }}
-                              className="p-2 rounded-xl text-[#64748B] hover:text-[#DC2626] hover:bg-rose-50 border border-transparent hover:border-rose-100 transition-all text-xs cursor-pointer"
-                              title="Delete / Offboard Store"
+                              onClick={() => copyToClipboard(biz.admin_email, `email_${biz.id}`, "Admin Email")}
+                              className="text-[#94A3B8] hover:text-[#0F172A] shrink-0 cursor-pointer"
+                              title="Copy Email"
                             >
-                              <Trash2 size={15} />
+                              {copiedKey === `email_${biz.id}` ? <Check size={12} className="text-[#16A34A]" /> : <Copy size={12} />}
                             </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          /* VIEW 2: CARDS GRID VIEW */
-          <div className="p-6 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
-            {filteredBusinesses.map((biz) => {
-              const isProtectedRoot = biz.id === "a0000000-0000-0000-0000-000000000001";
-              const enabledCount = Object.entries(biz.enabled_modules || {}).filter(([k, v]) => !k.startsWith('_') && Boolean(v)).length;
-              const openCount = biz.open_issues_count || 0;
+                          </div>
+                          <div className="text-[11px] text-[#64748B] mt-0.5 flex items-center gap-1">
+                            <KeyRound size={11} className="text-[#94A3B8]" />
+                            <span>Standard Password Policy</span>
+                          </div>
+                        </td>
 
-              return (
-                <div
-                  key={biz.id}
-                  className="rounded-2xl border border-[#E2E8F0] p-5 bg-white hover:shadow-md transition-all space-y-4 relative group"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex items-center gap-3">
-                      <div className="w-12 h-12 rounded-2xl bg-[#2563EB] text-white font-black text-base flex items-center justify-center shadow-xs">
-                        {biz.name[0]?.toUpperCase() || "S"}
+                        {/* Financials */}
+                        <td className="py-4 px-4">
+                          <div className="space-y-0.5">
+                            <div className="font-bold text-[#16A34A] font-mono text-xs">
+                              ₹{(biz.total_sales || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                            </div>
+                            <div className="text-[11px] text-[#64748B] font-mono">
+                              Cost: ₹{(biz.total_expenses || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                            </div>
+                            <div className={cn(
+                              "text-[10px] font-bold font-mono",
+                              (biz.net_profit || 0) >= 0 ? "text-[#2563EB]" : "text-[#D97706]"
+                            )}>
+                              Net: ₹{(biz.net_profit || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                            </div>
+                          </div>
+                        </td>
+
+                        {/* Reported Issues Badge */}
+                        <td className="py-4 px-4">
+                          <button
+                            onClick={() => {
+                              setSelectedBizForIssues(biz);
+                              setTicketStatusFilter("all");
+                            }}
+                            className={cn(
+                              "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-bold transition-all border cursor-pointer",
+                              openCount > 0
+                                ? "bg-[#FFFBEB] text-[#B45309] hover:bg-[#FEF3C7] border-[#FDE68A]"
+                                : totalCount > 0
+                                  ? "bg-slate-100 text-[#64748B] hover:bg-slate-200 border-[#E2E8F0]"
+                                  : "bg-[#F0FDF4] text-[#15803D] hover:bg-[#DCFCE7] border-[#BBF7D0]"
+                            )}
+                            title="Click to view all reported tickets for this store"
+                          >
+                            {openCount > 0 ? (
+                              <>
+                                <LifeBuoy size={13} className="text-[#B45309] animate-spin-slow" />
+                                <span>{openCount} Open ({totalCount})</span>
+                              </>
+                            ) : (
+                              <>
+                                <CheckCircle size={13} className="text-[#16A34A]" />
+                                <span>{totalCount > 0 ? `${totalCount} Solved` : "0 Issues"}</span>
+                              </>
+                            )}
+                          </button>
+                        </td>
+
+                        {/* Active Modules */}
+                        <td className="py-4 px-4">
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-1 text-xs font-bold text-[#0F172A]">
+                              <Sliders size={13} className="text-[#2563EB]" />
+                              <span>{enabledCount} / {totalModules} active</span>
+                            </div>
+                            <div className="w-24 h-1.5 rounded-full bg-slate-100 overflow-hidden">
+                              <div
+                                className="h-full bg-[#2563EB] rounded-full"
+                                style={{ width: `${(enabledCount / totalModules) * 100}%` }}
+                              />
+                            </div>
+                          </div>
+                        </td>
+
+                        {/* Status Toggle */}
+                        <td className="py-4 px-4 text-center">
+                          <button
+                            onClick={() => setStatusConfirmBiz(biz)}
+                            className={cn(
+                              "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold transition-all cursor-pointer",
+                              biz.is_active
+                                ? "bg-[#F0FDF4] text-[#15803D] hover:bg-[#DCFCE7] border border-[#BBF7D0]"
+                                : "bg-[#FFF1F2] text-[#BE123C] hover:bg-[#FFE4E6] border border-[#FECDD3]"
+                            )}
+                            title="Click to toggle status"
+                          >
+                            <span className={cn("w-1.5 h-1.5 rounded-full", biz.is_active ? "bg-[#16A34A]" : "bg-[#E11D48]")} />
+                            <span>{biz.is_active ? "Active" : "Suspended"}</span>
+                          </button>
+                        </td>
+
+                        {/* Action Buttons */}
+                        <td className="py-4 px-6 text-right">
+                          <div className="flex items-center justify-end gap-1.5">
+                            {/* Manage Subscription */}
+                            <button
+                              onClick={() => setManagingSubBiz(biz)}
+                              className="p-2 rounded-xl text-[#0F172A] hover:bg-blue-50 hover:text-[#2563EB] border border-[#E2E8F0] transition-all text-xs font-semibold flex items-center gap-1 cursor-pointer"
+                              title="Manage Plan, Expiry & Subscription History"
+                            >
+                              <Wallet size={14} />
+                              <span className="hidden xl:inline">Subscription</span>
+                            </button>
+
+                            {/* Audited Support Impersonation Launcher */}
+                            <button
+                              onClick={() => handleSwitchWorkspace(biz.slug, biz.name, biz.id)}
+                              className="p-2 rounded-xl text-[#2563EB] hover:bg-[#EFF6FF] border border-transparent hover:border-[#DBEAFE] transition-all font-bold text-xs flex items-center gap-1 cursor-pointer"
+                              title={`Start audited support session for ${biz.name}`}
+                            >
+                              <ArrowRightLeft size={14} />
+                              <span className="hidden xl:inline">Support Access</span>
+                            </button>
+
+                            {/* Configure / Edit */}
+                            <button
+                              onClick={() => openEditModal(biz)}
+                              className="p-2 rounded-xl text-[#0F172A] hover:bg-slate-100 border border-[#E2E8F0] transition-all text-xs font-semibold flex items-center gap-1 cursor-pointer"
+                              title="Edit Settings & Modules"
+                            >
+                              <Edit3 size={14} />
+                              <span className="hidden xl:inline">Configure</span>
+                            </button>
+
+                            {/* Delete Store (Danger Zone) */}
+                            {!isProtectedRoot && (
+                              <button
+                                onClick={() => {
+                                  setDeletingBiz(biz);
+                                  setConfirmDeleteInput("");
+                                }}
+                                className="p-2 rounded-xl text-[#64748B] hover:text-[#DC2626] hover:bg-rose-50 border border-transparent hover:border-rose-100 transition-all text-xs cursor-pointer"
+                                title="Delete / Offboard Store"
+                              >
+                                <Trash2 size={15} />
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            /* VIEW 2: CARDS GRID VIEW */
+            <div className="p-6 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+              {filteredBusinesses.map((biz) => {
+                const isProtectedRoot = biz.id === "a0000000-0000-0000-0000-000000000001";
+                const enabledCount = Object.entries(biz.enabled_modules || {}).filter(([k, v]) => !k.startsWith('_') && Boolean(v)).length;
+                const openCount = biz.open_issues_count || 0;
+
+                return (
+                  <div
+                    key={biz.id}
+                    className="rounded-2xl border border-[#E2E8F0] p-5 bg-white hover:shadow-md transition-all space-y-4 relative group"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                        <div className="w-12 h-12 rounded-2xl bg-[#2563EB] text-white font-black text-base flex items-center justify-center shadow-xs">
+                          {biz.name[0]?.toUpperCase() || "S"}
+                        </div>
+                        <div>
+                          <h3 className="font-extrabold text-base text-[#0F172A] flex items-center gap-1.5 flex-wrap">
+                            <span>{biz.name}</span>
+                            <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-extrabold bg-blue-50 text-blue-700 border border-blue-200">
+                              ID: {getBusinessStoreId(biz).storeId}
+                            </span>
+                            {isProtectedRoot && (
+                              <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-[#FFFBEB] text-[#B45309] border border-[#FDE68A]">Root</span>
+                            )}
+                          </h3>
+                          <p className="text-xs text-[#64748B] font-mono">{biz.slug}.countercub.com</p>
+                        </div>
+                      </div>
+
+                      <button
+                        onClick={() => setStatusConfirmBiz(biz)}
+                        className={cn(
+                          "px-2.5 py-1 rounded-full text-xs font-bold transition-all flex items-center gap-1 cursor-pointer border",
+                          biz.is_active ? "bg-[#F0FDF4] text-[#15803D] border-[#BBF7D0]" : "bg-[#FFF1F2] text-[#BE123C] border-[#FECDD3]"
+                        )}
+                      >
+                        <span className={cn("w-1.5 h-1.5 rounded-full", biz.is_active ? "bg-[#16A34A]" : "bg-[#E11D48]")} />
+                        <span>{biz.is_active ? "Active" : "Suspended"}</span>
+                      </button>
+                    </div>
+
+                    {/* Financials Row */}
+                    <div className="grid grid-cols-3 gap-2 p-3 bg-slate-50 rounded-xl border border-[#E2E8F0] text-center font-mono">
+                      <div>
+                        <span className="text-[10px] text-[#64748B] font-sans block uppercase font-bold">Sales</span>
+                        <span className="font-bold text-xs text-[#16A34A]">₹{(biz.total_sales || 0).toLocaleString()}</span>
                       </div>
                       <div>
-                        <h3 className="font-extrabold text-base text-[#0F172A] flex items-center gap-1.5 flex-wrap">
-                          <span>{biz.name}</span>
-                          <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-extrabold bg-blue-50 text-blue-700 border border-blue-200">
-                            ID: {getBusinessStoreId(biz).storeId}
-                          </span>
-                          {isProtectedRoot && (
-                            <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-[#FFFBEB] text-[#B45309] border border-[#FDE68A]">Root</span>
-                          )}
-                        </h3>
-                        <p className="text-xs text-[#64748B] font-mono">{biz.slug}.countercub.com</p>
+                        <span className="text-[10px] text-[#64748B] font-sans block uppercase font-bold">Expenses</span>
+                        <span className="font-bold text-xs text-[#DC2626]">₹{(biz.total_expenses || 0).toLocaleString()}</span>
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-[#64748B] font-sans block uppercase font-bold">Profit</span>
+                        <span className="font-bold text-xs text-[#2563EB]">₹{(biz.net_profit || 0).toLocaleString()}</span>
                       </div>
                     </div>
 
-                    <button
-                      onClick={() => setStatusConfirmBiz(biz)}
-                      className={cn(
-                        "px-2.5 py-1 rounded-full text-xs font-bold transition-all flex items-center gap-1 cursor-pointer border",
-                        biz.is_active ? "bg-[#F0FDF4] text-[#15803D] border-[#BBF7D0]" : "bg-[#FFF1F2] text-[#BE123C] border-[#FECDD3]"
-                      )}
-                    >
-                      <span className={cn("w-1.5 h-1.5 rounded-full", biz.is_active ? "bg-[#16A34A]" : "bg-[#E11D48]")} />
-                      <span>{biz.is_active ? "Active" : "Suspended"}</span>
-                    </button>
-                  </div>
+                    {/* Issues & Staff Info */}
+                    <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-[#64748B] pt-1">
+                      <div className="flex items-center gap-1.5 font-medium">
+                        <Users size={14} className="text-[#94A3B8]" />
+                        <span>{biz.user_count} / {biz.max_users} seats</span>
+                      </div>
 
-                  {/* Financials Row */}
-                  <div className="grid grid-cols-3 gap-2 p-3 bg-slate-50 rounded-xl border border-[#E2E8F0] text-center font-mono">
-                    <div>
-                      <span className="text-[10px] text-[#64748B] font-sans block uppercase font-bold">Sales</span>
-                      <span className="font-bold text-xs text-[#16A34A]">₹{(biz.total_sales || 0).toLocaleString()}</span>
-                    </div>
-                    <div>
-                      <span className="text-[10px] text-[#64748B] font-sans block uppercase font-bold">Expenses</span>
-                      <span className="font-bold text-xs text-[#DC2626]">₹{(biz.total_expenses || 0).toLocaleString()}</span>
-                    </div>
-                    <div>
-                      <span className="text-[10px] text-[#64748B] font-sans block uppercase font-bold">Profit</span>
-                      <span className="font-bold text-xs text-[#2563EB]">₹{(biz.net_profit || 0).toLocaleString()}</span>
-                    </div>
-                  </div>
-
-                  {/* Issues & Staff Info */}
-                  <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-[#64748B] pt-1">
-                    <div className="flex items-center gap-1.5 font-medium">
-                      <Users size={14} className="text-[#94A3B8]" />
-                      <span>{biz.user_count} / {biz.max_users} seats</span>
-                    </div>
-
-                    <button
-                      onClick={() => {
-                        setSelectedBizForIssues(biz);
-                        setTicketStatusFilter("all");
-                      }}
-                      className={cn(
-                        "flex items-center gap-1 font-bold px-2 py-0.5 rounded-lg border text-[11px] cursor-pointer",
-                        openCount > 0
-                          ? "bg-[#FFFBEB] text-[#B45309] border-[#FDE68A]"
-                          : "bg-slate-100 text-[#64748B] border-[#E2E8F0]"
-                      )}
-                    >
-                      <LifeBuoy size={12} className={openCount > 0 ? "text-[#B45309]" : "text-[#94A3B8]"} />
-                      <span>{openCount} Open Issues</span>
-                    </button>
-                  </div>
-
-                  {/* Action Bar */}
-                  <div className="pt-3 border-t border-[#E2E8F0] flex items-center justify-between gap-2">
-                    <Button
-                      onClick={() => handleSwitchWorkspace(biz.slug, biz.name, biz.id)}
-                      className="h-9 bg-[#2563EB] hover:bg-[#1D4ED8] text-white font-bold text-xs rounded-xl flex-1 flex items-center justify-center gap-1.5 cursor-pointer shadow-xs"
-                    >
-                      <ArrowRightLeft size={14} />
-                      <span>Support Access</span>
-                    </Button>
-
-                    <Button
-                      variant="outline"
-                      onClick={() => openEditModal(biz)}
-                      className="h-9 bg-white hover:bg-slate-50 text-[#0F172A] border-[#E2E8F0] text-xs font-semibold rounded-xl px-3 cursor-pointer"
-                    >
-                      <Edit3 size={14} />
-                    </Button>
-
-                    {!isProtectedRoot && (
                       <button
                         onClick={() => {
-                          setDeletingBiz(biz);
-                          setConfirmDeleteInput("");
+                          setSelectedBizForIssues(biz);
+                          setTicketStatusFilter("all");
                         }}
-                        className="p-2 rounded-xl text-[#64748B] hover:text-[#DC2626] hover:bg-rose-50 transition-colors cursor-pointer"
-                        title="Delete Store"
+                        className={cn(
+                          "flex items-center gap-1 font-bold px-2 py-0.5 rounded-lg border text-[11px] cursor-pointer",
+                          openCount > 0
+                            ? "bg-[#FFFBEB] text-[#B45309] border-[#FDE68A]"
+                            : "bg-slate-100 text-[#64748B] border-[#E2E8F0]"
+                        )}
                       >
-                        <Trash2 size={16} />
+                        <LifeBuoy size={12} className={openCount > 0 ? "text-[#B45309]" : "text-[#94A3B8]"} />
+                        <span>{openCount} Open Issues</span>
                       </button>
-                    )}
+                    </div>
+
+                    {/* Action Bar */}
+                    <div className="pt-3 border-t border-[#E2E8F0] flex items-center justify-between gap-2">
+                      <Button
+                        onClick={() => handleSwitchWorkspace(biz.slug, biz.name, biz.id)}
+                        className="h-9 bg-[#2563EB] hover:bg-[#1D4ED8] text-white font-bold text-xs rounded-xl flex-1 flex items-center justify-center gap-1.5 cursor-pointer shadow-xs"
+                      >
+                        <ArrowRightLeft size={14} />
+                        <span>Support Access</span>
+                      </Button>
+
+                      <Button
+                        variant="outline"
+                        onClick={() => openEditModal(biz)}
+                        className="h-9 bg-white hover:bg-slate-50 text-[#0F172A] border-[#E2E8F0] text-xs font-semibold rounded-xl px-3 cursor-pointer"
+                      >
+                        <Edit3 size={14} />
+                      </Button>
+
+                      {!isProtectedRoot && (
+                        <button
+                          onClick={() => {
+                            setDeletingBiz(biz);
+                            setConfirmDeleteInput("");
+                          }}
+                          className="p-2 rounded-xl text-[#64748B] hover:text-[#DC2626] hover:bg-rose-50 transition-colors cursor-pointer"
+                          title="Delete Store"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      )}
+                    </div>
                   </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </Card>
+                );
+              })}
+            </div>
+          )}
+        </Card>
       )}
 
       {managingSubBiz && (
@@ -2447,7 +2455,7 @@ export default function SuperAdminPage() {
       {(selectedBizForIssues || showAllTicketsModal) && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto animate-in fade-in duration-200">
           <div className="bg-white rounded-3xl max-w-3xl w-full p-6 sm:p-8 shadow-2xl border border-[#E2E8F0] space-y-6 animate-in zoom-in-95 duration-200 my-8 max-h-[90vh] flex flex-col">
-            
+
             {/* Header */}
             <div className="flex items-start justify-between border-b border-[#E2E8F0] pb-4 shrink-0">
               <div className="space-y-1">
@@ -2539,9 +2547,9 @@ export default function SuperAdminPage() {
                           <span className={cn(
                             "px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider",
                             ticket.priority === "urgent" ? "bg-rose-100 text-rose-800" :
-                            ticket.priority === "high" ? "bg-amber-100 text-amber-800" :
-                            ticket.priority === "medium" ? "bg-blue-100 text-blue-800" :
-                            "bg-slate-100 text-[#64748B]"
+                              ticket.priority === "high" ? "bg-amber-100 text-amber-800" :
+                                ticket.priority === "medium" ? "bg-blue-100 text-blue-800" :
+                                  "bg-slate-100 text-[#64748B]"
                           )}>
                             {ticket.priority}
                           </span>
@@ -2553,9 +2561,9 @@ export default function SuperAdminPage() {
                             className={cn(
                               "text-xs font-bold px-2.5 py-1 rounded-xl border focus:outline-none focus:ring-2 focus:ring-[#2563EB]/20 focus:border-[#2563EB] cursor-pointer",
                               ticket.status === "open" ? "bg-[#FFFBEB] text-[#B45309] border-[#FDE68A]" :
-                              ticket.status === "in_progress" ? "bg-[#EFF6FF] text-[#1E3A8A] border-[#DBEAFE]" :
-                              ticket.status === "resolved" ? "bg-[#F0FDF4] text-[#15803D] border-[#BBF7D0]" :
-                              "bg-slate-100 text-[#64748B] border-[#E2E8F0]"
+                                ticket.status === "in_progress" ? "bg-[#EFF6FF] text-[#1E3A8A] border-[#DBEAFE]" :
+                                  ticket.status === "resolved" ? "bg-[#F0FDF4] text-[#15803D] border-[#BBF7D0]" :
+                                    "bg-slate-100 text-[#64748B] border-[#E2E8F0]"
                             )}
                           >
                             <option value="open">🟡 Open</option>
@@ -2650,7 +2658,7 @@ export default function SuperAdminPage() {
       {showAddModal && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6 overflow-hidden animate-in fade-in duration-200">
           <div className="bg-white rounded-2xl sm:rounded-3xl max-w-3xl w-full max-h-[92vh] flex flex-col shadow-2xl border border-[#E2E8F0] overflow-hidden animate-in zoom-in-95 duration-200">
-            
+
             <div className="flex items-start justify-between border-b border-[#E2E8F0] px-5 sm:px-8 pt-5 pb-4 shrink-0 bg-white">
               <div className="space-y-1 pr-4">
                 <h2 className="text-lg sm:text-xl font-extrabold text-[#0F172A] flex items-center gap-2">
@@ -2672,407 +2680,470 @@ export default function SuperAdminPage() {
 
             <form onSubmit={handleCreateBusiness} className="flex flex-col flex-1 min-h-0">
               <div className="flex-1 overflow-y-auto px-5 sm:px-8 py-5 space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-[#0F172A]">Business Name *</label>
-                  <Input
-                    placeholder="e.g. Royal Chai House"
-                    value={formData.name}
-                    onChange={(e) => handleNameChange(e.target.value)}
-                    required
-                    className="h-10 bg-white border-[#E2E8F0] text-[#0F172A] focus:border-[#2563EB]"
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-[#0F172A]">Subdomain Slug *</label>
-                  <div className="flex items-center">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-[#0F172A]">Business Name *</label>
                     <Input
-                      placeholder="royal-chai"
-                      value={formData.slug}
-                      onChange={(e) => setFormData((prev) => ({ ...prev, slug: e.target.value }))}
+                      placeholder="e.g. Royal Chai House"
+                      value={formData.name}
+                      onChange={(e) => handleNameChange(e.target.value)}
                       required
-                      className="h-10 bg-white border-[#E2E8F0] text-[#0F172A] focus:border-[#2563EB] rounded-r-none font-mono text-xs"
-                    />
-                    <span className="h-10 px-3 bg-slate-50 border border-l-0 border-[#E2E8F0] text-[#64748B] text-xs font-mono font-medium rounded-r-xl flex items-center">
-                      .countercub.com
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-[#0F172A]">Store Prefix (Employee ID Prefix)</label>
-                  <div className="flex items-center gap-2">
-                    <Input
-                      placeholder="e.g. BFT or CK"
-                      value={formData.storePrefix}
-                      maxLength={5}
-                      onChange={(e) => {
-                        const nextPrefix = normalizeStorePrefix(e.target.value);
-                        const digits = formData.storeId.replace(/^[A-Z0-9]+?(?=\d+$)/, "") || String(Math.floor(10000 + Math.random() * 90000));
-                        setFormData((prev) => ({
-                          ...prev,
-                          storePrefix: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ""),
-                          storeId: `${nextPrefix}${digits.replace(/\D/g, "") || "10001"}`,
-                        }));
-                      }}
-                      className="h-10 bg-white border-[#E2E8F0] text-[#0F172A] focus:border-[#2563EB] font-mono text-xs uppercase font-bold"
-                    />
-                    <span className="text-[11px] text-[#64748B] whitespace-nowrap font-mono bg-slate-50 px-2.5 py-2 rounded-lg border border-[#E2E8F0]">
-                      e.g. {(formData.storePrefix || "ck").toLowerCase()}10121997
-                    </span>
-                  </div>
-                </div>
-
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <label className="text-xs font-bold text-[#0F172A]">Store Reference ID</label>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const { prefix, storeId } = generateStoreReferenceId(
-                          formData.name || "Store",
-                          formData.storePrefix || undefined
-                        );
-                        setFormData((prev) => ({
-                          ...prev,
-                          storePrefix: prefix,
-                          storeId,
-                        }));
-                      }}
-                      className="text-[11px] font-bold text-[#2563EB] hover:underline flex items-center gap-1 cursor-pointer"
-                    >
-                      <RefreshCw size={11} /> Regenerate ID
-                    </button>
-                  </div>
-                  <Input
-                    placeholder="e.g. BFT32523 or CK2342"
-                    value={formData.storeId}
-                    onChange={(e) =>
-                      setFormData((prev) => ({
-                        ...prev,
-                        storeId: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ""),
-                      }))
-                    }
-                    className="h-10 bg-slate-50 border-[#E2E8F0] text-[#0F172A] focus:border-[#2563EB] font-mono text-xs font-extrabold tracking-wider"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-[#0F172A]">Store Admin Email or ID *</label>
-                  <Input
-                    type="text"
-                    placeholder="owner@royalchai.com or ckadmin"
-                    value={formData.adminEmail}
-                    onChange={(e) => setFormData((prev) => ({ ...prev, adminEmail: e.target.value }))}
-                    required
-                    className="h-10 bg-white border-[#E2E8F0] text-[#0F172A] focus:border-[#2563EB] text-xs"
-                  />
-                  {formData.adminEmail.trim().includes("@") && (
-                    <p className="text-[11px] text-[#64748B]">
-                      Welcome &amp; password setup email will be sent to this address.
-                    </p>
-                  )}
-                </div>
-
-                {formData.adminEmail.trim().length > 0 && !formData.adminEmail.trim().includes("@") && (
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-[#0F172A]">Store Admin Contact Email *</label>
-                    <Input
-                      type="email"
-                      placeholder="owner@royalchai.com"
-                      value={formData.adminContactEmail}
-                      onChange={(e) =>
-                        setFormData((prev) => ({ ...prev, adminContactEmail: e.target.value }))
-                      }
-                      required
-                      className="h-10 bg-white border-[#E2E8F0] text-[#0F172A] focus:border-[#2563EB] text-xs"
-                    />
-                    <p className="text-[11px] text-[#64748B]">
-                      Required for welcome &amp; password setup email when logging in with a custom ID.
-                    </p>
-                  </div>
-                )}
-              </div>
-
-              <div className="space-y-3 pt-1 p-3.5 rounded-2xl border border-[#E2E8F0] bg-slate-50/60">
-                <div className="flex items-center justify-between gap-2 flex-wrap">
-                  <span className="text-xs font-bold text-[#0F172A] uppercase tracking-wider">
-                    Subscription &amp; Plan Configuration
-                  </span>
-                  <label className="flex items-center gap-1.5 text-[11px] font-bold text-[#2563EB] cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={formData.useCustomConfig}
-                      onChange={(e) =>
-                        setFormData((prev) => ({ ...prev, useCustomConfig: e.target.checked }))
-                      }
-                      className="rounded text-[#2563EB]"
-                    />
-                    Custom Plan Configuration
-                  </label>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-[#0F172A]">Subscription Tier</label>
-                    <select
-                      value={formData.planType}
-                      onChange={(e) => {
-                        const nextKey = e.target.value;
-                        const matched = subscriptionPlans.find((p) => p.plan_key === nextKey);
-                        const startDt = formData.startDate ? new Date(formData.startDate) : new Date();
-                        const dur = nextKey === "free" ? 0 : (formData.billingDurationMonths || 1);
-                        const nextExp =
-                          nextKey === "free"
-                            ? ""
-                            : addCalendarMonths(startDt, dur).toISOString().slice(0, 10);
-                        setFormData((prev) => ({
-                          ...prev,
-                          planType: nextKey,
-                          monthlyPrice: matched ? Number(matched.monthly_price) : prev.monthlyPrice,
-                          maxActiveProducts:
-                            matched && matched.max_active_products !== null
-                              ? String(matched.max_active_products)
-                              : "",
-                          isUnlimitedProducts: matched ? matched.max_active_products === null : false,
-                          maxUsers: matched ? Number(matched.max_employee_seats) : (nextKey === "free" ? 0 : prev.maxUsers),
-                          supportLevel: matched?.support_level || "standard",
-                          expiryDate: nextExp,
-                        }));
-                      }}
-                      className="w-full h-10 px-3 bg-white border border-[#E2E8F0] rounded-xl text-xs font-bold text-[#0F172A] focus:border-[#2563EB] cursor-pointer"
-                    >
-                      {subscriptionPlans
-                        .filter((p) => p.is_active)
-                        .map((p) => (
-                          <option key={p.id} value={p.plan_key}>
-                            {p.plan_name} (₹{p.monthly_price}/mo — {p.max_employee_seats} Seats)
-                          </option>
-                        ))}
-                    </select>
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-[#0F172A]">Max Staff Seats</label>
-                    <Input
-                      type="number"
-                      min={0}
-                      max={500}
-                      disabled={!formData.useCustomConfig && formData.planType === "free"}
-                      value={formData.maxUsers}
-                      onChange={(e) => setFormData((prev) => ({ ...prev, maxUsers: Number(e.target.value) }))}
-                      className="h-10 bg-white border-[#E2E8F0] text-[#0F172A] focus:border-[#2563EB] text-xs"
+                      className="h-10 bg-white border-[#E2E8F0] text-[#0F172A] focus:border-[#2563EB]"
                     />
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-[#0F172A]">Currency *</label>
-                    <select
-                      value={formData.currencySymbol}
-                      onChange={(e) => setFormData((prev) => ({ ...prev, currencySymbol: e.target.value }))}
-                      className="w-full h-10 px-3 bg-white border border-[#E2E8F0] rounded-xl text-xs font-bold text-[#0F172A] focus:border-[#2563EB] cursor-pointer"
-                    >
-                      {CURRENCY_OPTIONS.map((c) => (
-                        <option key={`${c.code}-${c.country}`} value={c.symbol}>
-                          {c.country} — {c.code} ({c.symbol})
-                        </option>
-                      ))}
-                    </select>
+                    <label className="text-xs font-bold text-[#0F172A]">Subdomain Slug *</label>
+                    <div className="flex items-center">
+                      <Input
+                        placeholder="royal-chai"
+                        value={formData.slug}
+                        onChange={(e) => setFormData((prev) => ({ ...prev, slug: e.target.value }))}
+                        required
+                        className="h-10 bg-white border-[#E2E8F0] text-[#0F172A] focus:border-[#2563EB] rounded-r-none font-mono text-xs"
+                      />
+                      <span className="h-10 px-3 bg-slate-50 border border-l-0 border-[#E2E8F0] text-[#64748B] text-xs font-mono font-medium rounded-r-xl flex items-center">
+                        .countercub.com
+                      </span>
+                    </div>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-[#0F172A]">Monthly Price (₹)</label>
-                    <Input
-                      type="number"
-                      min={0}
-                      disabled={!formData.useCustomConfig}
-                      value={formData.monthlyPrice}
-                      onChange={(e) =>
-                        setFormData((prev) => ({ ...prev, monthlyPrice: Number(e.target.value) }))
-                      }
-                      className="h-9 bg-white border-[#E2E8F0] text-xs"
-                    />
+                    <label className="text-xs font-bold text-[#0F172A]">Store Prefix (Employee ID Prefix)</label>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        placeholder="e.g. BFT or CK"
+                        value={formData.storePrefix}
+                        maxLength={5}
+                        onChange={(e) => {
+                          const nextPrefix = normalizeStorePrefix(e.target.value);
+                          const digits = formData.storeId.replace(/^[A-Z0-9]+?(?=\d+$)/, "") || String(Math.floor(10000 + Math.random() * 90000));
+                          setFormData((prev) => ({
+                            ...prev,
+                            storePrefix: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ""),
+                            storeId: `${nextPrefix}${digits.replace(/\D/g, "") || "10001"}`,
+                          }));
+                        }}
+                        className="h-10 bg-white border-[#E2E8F0] text-[#0F172A] focus:border-[#2563EB] font-mono text-xs uppercase font-bold"
+                      />
+                      <span className="text-[11px] text-[#64748B] whitespace-nowrap font-mono bg-slate-50 px-2.5 py-2 rounded-lg border border-[#E2E8F0]">
+                        e.g. {(formData.storePrefix || "ck").toLowerCase()}10121997
+                      </span>
+                    </div>
                   </div>
 
                   <div className="space-y-1.5">
                     <div className="flex items-center justify-between">
-                      <label className="text-xs font-bold text-[#0F172A]">Max Active Products</label>
-                      {formData.useCustomConfig && (
-                        <label className="flex items-center gap-1 text-[10px] font-semibold text-[#2563EB] cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={formData.isUnlimitedProducts}
-                            onChange={(e) =>
-                              setFormData((prev) => ({
-                                ...prev,
-                                isUnlimitedProducts: e.target.checked,
-                              }))
-                            }
-                          />
-                          Unlim.
-                        </label>
-                      )}
+                      <label className="text-xs font-bold text-[#0F172A]">Store Reference ID</label>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const { prefix, storeId } = generateStoreReferenceId(
+                            formData.name || "Store",
+                            formData.storePrefix || undefined
+                          );
+                          setFormData((prev) => ({
+                            ...prev,
+                            storePrefix: prefix,
+                            storeId,
+                          }));
+                        }}
+                        className="text-[11px] font-bold text-[#2563EB] hover:underline flex items-center gap-1 cursor-pointer"
+                      >
+                        <RefreshCw size={11} /> Regenerate ID
+                      </button>
                     </div>
                     <Input
-                      type={formData.isUnlimitedProducts ? "text" : "number"}
-                      min={0}
-                      disabled={!formData.useCustomConfig || formData.isUnlimitedProducts}
-                      value={formData.isUnlimitedProducts ? "Unlimited" : formData.maxActiveProducts}
-                      onChange={(e) =>
-                        setFormData((prev) => ({ ...prev, maxActiveProducts: e.target.value }))
-                      }
-                      className="h-9 bg-white border-[#E2E8F0] text-xs"
-                    />
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-[#0F172A]">Support Level</label>
-                    <select
-                      disabled={!formData.useCustomConfig}
-                      value={formData.supportLevel}
+                      placeholder="e.g. BFT32523 or CK2342"
+                      value={formData.storeId}
                       onChange={(e) =>
                         setFormData((prev) => ({
                           ...prev,
-                          supportLevel: e.target.value === "priority" ? "priority" : "standard",
+                          storeId: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ""),
                         }))
                       }
-                      className="w-full h-9 px-3 bg-white border border-[#E2E8F0] rounded-xl text-xs font-semibold text-[#0F172A]"
-                    >
-                      <option value="standard">Standard</option>
-                      <option value="priority">Priority</option>
-                    </select>
+                      className="h-10 bg-slate-50 border-[#E2E8F0] text-[#0F172A] focus:border-[#2563EB] font-mono text-xs font-extrabold tracking-wider"
+                    />
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-[#0F172A]">Billing Duration</label>
-                    <select
-                      disabled={formData.planType === "free"}
-                      value={formData.planType === "free" ? "none" : formData.billingDurationMonths}
-                      onChange={(e) => {
-                        const months = Number(e.target.value) || 1;
-                        const startDt = formData.startDate ? new Date(formData.startDate) : new Date();
-                        setFormData((prev) => ({
-                          ...prev,
-                          billingDurationMonths: months,
-                          expiryDate: addCalendarMonths(startDt, months).toISOString().slice(0, 10),
-                        }));
-                      }}
-                      className="w-full h-9 px-2.5 bg-white border border-[#E2E8F0] rounded-xl text-xs font-semibold text-[#0F172A]"
-                    >
-                      {formData.planType === "free" ? (
-                        <option value="none">No Expiry (Free)</option>
-                      ) : (
-                        <>
-                          <option value={1}>1 Month</option>
-                          <option value={3}>3 Months</option>
-                          <option value={6}>6 Months</option>
-                          <option value={12}>12 Months</option>
-                        </>
-                      )}
-                    </select>
+                    <label className="text-xs font-bold text-[#0F172A]">Store Admin Email or ID *</label>
+                    <Input
+                      type="text"
+                      placeholder="owner@royalchai.com or ckadmin"
+                      value={formData.adminEmail}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, adminEmail: e.target.value }))}
+                      required
+                      className="h-10 bg-white border-[#E2E8F0] text-[#0F172A] focus:border-[#2563EB] text-xs"
+                    />
+                    {formData.adminEmail.trim().includes("@") && (
+                      <p className="text-[11px] text-[#64748B]">
+                        Welcome &amp; password setup email will be sent to this address.
+                      </p>
+                    )}
                   </div>
 
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-[#0F172A]">Start Date</label>
-                    <Input
-                      type="date"
-                      value={formData.startDate}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        const startDt = val ? new Date(val) : new Date();
-                        setFormData((prev) => ({
-                          ...prev,
-                          startDate: val,
-                          expiryDate:
-                            prev.planType === "free"
+                  {formData.adminEmail.trim().length > 0 && !formData.adminEmail.trim().includes("@") && (
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold text-[#0F172A]">Store Admin Contact Email *</label>
+                      <Input
+                        type="email"
+                        placeholder="owner@royalchai.com"
+                        value={formData.adminContactEmail}
+                        onChange={(e) =>
+                          setFormData((prev) => ({ ...prev, adminContactEmail: e.target.value }))
+                        }
+                        required
+                        className="h-10 bg-white border-[#E2E8F0] text-[#0F172A] focus:border-[#2563EB] text-xs"
+                      />
+                      <p className="text-[11px] text-[#64748B]">
+                        Required for welcome &amp; password setup email when logging in with a custom ID.
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                <div className="space-y-3 pt-1 p-3.5 rounded-2xl border border-[#E2E8F0] bg-slate-50/60">
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <span className="text-xs font-bold text-[#0F172A] uppercase tracking-wider">
+                      Subscription &amp; Plan Configuration
+                    </span>
+                    <label className="flex items-center gap-1.5 text-[11px] font-bold text-[#2563EB] cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={formData.useCustomConfig}
+                        onChange={(e) =>
+                          setFormData((prev) => ({ ...prev, useCustomConfig: e.target.checked }))
+                        }
+                        className="rounded text-[#2563EB]"
+                      />
+                      Custom Plan Configuration
+                    </label>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold text-[#0F172A]">Subscription Tier</label>
+                      <select
+                        value={formData.planType}
+                        onChange={(e) => {
+                          const nextKey = e.target.value;
+                          const matched = subscriptionPlans.find((p) => p.plan_key === nextKey);
+                          const startDt = formData.startDate ? new Date(formData.startDate) : new Date();
+                          const dur = nextKey === "free" ? 0 : (formData.billingDurationMonths || 1);
+                          const nextExp =
+                            nextKey === "free"
                               ? ""
-                              : addCalendarMonths(startDt, prev.billingDurationMonths || 1)
+                              : addCalendarMonths(startDt, dur).toISOString().slice(0, 10);
+                          setFormData((prev) => ({
+                            ...prev,
+                            planType: nextKey,
+                            monthlyPrice: matched ? Number(matched.monthly_price) : prev.monthlyPrice,
+                            maxActiveProducts:
+                              matched && matched.max_active_products !== null
+                                ? String(matched.max_active_products)
+                                : "",
+                            isUnlimitedProducts: matched ? matched.max_active_products === null : false,
+                            maxUsers: matched ? Number(matched.max_employee_seats) : (nextKey === "free" ? 0 : prev.maxUsers),
+                            supportLevel: matched?.support_level || "standard",
+                            expiryDate: nextExp,
+                          }));
+                        }}
+                        className="w-full h-10 px-3 bg-white border border-[#E2E8F0] rounded-xl text-xs font-bold text-[#0F172A] focus:border-[#2563EB] cursor-pointer"
+                      >
+                        {subscriptionPlans
+                          .filter((p) => p.is_active)
+                          .map((p) => (
+                            <option key={p.id} value={p.plan_key}>
+                              {p.plan_name} (₹{p.monthly_price}/mo — {p.max_employee_seats} Seats)
+                            </option>
+                          ))}
+                      </select>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold text-[#0F172A]">Max Staff Seats</label>
+                      <Input
+                        type="number"
+                        min={0}
+                        max={500}
+                        disabled={!formData.useCustomConfig && formData.planType === "free"}
+                        value={formData.maxUsers}
+                        onChange={(e) => setFormData((prev) => ({ ...prev, maxUsers: Number(e.target.value) }))}
+                        className="h-10 bg-white border-[#E2E8F0] text-[#0F172A] focus:border-[#2563EB] text-xs"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold text-[#0F172A]">Currency *</label>
+                      <select
+                        value={formData.currencySymbol}
+                        onChange={(e) => setFormData((prev) => ({ ...prev, currencySymbol: e.target.value }))}
+                        className="w-full h-10 px-3 bg-white border border-[#E2E8F0] rounded-xl text-xs font-bold text-[#0F172A] focus:border-[#2563EB] cursor-pointer"
+                      >
+                        {CURRENCY_OPTIONS.map((c) => (
+                          <option key={`${c.code}-${c.country}`} value={c.symbol}>
+                            {c.country} — {c.code} ({c.symbol})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold text-[#0F172A]">Monthly Price (₹)</label>
+                      <Input
+                        type="number"
+                        min={0}
+                        disabled={!formData.useCustomConfig}
+                        value={formData.monthlyPrice}
+                        onChange={(e) =>
+                          setFormData((prev) => ({ ...prev, monthlyPrice: Number(e.target.value) }))
+                        }
+                        className="h-9 bg-white border-[#E2E8F0] text-xs"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <label className="text-xs font-bold text-[#0F172A]">Max Active Products</label>
+                        {formData.useCustomConfig && (
+                          <label className="flex items-center gap-1 text-[10px] font-semibold text-[#2563EB] cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={formData.isUnlimitedProducts}
+                              onChange={(e) =>
+                                setFormData((prev) => ({
+                                  ...prev,
+                                  isUnlimitedProducts: e.target.checked,
+                                }))
+                              }
+                            />
+                            Unlim.
+                          </label>
+                        )}
+                      </div>
+                      <Input
+                        type={formData.isUnlimitedProducts ? "text" : "number"}
+                        min={0}
+                        disabled={!formData.useCustomConfig || formData.isUnlimitedProducts}
+                        value={formData.isUnlimitedProducts ? "Unlimited" : formData.maxActiveProducts}
+                        onChange={(e) =>
+                          setFormData((prev) => ({ ...prev, maxActiveProducts: e.target.value }))
+                        }
+                        className="h-9 bg-white border-[#E2E8F0] text-xs"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold text-[#0F172A]">Support Level</label>
+                      <select
+                        disabled={!formData.useCustomConfig}
+                        value={formData.supportLevel}
+                        onChange={(e) =>
+                          setFormData((prev) => ({
+                            ...prev,
+                            supportLevel: e.target.value === "priority" ? "priority" : "standard",
+                          }))
+                        }
+                        className="w-full h-9 px-3 bg-white border border-[#E2E8F0] rounded-xl text-xs font-semibold text-[#0F172A]"
+                      >
+                        <option value="standard">Standard</option>
+                        <option value="priority">Priority</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold text-[#0F172A]">Billing Duration</label>
+                      <select
+                        disabled={formData.planType === "free"}
+                        value={formData.planType === "free" ? "none" : formData.billingDurationMonths}
+                        onChange={(e) => {
+                          const months = Number(e.target.value) || 1;
+                          const startDt = formData.startDate ? new Date(formData.startDate) : new Date();
+                          setFormData((prev) => ({
+                            ...prev,
+                            billingDurationMonths: months,
+                            expiryDate: addCalendarMonths(startDt, months).toISOString().slice(0, 10),
+                          }));
+                        }}
+                        className="w-full h-9 px-2.5 bg-white border border-[#E2E8F0] rounded-xl text-xs font-semibold text-[#0F172A]"
+                      >
+                        {formData.planType === "free" ? (
+                          <option value="none">No Expiry (Free)</option>
+                        ) : (
+                          <>
+                            <option value={1}>1 Month</option>
+                            <option value={3}>3 Months</option>
+                            <option value={6}>6 Months</option>
+                            <option value={12}>12 Months</option>
+                          </>
+                        )}
+                      </select>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold text-[#0F172A]">Start Date</label>
+                      <Input
+                        type="date"
+                        value={formData.startDate}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          const startDt = val ? new Date(val) : new Date();
+                          setFormData((prev) => ({
+                            ...prev,
+                            startDate: val,
+                            expiryDate:
+                              prev.planType === "free"
+                                ? ""
+                                : addCalendarMonths(startDt, prev.billingDurationMonths || 1)
                                   .toISOString()
                                   .slice(0, 10),
-                        }));
-                      }}
-                      className="h-9 bg-white border-[#E2E8F0] text-xs"
-                    />
-                  </div>
+                          }));
+                        }}
+                        className="h-9 bg-white border-[#E2E8F0] text-xs"
+                      />
+                    </div>
 
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-[#0F172A]">Expiry Date</label>
-                    <Input
-                      type="date"
-                      disabled={formData.planType === "free" && !formData.useCustomConfig}
-                      value={formData.expiryDate}
-                      onChange={(e) => setFormData((prev) => ({ ...prev, expiryDate: e.target.value }))}
-                      className="h-9 bg-white border-[#E2E8F0] text-xs"
-                    />
-                  </div>
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold text-[#0F172A]">Expiry Date</label>
+                      <Input
+                        type="date"
+                        disabled={formData.planType === "free" && !formData.useCustomConfig}
+                        value={formData.expiryDate}
+                        onChange={(e) => setFormData((prev) => ({ ...prev, expiryDate: e.target.value }))}
+                        className="h-9 bg-white border-[#E2E8F0] text-xs"
+                      />
+                    </div>
 
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-[#0F172A]">Status</label>
-                    <select
-                      value={formData.subscriptionStatus}
-                      onChange={(e) =>
-                        setFormData((prev) => ({
-                          ...prev,
-                          subscriptionStatus: e.target.value === "pending" ? "pending" : "active",
-                        }))
-                      }
-                      className="w-full h-9 px-2.5 bg-white border border-[#E2E8F0] rounded-xl text-xs font-semibold text-[#0F172A]"
-                    >
-                      <option value="active">Active</option>
-                      <option value="pending">Pending</option>
-                    </select>
-                  </div>
-                </div>
-              </div>
-
-              {/* Module Toggles */}
-              <div className="space-y-2 pt-2">
-                <label className="text-xs font-bold text-[#0F172A] uppercase tracking-wider block">
-                  Enabled Feature Modules
-                </label>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto p-1 border border-[#E2E8F0] rounded-2xl bg-slate-50/50">
-                  {MODULE_DEFINITIONS.map((m) => {
-                    const Icon = m.icon;
-                    const isChecked = (m.key === "baker_mode" || m.key === "b2b_bridge")
-                      ? Boolean(formData.modules[m.key])
-                      : formData.modules[m.key] !== false;
-                    return (
-                      <label
-                        key={m.key}
-                        className={cn(
-                          "flex items-center gap-2.5 p-2.5 rounded-xl border transition-all cursor-pointer text-xs",
-                          isChecked
-                            ? "bg-white border-[#2563EB]/40 shadow-xs text-[#0F172A]"
-                            : "bg-slate-100/50 border-transparent text-[#64748B]"
-                        )}
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold text-[#0F172A]">Status</label>
+                      <select
+                        value={formData.subscriptionStatus}
+                        onChange={(e) =>
+                          setFormData((prev) => ({
+                            ...prev,
+                            subscriptionStatus: e.target.value === "pending" ? "pending" : "active",
+                          }))
+                        }
+                        className="w-full h-9 px-2.5 bg-white border border-[#E2E8F0] rounded-xl text-xs font-semibold text-[#0F172A]"
                       >
-                        <input
-                          type="checkbox"
-                          checked={isChecked}
-                          onChange={(e) =>
-                            setFormData((prev) => ({
-                              ...prev,
-                              modules: { ...prev.modules, [m.key]: e.target.checked },
-                            }))
-                          }
-                          className="rounded text-[#2563EB] focus:ring-[#2563EB] w-4 h-4 cursor-pointer"
-                        />
-                        <Icon size={16} className={isChecked ? "text-[#2563EB]" : "text-[#94A3B8]"} />
-                        <span className="font-semibold">{m.label}</span>
-                      </label>
-                    );
-                  })}
+                        <option value="active">Active</option>
+                        <option value="pending">Pending</option>
+                      </select>
+                    </div>
+                  </div>
                 </div>
-              </div>
+
+                {/* Module Toggles */}
+                <div className="space-y-4 pt-2">
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-[#0F172A] uppercase tracking-wider block">
+                      Enabled Feature Modules
+                    </label>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 p-1.5 border border-[#E2E8F0] rounded-2xl bg-slate-50/50">
+                      {CORE_MODULE_DEFINITIONS.map((m) => {
+                        const Icon = m.icon;
+                        const isB2bBridgeDisabled =
+                          m.key === "b2b_bridge" && !Boolean(formData.modules.baker_mode);
+                        const isChecked = isB2bBridgeDisabled
+                          ? false
+                          : m.key === "b2b_bridge"
+                            ? Boolean(formData.modules[m.key])
+                            : formData.modules[m.key] !== false;
+                        return (
+                          <label
+                            key={m.key}
+                            className={cn(
+                              "flex items-center gap-2.5 p-2.5 rounded-xl border transition-all text-xs",
+                              isB2bBridgeDisabled
+                                ? "bg-slate-100/40 border-transparent text-[#94A3B8] opacity-60 cursor-not-allowed"
+                                : isChecked
+                                  ? "bg-white border-[#2563EB]/40 shadow-xs text-[#0F172A] cursor-pointer"
+                                  : "bg-slate-100/50 border-transparent text-[#64748B] cursor-pointer"
+                            )}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              disabled={isB2bBridgeDisabled}
+                              onChange={(e) => {
+                                if (isB2bBridgeDisabled) return;
+                                setFormData((prev) => ({
+                                  ...prev,
+                                  modules: { ...prev.modules, [m.key]: e.target.checked },
+                                }));
+                              }}
+                              className="rounded text-[#2563EB] focus:ring-[#2563EB] w-4 h-4 cursor-pointer disabled:cursor-not-allowed"
+                            />
+                            <Icon size={16} className={isChecked ? "text-[#2563EB]" : "text-[#94A3B8]"} />
+                            <span className="font-semibold">{m.label}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-bold text-[#0F172A] uppercase tracking-wider block">
+                        Industry Mode
+                      </label>
+                      <span className="text-[10px] font-semibold text-[#64748B]">
+                        Select at most one vertical
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 p-1.5 border border-amber-200/80 rounded-2xl bg-amber-50/30">
+                      {SPECIALIZED_MODULE_DEFINITIONS.map((m) => {
+                        const Icon = m.icon;
+                        const isChecked = Boolean(formData.modules[m.key]);
+                        return (
+                          <button
+                            key={m.key}
+                            type="button"
+                            onClick={() =>
+                              setFormData((prev) => {
+                                const nextVal = !Boolean(prev.modules[m.key]);
+                                const updated: Record<string, boolean> = { ...prev.modules };
+                                for (const spec of SPECIALIZED_MODULE_DEFINITIONS) {
+                                  updated[spec.key] = spec.key === m.key ? nextVal : false;
+                                }
+                                if (m.key === "baker_mode") {
+                                  updated.b2b_bridge = nextVal;
+                                }
+                                return { ...prev, modules: updated };
+                              })
+                            }
+                            className={cn(
+                              "flex items-center gap-2.5 p-2.5 rounded-xl border transition-all cursor-pointer text-xs text-left",
+                              isChecked
+                                ? "bg-white border-amber-400 shadow-xs text-[#0F172A]"
+                                : "bg-white/60 border-transparent text-[#64748B]"
+                            )}
+                          >
+                            <span
+                              className={cn(
+                                "w-4 h-4 rounded-full border flex items-center justify-center shrink-0",
+                                isChecked ? "border-amber-600 bg-amber-600" : "border-slate-300 bg-white"
+                              )}
+                            >
+                              {isChecked && <span className="w-1.5 h-1.5 rounded-full bg-white" />}
+                            </span>
+                            <Icon size={16} className={isChecked ? "text-amber-600" : "text-[#94A3B8]"} />
+                            <span className="font-semibold">{m.label}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
               </div>
 
               <div className="flex flex-col-reverse sm:flex-row sm:items-center justify-end gap-2.5 sm:gap-3 px-5 sm:px-8 py-4 border-t border-[#E2E8F0] bg-slate-50/70 shrink-0">
@@ -3103,7 +3174,7 @@ export default function SuperAdminPage() {
       {editingBiz && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto animate-in fade-in duration-200">
           <div className="bg-white rounded-3xl max-w-2xl w-full p-6 sm:p-8 shadow-2xl border border-[#E2E8F0] space-y-6 animate-in zoom-in-95 duration-200 my-8">
-            
+
             {/* Header */}
             <div className="flex items-start justify-between border-b border-[#E2E8F0] pb-4">
               <div className="space-y-1">
@@ -3156,7 +3227,7 @@ export default function SuperAdminPage() {
             </div>
 
             <form onSubmit={handleSaveClientSettings} className="space-y-5">
-              
+
               {/* TAB 1: PROFILE & PLAN */}
               {editTab === "profile" && (
                 <div className="space-y-4 animate-in fade-in duration-200">
@@ -3232,49 +3303,123 @@ export default function SuperAdminPage() {
                   <p className="text-xs text-[#64748B] font-medium">
                     Enabling or disabling a module immediately adds or hides it from the client shop's navigation bar and mobile layout.
                   </p>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-h-64 overflow-y-auto p-1">
-                    {MODULE_DEFINITIONS.map((m) => {
-                      const Icon = m.icon;
-                      const isEnabled = (m.key === "baker_mode" || m.key === "b2b_bridge")
-                        ? Boolean(editFormData.enabled_modules[m.key])
-                        : editFormData.enabled_modules[m.key] !== false;
-                      return (
-                        <div
-                          key={m.key}
-                          onClick={() =>
-                            setEditFormData((prev) => ({
-                              ...prev,
-                              enabled_modules: { ...prev.enabled_modules, [m.key]: !isEnabled },
-                            }))
-                          }
-                          className={cn(
-                            "flex items-start gap-3 p-3 rounded-2xl border transition-all cursor-pointer",
-                            isEnabled
-                              ? "bg-[#EFF6FF] border-[#2563EB]/40 shadow-xs"
-                              : "bg-slate-50 border-[#E2E8F0] text-[#64748B] opacity-60"
-                          )}
-                        >
-                          <div className={cn(
-                            "p-2 rounded-xl shrink-0 mt-0.5",
-                            isEnabled ? "bg-[#2563EB] text-white" : "bg-slate-200 text-slate-500"
-                          )}>
-                            <Icon size={16} />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center justify-between">
-                              <h4 className="font-extrabold text-xs text-[#0F172A]">{m.label}</h4>
-                              <span className={cn(
-                                "text-[10px] font-bold px-1.5 py-0.5 rounded",
-                                isEnabled ? "bg-[#2563EB]/15 text-[#2563EB]" : "bg-slate-200 text-slate-600"
+                  <div className="space-y-4 max-h-72 overflow-y-auto p-1">
+                    <div>
+                      <div className="text-[11px] font-bold text-[#64748B] uppercase tracking-wider mb-2">
+                        Core Store Modules
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                        {CORE_MODULE_DEFINITIONS.map((m) => {
+                          const Icon = m.icon;
+                          const isB2bBridgeDisabled =
+                            m.key === "b2b_bridge" && !Boolean(editFormData.enabled_modules.baker_mode);
+                          const isEnabled = isB2bBridgeDisabled
+                            ? false
+                            : m.key === "b2b_bridge"
+                              ? Boolean(editFormData.enabled_modules[m.key])
+                              : editFormData.enabled_modules[m.key] !== false;
+                          return (
+                            <div
+                              key={m.key}
+                              onClick={() => {
+                                if (isB2bBridgeDisabled) return;
+                                setEditFormData((prev) => ({
+                                  ...prev,
+                                  enabled_modules: { ...prev.enabled_modules, [m.key]: !isEnabled },
+                                }));
+                              }}
+                              className={cn(
+                                "flex items-start gap-3 p-3 rounded-2xl border transition-all",
+                                isB2bBridgeDisabled
+                                  ? "bg-slate-50 border-[#E2E8F0] text-[#94A3B8] opacity-50 cursor-not-allowed"
+                                  : isEnabled
+                                    ? "bg-[#EFF6FF] border-[#2563EB]/40 shadow-xs cursor-pointer"
+                                    : "bg-slate-50 border-[#E2E8F0] text-[#64748B] opacity-60 cursor-pointer"
+                              )}
+                            >
+                              <div className={cn(
+                                "p-2 rounded-xl shrink-0 mt-0.5",
+                                isEnabled ? "bg-[#2563EB] text-white" : "bg-slate-200 text-slate-500"
                               )}>
-                                {isEnabled ? "ON" : "OFF"}
-                              </span>
+                                <Icon size={16} />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center justify-between">
+                                  <h4 className="font-extrabold text-xs text-[#0F172A]">{m.label}</h4>
+                                  <span className={cn(
+                                    "text-[10px] font-bold px-1.5 py-0.5 rounded",
+                                    isEnabled ? "bg-[#2563EB]/15 text-[#2563EB]" : "bg-slate-200 text-slate-600"
+                                  )}>
+                                    {isEnabled ? "ON" : "OFF"}
+                                  </span>
+                                </div>
+                                <p className="text-[11px] text-[#64748B] mt-0.5 truncate">{m.desc}</p>
+                              </div>
                             </div>
-                            <p className="text-[11px] text-[#64748B] mt-0.5 truncate">{m.desc}</p>
-                          </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="text-[11px] font-bold text-amber-700 uppercase tracking-wider">
+                          Industry Mode
                         </div>
-                      );
-                    })}
+                        <span className="text-[10px] font-semibold text-[#64748B]">
+                          Single-select vertical
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                        {SPECIALIZED_MODULE_DEFINITIONS.map((m) => {
+                          const Icon = m.icon;
+                          const isEnabled = Boolean(editFormData.enabled_modules[m.key]);
+                          return (
+                            <div
+                              key={m.key}
+                              onClick={() =>
+                                setEditFormData((prev) => {
+                                  const nextVal = !isEnabled;
+                                  const updated: Record<string, boolean> = { ...prev.enabled_modules };
+                                  for (const spec of SPECIALIZED_MODULE_DEFINITIONS) {
+                                    updated[spec.key] = spec.key === m.key ? nextVal : false;
+                                  }
+                                  if (m.key === "baker_mode") {
+                                    updated.b2b_bridge = nextVal;
+                                  }
+                                  return { ...prev, enabled_modules: updated };
+                                })
+                              }
+                              className={cn(
+                                "flex items-start gap-3 p-3 rounded-2xl border transition-all cursor-pointer",
+                                isEnabled
+                                  ? "bg-amber-50 border-amber-400 shadow-xs"
+                                  : "bg-slate-50 border-[#E2E8F0] text-[#64748B] opacity-60"
+                              )}
+                            >
+                              <div className={cn(
+                                "p-2 rounded-xl shrink-0 mt-0.5",
+                                isEnabled ? "bg-amber-600 text-white" : "bg-slate-200 text-slate-500"
+                              )}>
+                                <Icon size={16} />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center justify-between">
+                                  <h4 className="font-extrabold text-xs text-[#0F172A]">{m.label}</h4>
+                                  <span className={cn(
+                                    "text-[10px] font-bold px-1.5 py-0.5 rounded",
+                                    isEnabled ? "bg-amber-200 text-amber-900" : "bg-slate-200 text-slate-600"
+                                  )}>
+                                    {isEnabled ? "ON" : "OFF"}
+                                  </span>
+                                </div>
+                                <p className="text-[11px] text-[#64748B] mt-0.5 truncate">{m.desc}</p>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
                   </div>
                 </div>
               )}
@@ -3402,7 +3547,7 @@ export default function SuperAdminPage() {
       {deletingBiz && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto animate-in fade-in duration-200">
           <div className="bg-white rounded-3xl max-w-md w-full p-6 sm:p-8 shadow-2xl border border-rose-200 space-y-6 animate-in zoom-in-95 duration-200">
-            
+
             <div className="text-center space-y-3">
               <div className="w-14 h-14 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center mx-auto shadow-inner border border-rose-100">
                 <AlertOctagon size={30} />
@@ -3592,99 +3737,99 @@ export default function SuperAdminPage() {
               </div>
             </form>
           ) : (
-          <form
-            onSubmit={handleConfirmSupportImpersonation}
-            className="bg-white rounded-3xl max-w-md w-full p-6 sm:p-8 shadow-2xl border border-amber-200 space-y-5 animate-in zoom-in-95 duration-200"
-          >
-            <div className="text-center space-y-2">
-              <div className="w-14 h-14 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center mx-auto border border-amber-200">
-                <Shield size={28} />
-              </div>
-              <span className="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider bg-amber-100 text-amber-800 border border-amber-200">
-                Zero-Trust Audited Support Access
-              </span>
-              <h3 className="text-lg font-extrabold text-[#0F172A]">
-                Enter {impersonatingBiz.name}
-              </h3>
-              <p className="text-xs text-[#64748B] font-mono">
-                {impersonatingBiz.slug}.countercub.com
-              </p>
-            </div>
-
-            <div className="p-3.5 rounded-2xl bg-slate-50 border border-[#E2E8F0] text-xs text-[#475569] leading-relaxed">
-              Cross-tenant support access requires an explicit reason, is recorded in the immutable security audit log, displays a visible banner inside the workspace, and automatically expires.
-            </div>
-            {activeSupportSession && activeSupportSession.targetBusinessId !== impersonatingBiz.id && (
-              <div className="p-3 rounded-2xl bg-amber-50 border border-amber-200 text-xs text-amber-800 leading-relaxed flex items-start gap-2">
-                <ShieldAlert className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                <span>
-                  Note: Launching access for this store will automatically end your active session for{" "}
-                  <strong>{activeSupportLabel}</strong>.
+            <form
+              onSubmit={handleConfirmSupportImpersonation}
+              className="bg-white rounded-3xl max-w-md w-full p-6 sm:p-8 shadow-2xl border border-amber-200 space-y-5 animate-in zoom-in-95 duration-200"
+            >
+              <div className="text-center space-y-2">
+                <div className="w-14 h-14 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center mx-auto border border-amber-200">
+                  <Shield size={28} />
+                </div>
+                <span className="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider bg-amber-100 text-amber-800 border border-amber-200">
+                  Zero-Trust Audited Support Access
                 </span>
+                <h3 className="text-lg font-extrabold text-[#0F172A]">
+                  Enter {impersonatingBiz.name}
+                </h3>
+                <p className="text-xs text-[#64748B] font-mono">
+                  {impersonatingBiz.slug}.countercub.com
+                </p>
               </div>
-            )}
 
-            <div className="space-y-1.5">
-              <label className="text-xs font-bold text-[#0F172A] block">
-                Support Access Reason (min 10 chars) *
-              </label>
-              <Input
-                type="text"
-                required
-                minLength={10}
-                maxLength={500}
-                placeholder="e.g., Investigating support ticket #1042 for billing printer setup"
-                value={impersonationReason}
-                onChange={(e) => setImpersonationReason(e.target.value)}
-                className="h-10 text-xs bg-white border-[#E2E8F0] text-[#0F172A]"
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-xs font-bold text-[#0F172A] block">
-                Session Duration *
-              </label>
-              <div className="grid grid-cols-3 gap-2">
-                {[10, 15, 30].map((mins) => (
-                  <button
-                    key={mins}
-                    type="button"
-                    onClick={() => setImpersonationDuration(mins)}
-                    className={cn(
-                      "py-2 rounded-xl text-xs font-bold border transition cursor-pointer",
-                      impersonationDuration === mins
-                        ? "bg-[#2563EB] text-white border-[#2563EB]"
-                        : "bg-slate-50 text-[#0F172A] border-[#E2E8F0] hover:bg-slate-100"
-                    )}
-                  >
-                    {mins} mins
-                  </button>
-                ))}
+              <div className="p-3.5 rounded-2xl bg-slate-50 border border-[#E2E8F0] text-xs text-[#475569] leading-relaxed">
+                Cross-tenant support access requires an explicit reason, is recorded in the immutable security audit log, displays a visible banner inside the workspace, and automatically expires.
               </div>
-            </div>
+              {activeSupportSession && activeSupportSession.targetBusinessId !== impersonatingBiz.id && (
+                <div className="p-3 rounded-2xl bg-amber-50 border border-amber-200 text-xs text-amber-800 leading-relaxed flex items-start gap-2">
+                  <ShieldAlert className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                  <span>
+                    Note: Launching access for this store will automatically end your active session for{" "}
+                    <strong>{activeSupportLabel}</strong>.
+                  </span>
+                </div>
+              )}
 
-            <div className="flex items-center gap-3 pt-2">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setImpersonatingBiz(null)}
-                className="flex-1 rounded-xl border-[#E2E8F0] text-[#0F172A] hover:bg-slate-50 cursor-pointer"
-              >
-                Cancel
-              </Button>
-              <Button
-                type="submit"
-                disabled={isStartingImpersonation || impersonationReason.trim().length < 10}
-                className="flex-1 bg-[#2563EB] hover:bg-[#1D4ED8] text-white font-bold rounded-xl shadow-md cursor-pointer"
-              >
-                {isStartingImpersonation ? (
-                  <Loader2 className="animate-spin" size={16} />
-                ) : (
-                  "Authorize & Launch"
-                )}
-              </Button>
-            </div>
-          </form>
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-[#0F172A] block">
+                  Support Access Reason (min 10 chars) *
+                </label>
+                <Input
+                  type="text"
+                  required
+                  minLength={10}
+                  maxLength={500}
+                  placeholder="e.g., Investigating support ticket #1042 for billing printer setup"
+                  value={impersonationReason}
+                  onChange={(e) => setImpersonationReason(e.target.value)}
+                  className="h-10 text-xs bg-white border-[#E2E8F0] text-[#0F172A]"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-[#0F172A] block">
+                  Session Duration *
+                </label>
+                <div className="grid grid-cols-3 gap-2">
+                  {[10, 15, 30].map((mins) => (
+                    <button
+                      key={mins}
+                      type="button"
+                      onClick={() => setImpersonationDuration(mins)}
+                      className={cn(
+                        "py-2 rounded-xl text-xs font-bold border transition cursor-pointer",
+                        impersonationDuration === mins
+                          ? "bg-[#2563EB] text-white border-[#2563EB]"
+                          : "bg-slate-50 text-[#0F172A] border-[#E2E8F0] hover:bg-slate-100"
+                      )}
+                    >
+                      {mins} mins
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3 pt-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setImpersonatingBiz(null)}
+                  className="flex-1 rounded-xl border-[#E2E8F0] text-[#0F172A] hover:bg-slate-50 cursor-pointer"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={isStartingImpersonation || impersonationReason.trim().length < 10}
+                  className="flex-1 bg-[#2563EB] hover:bg-[#1D4ED8] text-white font-bold rounded-xl shadow-md cursor-pointer"
+                >
+                  {isStartingImpersonation ? (
+                    <Loader2 className="animate-spin" size={16} />
+                  ) : (
+                    "Authorize & Launch"
+                  )}
+                </Button>
+              </div>
+            </form>
           )}
         </div>
       )}

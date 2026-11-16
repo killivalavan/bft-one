@@ -37,13 +37,15 @@ export async function GET(request: NextRequest) {
     }
 
     let homeBusiness: { id: string; name: string; slug: string; is_active: boolean } | null = null;
+    let fullBusiness: Record<string, unknown> | null = null;
     if (profile?.business_id) {
       const { data: biz } = await supa
         .from("businesses")
-        .select("id, name, slug, is_active")
+        .select("*")
         .eq("id", profile.business_id)
         .maybeSingle();
       if (biz) {
+        fullBusiness = biz;
         homeBusiness = {
           id: biz.id,
           name: biz.name,
@@ -61,6 +63,7 @@ export async function GET(request: NextRequest) {
       },
       profile: profile || null,
       homeBusiness,
+      business: fullBusiness,
       flags: {
         isAdmin: Boolean(profile?.is_admin),
         isStockManager: Boolean(profile?.is_stock_manager),
