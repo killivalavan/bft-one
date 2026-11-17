@@ -15,7 +15,6 @@ import {
 import { SeyalLogo } from "@/components/ui/SeyalLogo";
 import {
   PanelLeftClose,
-  PanelLeftOpen,
   LayoutDashboard,
   BarChart3,
   Coffee,
@@ -645,7 +644,74 @@ export function AdminSidebar({
 
   // Baker Mode is active if B2B is enabled AND (either cafe billing is disabled or user switched to baker mode)
   const isBakerActive = isBakerModuleEnabled && (!isBillingEnabled || appMode === "baker");
+  const isDualMode = isBillingEnabled && isBakerModuleEnabled;
   const activeNavItems = isBakerActive ? bakerNavItems : navItems;
+
+  const renderBrandWithModel = () => {
+    const hasModel = isBillingEnabled || isBakerModuleEnabled;
+    return (
+      <Link
+        href={isBakerActive ? "/b2b" : "/"}
+        className="min-w-0 pr-1 flex flex-col justify-center"
+      >
+        <SeyalLogo size={36} showWordmark theme="dark" className="shrink-0" />
+        {hasModel && (
+          <span className="mt-0.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400 leading-none truncate">
+            {isBakerActive ? "B2B Supply" : "Cafe POS"}
+          </span>
+        )}
+      </Link>
+    );
+  };
+
+  const renderModeSwitcher = (variant: "mobile" | "desktop") => {
+    if (!isDualMode) return null;
+
+    const isMobile = variant === "mobile";
+    const btnPadding = isMobile ? "py-1.5 px-2 text-xs gap-1.5" : "py-1 px-1.5 text-[11px] gap-1";
+    const iconSize = isMobile ? 13 : 12;
+    const containerPadding = isMobile ? "p-1" : "p-0.5";
+
+    return (
+      <div
+        className={cn(
+          "bg-slate-950/70 rounded-xl border border-slate-800/80 flex items-center gap-1",
+          containerPadding
+        )}
+      >
+        <button
+          type="button"
+          onClick={() => handleToggleAppMode("cafe")}
+          className={cn(
+            "flex-1 rounded-lg font-bold transition-all flex items-center justify-center cursor-pointer",
+            btnPadding,
+            !isBakerActive
+              ? "bg-blue-600 text-white shadow-xs"
+              : "text-slate-400 hover:text-white"
+          )}
+          title="Cafe POS & Operations Mode"
+        >
+          <Coffee size={iconSize} />
+          <span>Cafe POS</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => handleToggleAppMode("baker")}
+          className={cn(
+            "flex-1 rounded-lg font-bold transition-all flex items-center justify-center cursor-pointer",
+            btnPadding,
+            isBakerActive
+              ? "bg-blue-600 text-white shadow-xs font-extrabold"
+              : "text-slate-400 hover:text-white"
+          )}
+          title="B2B Supply & Wholesale Mode"
+        >
+          <Truck size={iconSize} />
+          <span>B2B Supply</span>
+        </button>
+      </div>
+    );
+  };
 
   const isItemActive = (item: NavItemConfig) => {
     if (item.isLocked) return false;
@@ -707,9 +773,7 @@ export function AdminSidebar({
       >
         {/* Mobile Header: Brand + Store + Close Button */}
         <div className="flex items-center justify-between h-[68px] px-3.5 border-b border-slate-800/80 shrink-0">
-          <Link href="/" className="min-w-0 pr-2">
-            <SeyalLogo size={36} showWordmark theme="dark" />
-          </Link>
+          {renderBrandWithModel()}
 
           <button
             onClick={onCloseMobile}
@@ -740,37 +804,8 @@ export function AdminSidebar({
             </div>
           </div>
 
-          {/* Mode Switch Toggle Pill - Always visible for quick switching or feature discovery */}
-          <div className="p-1 bg-slate-950/70 rounded-xl border border-slate-800/80 flex items-center gap-1">
-            <button
-              type="button"
-              onClick={() => handleToggleAppMode("cafe")}
-              className={cn(
-                "flex-1 py-1.5 px-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer",
-                !isBakerActive
-                  ? "bg-blue-600 text-white shadow-xs"
-                  : "text-slate-400 hover:text-white"
-              )}
-            >
-              <Coffee size={13} />
-              <span>Cafe POS</span>
-              {!isBillingEnabled && <BoldFilledLock size={11} className="text-amber-400 shrink-0" />}
-            </button>
-            <button
-              type="button"
-              onClick={() => handleToggleAppMode("baker")}
-              className={cn(
-                "flex-1 py-1.5 px-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer",
-                isBakerActive
-                  ? "bg-blue-600 text-white shadow-xs font-extrabold"
-                  : "text-slate-400 hover:text-white"
-              )}
-            >
-              <Truck size={13} />
-              <span>B2B Supply</span>
-              {!isBakerModuleEnabled && <BoldFilledLock size={11} className="text-amber-400 shrink-0" />}
-            </button>
-          </div>
+          {/* Mode Switch / Active Workspace Pill */}
+          {renderModeSwitcher("mobile")}
         </div>
 
         {/* Mobile Nav Items */}
@@ -922,21 +957,21 @@ export function AdminSidebar({
         isCollapsed ? "justify-center" : "justify-between"
       )}>
         {isCollapsed ? (
-          /* Collapsed Mode: Toggle Trigger */
+          /* Collapsed Mode: Brand Monogram (CC) acts as Expand Trigger */
           <button
+            type="button"
             onClick={onToggleCollapse}
-            title="Expand Sidebar (Ctrl+B)"
+            title="Expand CounterCub Sidebar (Ctrl+B)"
             aria-label="Expand Sidebar"
-            className="w-10 h-10 rounded-xl bg-slate-800/80 hover:bg-slate-800 flex items-center justify-center text-slate-300 hover:text-white active:scale-95 transition-all border border-slate-700/80"
+            className="w-10 h-10 rounded-xl bg-slate-800/80 hover:bg-slate-800 flex items-center justify-center active:scale-95 transition-all border border-slate-700/80 cursor-pointer text-base font-black tracking-tight leading-none"
           >
-            <PanelLeftOpen size={18} />
+            <span className="text-white">C</span>
+            <span className="text-blue-400">C</span>
           </button>
         ) : (
           /* Expanded Mode: Full Brand + Store + Collapse Button */
           <>
-            <Link href="/" className="min-w-0 pr-1">
-              <SeyalLogo size={36} showWordmark theme="dark" />
-            </Link>
+            {renderBrandWithModel()}
 
             <button
               onClick={onToggleCollapse}
@@ -972,39 +1007,8 @@ export function AdminSidebar({
             </div>
           </div>
 
-          {/* Mode Switch Toggle Pill for Desktop - Always visible for quick switching or feature discovery */}
-          <div className="p-0.5 bg-slate-950/70 rounded-xl border border-slate-800/80 flex items-center gap-1">
-            <button
-              type="button"
-              onClick={() => handleToggleAppMode("cafe")}
-              className={cn(
-                "flex-1 py-1 px-1.5 rounded-lg text-[11px] font-bold transition-all flex items-center justify-center gap-1 cursor-pointer",
-                !isBakerActive
-                  ? "bg-blue-600 text-white shadow-xs"
-                  : "text-slate-400 hover:text-white"
-              )}
-              title={isBillingEnabled ? "Cafe POS & Operations Mode" : "Cafe POS is locked (disabled for this store)"}
-            >
-              <Coffee size={12} />
-              <span>Cafe POS</span>
-              {!isBillingEnabled && <BoldFilledLock size={10} className="text-amber-400 shrink-0" />}
-            </button>
-            <button
-              type="button"
-              onClick={() => handleToggleAppMode("baker")}
-              className={cn(
-                "flex-1 py-1 px-1.5 rounded-lg text-[11px] font-bold transition-all flex items-center justify-center gap-1 cursor-pointer",
-                isBakerActive
-                  ? "bg-blue-600 text-white shadow-xs font-extrabold"
-                  : "text-slate-400 hover:text-white"
-              )}
-              title={isBakerModuleEnabled ? "B2B Supply & Wholesale Mode" : "B2B Supply is locked (disabled for this store)"}
-            >
-              <Truck size={12} />
-              <span>B2B Supply</span>
-              {!isBakerModuleEnabled && <BoldFilledLock size={10} className="text-amber-400 shrink-0" />}
-            </button>
-          </div>
+          {/* Mode Switch / Active Workspace Pill for Desktop */}
+          {renderModeSwitcher("desktop")}
         </div>
       ) : (
         <div className="py-1.5 flex flex-col items-center gap-1.5 shrink-0">
@@ -1020,42 +1024,22 @@ export function AdminSidebar({
             </div>
           </div>
 
-          {/* Collapsed Mode Quick Switcher */}
-          <button
-            type="button"
-            onClick={() => handleToggleAppMode(isBakerActive ? "cafe" : "baker")}
-            className="w-8 h-8 rounded-lg border flex items-center justify-center transition-all cursor-pointer relative group bg-slate-900 text-slate-400 border-slate-800 hover:text-white hover:border-slate-700"
-            title={
-              isBakerActive
-                ? isBillingEnabled
-                  ? "Switch to Cafe POS"
-                  : "Cafe POS is locked"
-                : isBakerModuleEnabled
-                ? "Switch to B2B Supply"
-                : "B2B Supply is locked"
-            }
-          >
-            {isBakerActive ? <Coffee size={14} /> : <Truck size={14} />}
-            {((isBakerActive && !isBillingEnabled) || (!isBakerActive && !isBakerModuleEnabled)) && (
-              <span className="w-2.5 h-2.5 rounded-full bg-amber-500/20 border border-amber-400/40 flex items-center justify-center absolute -top-1 -right-1 text-amber-300">
-                <BoldFilledLock size={7} />
-              </span>
-            )}
-            <div className="absolute left-full top-1/2 -translate-y-1/2 ml-2.5 px-2.5 py-1.5 bg-slate-900 text-white text-xs rounded-lg shadow-xl border border-slate-700 whitespace-nowrap z-50 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity">
-              <span className="font-bold flex items-center gap-1.5">
-                {((isBakerActive && !isBillingEnabled) || (!isBakerActive && !isBakerModuleEnabled)) && (
-                  <BoldFilledLock size={11} className="text-amber-400" />
-                )}
-                {isBakerActive
-                  ? isBillingEnabled
-                    ? "Switch to Cafe POS"
-                    : "Cafe POS Locked"
-                  : isBakerModuleEnabled
-                  ? "Switch to B2B Supply"
-                  : "B2B Supply Locked"}
-              </span>
-            </div>
-          </button>
+          {/* Collapsed Mode Quick Switcher (shown only when both Cafe POS & B2B Supply are enabled) */}
+          {isDualMode && (
+            <button
+              type="button"
+              onClick={() => handleToggleAppMode(isBakerActive ? "cafe" : "baker")}
+              className="w-8 h-8 rounded-lg border flex items-center justify-center transition-all cursor-pointer relative group bg-slate-900 text-slate-400 border-slate-800 hover:text-white hover:border-slate-700"
+              title={isBakerActive ? "Switch to Cafe POS" : "Switch to B2B Supply"}
+            >
+              {isBakerActive ? <Coffee size={14} /> : <Truck size={14} />}
+              <div className="absolute left-full top-1/2 -translate-y-1/2 ml-2.5 px-2.5 py-1.5 bg-slate-900 text-white text-xs rounded-lg shadow-xl border border-slate-700 whitespace-nowrap z-50 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity">
+                <span className="font-bold">
+                  {isBakerActive ? "Switch to Cafe POS" : "Switch to B2B Supply"}
+                </span>
+              </div>
+            </button>
+          )}
         </div>
       )}
 
