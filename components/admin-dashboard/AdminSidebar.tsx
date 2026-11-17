@@ -792,14 +792,11 @@ export function AdminSidebar({
               <Store size={15} />
             </div>
             <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />
-                <p className="text-xs font-bold text-white truncate leading-tight" title={storeName}>
-                  {storeName}
-                </p>
-              </div>
+              <p className="text-xs font-bold text-white truncate leading-tight" title={storeName}>
+                {storeName}
+              </p>
               <span className="text-[9.5px] font-semibold text-slate-400 uppercase tracking-wider block mt-0.5">
-                {storeReferenceId ? `ID: ${storeReferenceId}` : (isBakerActive ? "B2B Supply & Wholesale" : "Connected Store")}
+                {storeReferenceId ? `${storeReferenceId}` : (isBakerActive ? "B2B Supply & Wholesale" : "Connected Store")}
               </span>
             </div>
           </div>
@@ -993,15 +990,12 @@ export function AdminSidebar({
               <Store size={13} />
             </div>
             <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />
-                <p className="text-xs font-bold text-white truncate leading-tight" title={storeName}>
-                  {storeName}
-                </p>
-              </div>
+              <p className="text-xs font-bold text-white truncate leading-tight" title={storeName}>
+                {storeName}
+              </p>
               {storeReferenceId && (
                 <span className="text-[10px] font-mono font-bold text-blue-300/90 tracking-wider block mt-0.5 truncate">
-                  ID: {storeReferenceId}
+                  {storeReferenceId}
                 </span>
               )}
             </div>
@@ -1017,10 +1011,9 @@ export function AdminSidebar({
             title={`Store: ${storeName}`}
           >
             <Store size={14} />
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 absolute top-1 right-1" />
             <div className="absolute left-full top-1/2 -translate-y-1/2 ml-2.5 px-2.5 py-1.5 bg-slate-900 text-white text-xs rounded-lg shadow-xl border border-slate-700 whitespace-nowrap z-50 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity">
               <span className="font-bold">{storeName}</span>
-              <span className="text-[10px] text-slate-400 block">{storeReferenceId ? `ID: ${storeReferenceId}` : (isBakerActive ? "B2B Supply & Wholesale" : "Connected Store")}</span>
+              <span className="text-[10px] text-slate-400 block">{storeReferenceId ? `${storeReferenceId}` : (isBakerActive ? "B2B Supply & Wholesale" : "Connected Store")}</span>
             </div>
           </div>
 
