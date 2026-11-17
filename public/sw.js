@@ -3,11 +3,14 @@
  * Zero-Trust Multi-Tenant App Shell Caching & Offline Fallback Handler (SEC-18)
  */
 
-const CACHE_NAME = "countercub-pos-v3";
+const CACHE_NAME = "countercub-pos-v4";
 
 // Never pre-cache "/" or authenticated HTML documents across tenants
 const STATIC_ASSETS = [
   "/favicon.ico",
+  "/apple-touch-icon.png",
+  "/icon-192x192.png",
+  "/icon-512x512.png",
   "/dummy-logo.svg",
   "/manifest.json",
 ];
