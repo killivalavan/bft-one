@@ -3,7 +3,7 @@
  * Zero-Trust Multi-Tenant App Shell Caching & Offline Fallback Handler (SEC-18)
  */
 
-const CACHE_NAME = "countercub-pos-v4";
+const CACHE_NAME = "countercub-pos-v3";
 
 // Never pre-cache "/" or authenticated HTML documents across tenants
 const STATIC_ASSETS = [
