@@ -2,14 +2,18 @@
 
 import React from "react";
 import { Building2, Loader2 } from "lucide-react";
+import { cn } from "@/lib/utils/cn";
 
 /**
  * 1. Clean & Simple Initial Load Shimmer matching the B2B Dashboard Theme
  */
-export function B2BCitySkeleton() {
+export function B2BCitySkeleton({ className }: { className?: string } = {}) {
   return (
     <div
-      className="relative w-full h-[560px] sm:h-[620px] rounded-3xl border border-slate-200/90 bg-slate-100/70 overflow-hidden shadow-xs flex flex-col justify-between p-3 sm:p-4 select-none animate-in fade-in duration-150"
+      className={cn(
+        "relative w-full h-[560px] sm:h-[620px] rounded-3xl border border-slate-200/90 bg-slate-100 overflow-hidden shadow-xs flex flex-col justify-between p-3 sm:p-4 select-none animate-in fade-in duration-150",
+        className
+      )}
       aria-label="Loading 3D View..."
       role="status"
     >

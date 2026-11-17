@@ -116,53 +116,16 @@ export default function HomeBakerDashboardPage() {
 
   // Active Reporting Period Filter
   const [reportingPeriod, setReportingPeriod] = useState<ReportingPeriod>("this_month");
-  // 3D View: Visible by default on refresh/initial visit.
-  // When user clicks "Hide 3D City", hidden state is remembered across in-app page jumps (e.g. /b2b -> /b2b/dispatch -> /b2b) via sessionStorage.
-  const [show3DCity, setShow3DCity] = useState<boolean>(() => {
-    if (typeof window !== "undefined") {
-      try {
-        return sessionStorage.getItem("bftone_b2b_hide_3d_city") !== "true";
-      } catch {}
-    }
-    return true;
-  });
-  const [hasActivated3D, setHasActivated3D] = useState<boolean>(() => {
-    if (typeof window !== "undefined") {
-      try {
-        return sessionStorage.getItem("bftone_b2b_hide_3d_city") !== "true";
-      } catch {}
-    }
-    return true;
-  });
-
-  // On page refresh / hard reload / new window load, clear the sessionStorage flag so 3D loads by default
-  useEffect(() => {
-    const handleBeforeUnload = () => {
-      try {
-        sessionStorage.removeItem("bftone_b2b_hide_3d_city");
-      } catch {}
-    };
-    window.addEventListener("beforeunload", handleBeforeUnload);
-    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
-  }, []);
+  // 3D View: Hidden by default on page load; dynamically loaded & rendered only when user clicks "3D View".
+  const [show3DCity, setShow3DCity] = useState<boolean>(false);
+  const [hasActivated3D, setHasActivated3D] = useState<boolean>(false);
 
   const handleToggle3D = () => {
-    setShow3DCity((prev) => {
-      const next = !prev;
-      if (next && !hasActivated3D) {
-        setHasActivated3D(true);
-      }
-      if (typeof window !== "undefined") {
-        try {
-          if (!next) {
-            sessionStorage.setItem("bftone_b2b_hide_3d_city", "true");
-          } else {
-            sessionStorage.removeItem("bftone_b2b_hide_3d_city");
-          }
-        } catch {}
-      }
-      return next;
-    });
+    const next = !show3DCity;
+    setShow3DCity(next);
+    if (next && !hasActivated3D) {
+      setHasActivated3D(true);
+    }
   };
 
   // Visual Intelligence Hub State

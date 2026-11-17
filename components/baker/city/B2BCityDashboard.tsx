@@ -341,7 +341,7 @@ export function B2BCityDashboard({
       {/* 1. Initial Load: Rich Isometric 3D View Skeleton */}
       {!isSceneReady && (
         <div className="absolute inset-0 z-50 transition-opacity duration-300">
-          <B2BCitySkeleton />
+          <B2BCitySkeleton className="h-full border-0" />
         </div>
       )}
 
@@ -376,7 +376,12 @@ export function B2BCityDashboard({
       {/* ================================================================= */}
       {/* 2. TOP FLOATING HUD: LIVE SYNC STATUS, PERIOD & SCENE CONTROLS    */}
       {/* ================================================================= */}
-      <div className="pointer-events-none absolute top-3 left-3 right-3 z-30 flex items-center justify-between gap-2 overflow-x-auto no-scrollbar [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden flex-nowrap pb-0.5">
+      <div
+        className={cn(
+          "pointer-events-none absolute top-3 left-3 right-3 z-30 flex items-center justify-between gap-2 overflow-x-auto no-scrollbar [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden flex-nowrap pb-0.5 transition-opacity duration-200",
+          !isSceneReady && "opacity-0 invisible"
+        )}
+      >
         {/* Left HUD Pill: Title + LIVE Sync Status */}
         <div className="pointer-events-auto inline-flex items-center flex-nowrap gap-2 sm:gap-2.5 px-3 py-1.5 rounded-xl bg-white/90 backdrop-blur-md border border-slate-200/90 shadow-sm shrink-0 whitespace-nowrap">
           <div className="flex items-center gap-1.5 sm:gap-2">
@@ -1184,7 +1189,12 @@ export function B2BCityDashboard({
       {/* ================================================================= */}
       {/* 4. BOTTOM LEGEND & QUICK INTERACTION BAR                          */}
       {/* ================================================================= */}
-      <div className="pointer-events-none absolute bottom-3 left-3 right-3 z-20 flex flex-wrap items-center justify-between gap-2">
+      <div
+        className={cn(
+          "pointer-events-none absolute bottom-3 left-3 right-3 z-20 flex flex-wrap items-center justify-between gap-2 transition-opacity duration-200",
+          !isSceneReady && "opacity-0 invisible"
+        )}
+      >
         <div className="pointer-events-auto inline-flex flex-wrap items-center gap-2 px-3 py-1.5 rounded-2xl bg-white/85 backdrop-blur-md border border-slate-200/80 shadow-xs text-[11px] font-bold text-slate-700">
           <button
             type="button"

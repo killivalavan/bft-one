@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useRef, useState, useCallback } from "react";
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState, useCallback } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
@@ -20,16 +20,24 @@ export interface SelectedCityObject {
   screenY?: number;
 }
 
-interface FloatingLabelItem {
+interface FloatingLabelMeta {
   id: string;
   kind: CityObjectKind;
   label: string;
   subLabel?: string;
-  topProduct?: string;
   healthStatus?: "healthy" | "warning" | "urgent" | "new";
-  x: number;
-  y: number;
-  visible: boolean;
+}
+
+interface WorkerRigRefs {
+  lLeg?: THREE.Object3D;
+  rLeg?: THREE.Object3D;
+  lKnee?: THREE.Object3D;
+  rKnee?: THREE.Object3D;
+  lArm?: THREE.Object3D;
+  rArm?: THREE.Object3D;
+  headGrp?: THREE.Object3D;
+  heldBite?: THREE.Object3D;
+  carriedCrate?: THREE.Object3D;
 }
 
 interface B2BCityCanvasProps {
@@ -46,9 +54,178 @@ interface B2BCityCanvasProps {
   onLoaded?: () => void;
 }
 
+// ============================================================================
+// MODULE-LEVEL GEOMETRY, MATERIAL & TEXTURE CACHES (shared across stores/mounts)
+// ============================================================================
+const roundedBoxGeoCache = new Map<string, THREE.BufferGeometry>();
+const boxGeoCache = new Map<string, THREE.BufferGeometry>();
+const cylinderGeoCache = new Map<string, THREE.BufferGeometry>();
+const sphereGeoCache = new Map<string, THREE.BufferGeometry>();
+const coneGeoCache = new Map<string, THREE.BufferGeometry>();
+const torusGeoCache = new Map<string, THREE.BufferGeometry>();
+const icosahedronGeoCache = new Map<string, THREE.BufferGeometry>();
+const octahedronGeoCache = new Map<string, THREE.BufferGeometry>();
+const stdMatCache = new Map<string, THREE.MeshStandardMaterial>();
+const basicMatCache = new Map<string, THREE.MeshBasicMaterial>();
+const grassTextureCache = new Map<boolean, THREE.CanvasTexture>();
+const turfMatCache = new Map<boolean, THREE.MeshStandardMaterial>();
+const foodBubbleSpriteMatCache = new Map<string, THREE.SpriteMaterial>();
+let circleParticleTexCache: THREE.CanvasTexture | null = null;
+
+// Invisible hit-box proxy material: skipped by WebGLRenderer (0 draw calls) but intersected by Raycaster
+const HIT_PROXY_MAT = new THREE.MeshBasicMaterial({ visible: false });
+
+// Shared candle material updated once per frame in animate()
+const SHARED_CANDLE_MAT = new THREE.MeshStandardMaterial({
+  color: 0xfef08a,
+  emissive: 0xf59e0b,
+  emissiveIntensity: 0.2,
+  roughness: 0.3,
+});
+
+const Y_AXIS = new THREE.Vector3(0, 1, 0);
+const LABEL_INIT_STYLE: React.CSSProperties = {
+  transform: "translate3d(-9999px, -9999px, 0)",
+};
+
+function getCachedGeo(
+  cache: Map<string, THREE.BufferGeometry>,
+  key: string,
+  factory: () => THREE.BufferGeometry
+): THREE.BufferGeometry {
+  let geo = cache.get(key);
+  if (!geo) {
+    geo = factory();
+    cache.set(key, geo);
+  }
+  return geo;
+}
+
+function getBoxGeo(w: number, h: number, d: number): THREE.BufferGeometry {
+  return getCachedGeo(boxGeoCache, `${w}|${h}|${d}`, () => new THREE.BoxGeometry(w, h, d));
+}
+
+function getCylinderGeo(
+  rt: number,
+  rb: number,
+  h: number,
+  radialSegs: number,
+  heightSegs: number = 1,
+  openEnded: boolean = false
+): THREE.BufferGeometry {
+  return getCachedGeo(
+    cylinderGeoCache,
+    `${rt}|${rb}|${h}|${radialSegs}|${heightSegs}|${openEnded ? 1 : 0}`,
+    () => new THREE.CylinderGeometry(rt, rb, h, radialSegs, heightSegs, openEnded)
+  );
+}
+
+function getSphereGeo(radius: number, wSegs: number, hSegs: number): THREE.BufferGeometry {
+  return getCachedGeo(
+    sphereGeoCache,
+    `${radius}|${wSegs}|${hSegs}`,
+    () => new THREE.SphereGeometry(radius, wSegs, hSegs)
+  );
+}
+
+function getConeGeo(
+  radius: number,
+  height: number,
+  radialSegs: number,
+  heightSegs: number = 1,
+  openEnded: boolean = false
+): THREE.BufferGeometry {
+  return getCachedGeo(
+    coneGeoCache,
+    `${radius}|${height}|${radialSegs}|${heightSegs}|${openEnded ? 1 : 0}`,
+    () => new THREE.ConeGeometry(radius, height, radialSegs, heightSegs, openEnded)
+  );
+}
+
+function getTorusGeo(
+  radius: number,
+  tube: number,
+  radialSegs: number,
+  tubularSegs: number,
+  arc: number = Math.PI * 2
+): THREE.BufferGeometry {
+  return getCachedGeo(
+    torusGeoCache,
+    `${radius}|${tube}|${radialSegs}|${tubularSegs}|${arc}`,
+    () => new THREE.TorusGeometry(radius, tube, radialSegs, tubularSegs, arc)
+  );
+}
+
+function getIcosahedronGeo(radius: number, detail: number = 0): THREE.BufferGeometry {
+  return getCachedGeo(
+    icosahedronGeoCache,
+    `${radius}|${detail}`,
+    () => new THREE.IcosahedronGeometry(radius, detail)
+  );
+}
+
+function getOctahedronGeo(radius: number, detail: number = 0): THREE.BufferGeometry {
+  return getCachedGeo(
+    octahedronGeoCache,
+    `${radius}|${detail}`,
+    () => new THREE.OctahedronGeometry(radius, detail)
+  );
+}
+
+function getSharedStdMat(
+  color: number,
+  roughness: number = 0.5,
+  metalness: number = 0,
+  extra?: {
+    emissive?: number;
+    emissiveIntensity?: number;
+    side?: THREE.Side;
+    transparent?: boolean;
+    opacity?: number;
+  }
+): THREE.MeshStandardMaterial {
+  const key = `${color}|${roughness}|${metalness}|${extra?.emissive ?? ""}|${
+    extra?.emissiveIntensity ?? ""
+  }|${extra?.side ?? THREE.FrontSide}|${extra?.transparent ? 1 : 0}|${extra?.opacity ?? 1}`;
+  let mat = stdMatCache.get(key);
+  if (!mat) {
+    mat = new THREE.MeshStandardMaterial({
+      color,
+      roughness,
+      metalness,
+      ...(extra?.emissive !== undefined ? { emissive: extra.emissive } : {}),
+      ...(extra?.emissiveIntensity !== undefined
+        ? { emissiveIntensity: extra.emissiveIntensity }
+        : {}),
+      ...(extra?.side !== undefined ? { side: extra.side } : {}),
+      ...(extra?.transparent !== undefined ? { transparent: extra.transparent } : {}),
+      ...(extra?.opacity !== undefined ? { opacity: extra.opacity } : {}),
+    });
+    stdMatCache.set(key, mat);
+  }
+  return mat;
+}
+
+function getSharedBasicMat(
+  color: number,
+  side?: THREE.Side
+): THREE.MeshBasicMaterial {
+  const key = `${color}|${side ?? THREE.FrontSide}`;
+  let mat = basicMatCache.get(key);
+  if (!mat) {
+    mat = new THREE.MeshBasicMaterial({
+      color,
+      ...(side !== undefined ? { side } : {}),
+    });
+    basicMatCache.set(key, mat);
+  }
+  return mat;
+}
+
 /**
  * Creates a smooth chamfered/rounded 3D box geometry centered at (0, 0, 0)
  * so every building, roof, awning, and vehicle looks like a crafted diorama model.
+ * Cached by dimensions to eliminate redundant ExtrudeGeometry tessellation across stores.
  */
 function createRoundedBoxGeo(
   width: number,
@@ -57,34 +234,37 @@ function createRoundedBoxGeo(
   radius: number = 0.08,
   smoothness: number = 3
 ): THREE.BufferGeometry {
-  const r = Math.min(radius, width * 0.25, height * 0.25, depth * 0.25);
-  const w = width - r * 2;
-  const h = height - r * 2;
-  const shape = new THREE.Shape();
-  const x = -w / 2;
-  const y = -h / 2;
+  const key = `${width.toFixed(4)}|${height.toFixed(4)}|${depth.toFixed(4)}|${radius.toFixed(4)}|${smoothness}`;
+  return getCachedGeo(roundedBoxGeoCache, key, () => {
+    const r = Math.min(radius, width * 0.25, height * 0.25, depth * 0.25);
+    const w = width - r * 2;
+    const h = height - r * 2;
+    const shape = new THREE.Shape();
+    const x = -w / 2;
+    const y = -h / 2;
 
-  shape.moveTo(x, y + r);
-  shape.lineTo(x, y + h - r);
-  shape.quadraticCurveTo(x, y + h, x + r, y + h);
-  shape.lineTo(x + w - r, y + h);
-  shape.quadraticCurveTo(x + w, y + h, x + w, y + h - r);
-  shape.lineTo(x + w, y + r);
-  shape.quadraticCurveTo(x + w, y, x + w - r, y);
-  shape.lineTo(x + r, y);
-  shape.quadraticCurveTo(x, y, x, y + r);
+    shape.moveTo(x, y + r);
+    shape.lineTo(x, y + h - r);
+    shape.quadraticCurveTo(x, y + h, x + r, y + h);
+    shape.lineTo(x + w - r, y + h);
+    shape.quadraticCurveTo(x + w, y + h, x + w, y + h - r);
+    shape.lineTo(x + w, y + r);
+    shape.quadraticCurveTo(x + w, y, x + w - r, y);
+    shape.lineTo(x + r, y);
+    shape.quadraticCurveTo(x, y, x, y + r);
 
-  const geo = new THREE.ExtrudeGeometry(shape, {
-    depth: Math.max(0.01, depth - r * 2),
-    bevelEnabled: true,
-    bevelSegments: smoothness,
-    steps: 1,
-    bevelSize: r,
-    bevelThickness: r,
-    curveSegments: smoothness,
+    const geo = new THREE.ExtrudeGeometry(shape, {
+      depth: Math.max(0.01, depth - r * 2),
+      bevelEnabled: true,
+      bevelSegments: smoothness,
+      steps: 1,
+      bevelSize: r,
+      bevelThickness: r,
+      curveSegments: smoothness,
+    });
+    geo.center();
+    return geo;
   });
-  geo.center();
-  return geo;
 }
 
 /**
@@ -98,14 +278,8 @@ function createStripedAwning(
 ): THREE.Group {
   const awningGroup = new THREE.Group();
   const stripeW = width / stripeCount;
-  const mainMat = new THREE.MeshStandardMaterial({
-    color: stripeColorHex,
-    roughness: 0.4,
-  });
-  const altMat = new THREE.MeshStandardMaterial({
-    color: 0xfffbeb,
-    roughness: 0.45,
-  });
+  const mainMat = getSharedStdMat(stripeColorHex, 0.4);
+  const altMat = getSharedStdMat(0xfffbeb, 0.45);
 
   for (let i = 0; i < stripeCount; i++) {
     const isEven = i % 2 === 0;
@@ -114,7 +288,6 @@ function createStripedAwning(
       isEven ? mainMat : altMat
     );
     sMesh.position.x = -width / 2 + stripeW / 2 + i * stripeW;
-    sMesh.castShadow = true;
     awningGroup.add(sMesh);
 
     // Front valence flap
@@ -183,100 +356,107 @@ function drawRoundRect(
  * product name (auto-shrinks to fit before truncating).
  */
 function createFoodBubbleSprite(productName: string): THREE.Sprite {
-  const W = 640;
-  const H = 192;
-  const canvas = document.createElement("canvas");
-  canvas.width = W;
-  canvas.height = H;
-  const ctx = canvas.getContext("2d");
-  if (ctx) {
-    ctx.clearRect(0, 0, W, H);
+  const normalizedName =
+    productName && productName !== "Assorted Items" ? productName : "Signature Bake";
+  let mat = foodBubbleSpriteMatCache.get(normalizedName);
 
-    const cardX = 18;
-    const cardY = 14;
-    const cardW = W - 36;
-    const cardH = 132;
-    const fontStack = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
+  if (!mat) {
+    const W = 640;
+    const H = 192;
+    const canvas = document.createElement("canvas");
+    canvas.width = W;
+    canvas.height = H;
+    const ctx = canvas.getContext("2d");
+    if (ctx) {
+      ctx.clearRect(0, 0, W, H);
 
-    // Soft drop shadow + cream gradient card
-    ctx.save();
-    ctx.shadowColor = "rgba(15, 23, 42, 0.35)";
-    ctx.shadowBlur = 14;
-    ctx.shadowOffsetY = 4;
-    const cardGrad = ctx.createLinearGradient(0, cardY, 0, cardY + cardH);
-    cardGrad.addColorStop(0, "#ffffff");
-    cardGrad.addColorStop(1, "#fff7e6");
-    ctx.fillStyle = cardGrad;
-    drawRoundRect(ctx, cardX, cardY, cardW, cardH, 40);
-    ctx.fill();
+      const cardX = 18;
+      const cardY = 14;
+      const cardW = W - 36;
+      const cardH = 132;
+      const fontStack = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
 
-    // Pointer tail (same fill, drawn inside shadow pass)
-    ctx.beginPath();
-    ctx.moveTo(W / 2 - 18, cardY + cardH - 1);
-    ctx.lineTo(W / 2, cardY + cardH + 22);
-    ctx.lineTo(W / 2 + 18, cardY + cardH - 1);
-    ctx.closePath();
-    ctx.fillStyle = "#fff7e6";
-    ctx.fill();
-    ctx.restore();
+      // Soft drop shadow + cream gradient card
+      ctx.save();
+      ctx.shadowColor = "rgba(15, 23, 42, 0.35)";
+      ctx.shadowBlur = 14;
+      ctx.shadowOffsetY = 4;
+      const cardGrad = ctx.createLinearGradient(0, cardY, 0, cardY + cardH);
+      cardGrad.addColorStop(0, "#ffffff");
+      cardGrad.addColorStop(1, "#fff7e6");
+      ctx.fillStyle = cardGrad;
+      drawRoundRect(ctx, cardX, cardY, cardW, cardH, 40);
+      ctx.fill();
 
-    // Amber accent border
-    ctx.strokeStyle = "#f59e0b";
-    ctx.lineWidth = 4;
-    drawRoundRect(ctx, cardX, cardY, cardW, cardH, 40);
-    ctx.stroke();
+      // Pointer tail (same fill, drawn inside shadow pass)
+      ctx.beginPath();
+      ctx.moveTo(W / 2 - 18, cardY + cardH - 1);
+      ctx.lineTo(W / 2, cardY + cardH + 22);
+      ctx.lineTo(W / 2 + 18, cardY + cardH - 1);
+      ctx.closePath();
+      ctx.fillStyle = "#fff7e6";
+      ctx.fill();
+      ctx.restore();
 
-    // Emoji badge circle
-    const badgeCx = cardX + 70;
-    const badgeCy = cardY + cardH / 2;
-    const badgeGrad = ctx.createLinearGradient(0, badgeCy - 46, 0, badgeCy + 46);
-    badgeGrad.addColorStop(0, "#fde68a");
-    badgeGrad.addColorStop(1, "#f59e0b");
-    ctx.beginPath();
-    ctx.arc(badgeCx, badgeCy, 46, 0, Math.PI * 2);
-    ctx.fillStyle = badgeGrad;
-    ctx.fill();
+      // Amber accent border
+      ctx.strokeStyle = "#f59e0b";
+      ctx.lineWidth = 4;
+      drawRoundRect(ctx, cardX, cardY, cardW, cardH, 40);
+      ctx.stroke();
 
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.font = `52px "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif`;
-    ctx.fillText(getFoodEmoji(productName), badgeCx, badgeCy + 3);
+      // Emoji badge circle
+      const badgeCx = cardX + 70;
+      const badgeCy = cardY + cardH / 2;
+      const badgeGrad = ctx.createLinearGradient(0, badgeCy - 46, 0, badgeCy + 46);
+      badgeGrad.addColorStop(0, "#fde68a");
+      badgeGrad.addColorStop(1, "#f59e0b");
+      ctx.beginPath();
+      ctx.arc(badgeCx, badgeCy, 46, 0, Math.PI * 2);
+      ctx.fillStyle = badgeGrad;
+      ctx.fill();
 
-    // Caption
-    const textX = badgeCx + 70;
-    const maxTextW = cardX + cardW - 36 - textX;
-    ctx.textAlign = "left";
-    ctx.fillStyle = "#b45309";
-    ctx.font = `800 22px ${fontStack}`;
-    ctx.fillText("★  TOP SELLER", textX, cardY + 42);
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.font = `52px "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif`;
+      ctx.fillText(getFoodEmoji(productName), badgeCx, badgeCy + 3);
 
-    // Product name: shrink to fit, then ellipsis as last resort
-    let name =
-      productName && productName !== "Assorted Items" ? productName : "Signature Bake";
-    let fontSize = 40;
-    ctx.font = `800 ${fontSize}px ${fontStack}`;
-    while (ctx.measureText(name).width > maxTextW && fontSize > 28) {
-      fontSize -= 2;
+      // Caption
+      const textX = badgeCx + 70;
+      const maxTextW = cardX + cardW - 36 - textX;
+      ctx.textAlign = "left";
+      ctx.fillStyle = "#b45309";
+      ctx.font = `800 22px ${fontStack}`;
+      ctx.fillText("★  TOP SELLER", textX, cardY + 42);
+
+      // Product name: shrink to fit, then ellipsis as last resort
+      let name = normalizedName;
+      let fontSize = 40;
       ctx.font = `800 ${fontSize}px ${fontStack}`;
-    }
-    if (ctx.measureText(name).width > maxTextW) {
-      while (name.length > 1 && ctx.measureText(`${name}…`).width > maxTextW) {
-        name = name.slice(0, -1);
+      while (ctx.measureText(name).width > maxTextW && fontSize > 28) {
+        fontSize -= 2;
+        ctx.font = `800 ${fontSize}px ${fontStack}`;
       }
-      name = `${name.trimEnd()}…`;
+      if (ctx.measureText(name).width > maxTextW) {
+        while (name.length > 1 && ctx.measureText(`${name}…`).width > maxTextW) {
+          name = name.slice(0, -1);
+        }
+        name = `${name.trimEnd()}…`;
+      }
+      ctx.fillStyle = "#0f172a";
+      ctx.fillText(name, textX, cardY + 90);
     }
-    ctx.fillStyle = "#0f172a";
-    ctx.fillText(name, textX, cardY + 90);
+
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.minFilter = THREE.LinearFilter;
+    texture.colorSpace = THREE.SRGBColorSpace;
+    mat = new THREE.SpriteMaterial({
+      map: texture,
+      transparent: true,
+      depthTest: false,
+    });
+    foodBubbleSpriteMatCache.set(normalizedName, mat);
   }
 
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.minFilter = THREE.LinearFilter;
-  texture.colorSpace = THREE.SRGBColorSpace;
-  const mat = new THREE.SpriteMaterial({
-    map: texture,
-    transparent: true,
-    depthTest: false,
-  });
   const sprite = new THREE.Sprite(mat);
   sprite.scale.set(1.6, 0.48, 1);
   sprite.renderOrder = 10;
@@ -291,21 +471,16 @@ function createBakeryFoodMesh(productName: string): THREE.Group {
   g.name = "bakery-food-dish";
 
   // 1. Ceramic Porcelain Plate
-  const plateMat = new THREE.MeshStandardMaterial({
-    color: 0xf8fafc,
-    roughness: 0.2,
-    metalness: 0.08,
-  });
+  const plateMat = getSharedStdMat(0xf8fafc, 0.2, 0.08);
   const plate = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.14, 0.125, 0.016, 16),
+    getCylinderGeo(0.14, 0.125, 0.016, 16),
     plateMat
   );
   plate.position.y = 0.008;
-  plate.castShadow = true;
   g.add(plate);
 
   const plateRim = new THREE.Mesh(
-    new THREE.TorusGeometry(0.13, 0.012, 6, 16),
+    getTorusGeo(0.13, 0.012, 6, 16),
     plateMat
   );
   plateRim.rotation.x = Math.PI / 2;
@@ -313,27 +488,23 @@ function createBakeryFoodMesh(productName: string): THREE.Group {
   g.add(plateRim);
 
   // 2. Bistro Coffee Mug beside Plate
-  const mugMat = new THREE.MeshStandardMaterial({
-    color: 0x0284c7,
-    roughness: 0.3,
-  });
+  const mugMat = getSharedStdMat(0x0284c7, 0.3);
   const mug = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.045, 0.038, 0.075, 12),
+    getCylinderGeo(0.045, 0.038, 0.075, 12),
     mugMat
   );
   mug.position.set(0.16, 0.038, 0.1);
-  mug.castShadow = true;
   g.add(mug);
 
   const coffeeLiquid = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.04, 0.04, 0.01, 10),
-    new THREE.MeshBasicMaterial({ color: 0x3f2314 })
+    getCylinderGeo(0.04, 0.04, 0.01, 10),
+    getSharedBasicMat(0x3f2314)
   );
   coffeeLiquid.position.set(0.16, 0.07, 0.1);
   g.add(coffeeLiquid);
 
   const mugHandle = new THREE.Mesh(
-    new THREE.TorusGeometry(0.024, 0.007, 6, 8),
+    getTorusGeo(0.024, 0.007, 6, 8),
     mugMat
   );
   mugHandle.position.set(0.205, 0.04, 0.1);
@@ -341,22 +512,10 @@ function createBakeryFoodMesh(productName: string): THREE.Group {
 
   // 3. 3D Bakery Treat on Plate
   const p = (productName || "").toLowerCase();
-  const crustMat = new THREE.MeshStandardMaterial({
-    color: 0xd97706,
-    roughness: 0.5,
-  });
-  const darkChocMat = new THREE.MeshStandardMaterial({
-    color: 0x3e1d0d,
-    roughness: 0.4,
-  });
-  const creamMat = new THREE.MeshStandardMaterial({
-    color: 0xfffbeb,
-    roughness: 0.3,
-  });
-  const cherryMat = new THREE.MeshStandardMaterial({
-    color: 0xe11d48,
-    roughness: 0.2,
-  });
+  const crustMat = getSharedStdMat(0xd97706, 0.5);
+  const darkChocMat = getSharedStdMat(0x3e1d0d, 0.4);
+  const creamMat = getSharedStdMat(0xfffbeb, 0.3);
+  const cherryMat = getSharedStdMat(0xe11d48, 0.2);
 
   if (p.includes("croissant") || p.includes("puff")) {
     // Golden Curved French Croissant
@@ -369,7 +528,7 @@ function createBakeryFoodMesh(productName: string): THREE.Group {
 
     [-0.07, 0.07].forEach((tx, idx) => {
       const tip = new THREE.Mesh(
-        new THREE.ConeGeometry(0.035, 0.07, 6),
+        getConeGeo(0.035, 0.07, 6),
         crustMat
       );
       tip.rotation.z = idx === 0 ? Math.PI / 2.8 : -Math.PI / 2.8;
@@ -387,7 +546,7 @@ function createBakeryFoodMesh(productName: string): THREE.Group {
     g.add(cakeBase);
 
     const creamLayer = new THREE.Mesh(
-      new THREE.BoxGeometry(0.145, 0.014, 0.105),
+      getBoxGeo(0.145, 0.014, 0.105),
       creamMat
     );
     creamLayer.position.y = 0.05;
@@ -395,13 +554,13 @@ function createBakeryFoodMesh(productName: string): THREE.Group {
 
     const frosting = new THREE.Mesh(
       createRoundedBoxGeo(0.14, 0.02, 0.1, 0.01, 2),
-      new THREE.MeshStandardMaterial({ color: 0x9333ea, roughness: 0.3 })
+      getSharedStdMat(0x9333ea, 0.3)
     );
     frosting.position.y = 0.065;
     g.add(frosting);
 
     const cherry = new THREE.Mesh(
-      new THREE.SphereGeometry(0.022, 8, 8),
+      getSphereGeo(0.022, 8, 8),
       cherryMat
     );
     cherry.position.set(0, 0.088, 0);
@@ -410,15 +569,15 @@ function createBakeryFoodMesh(productName: string): THREE.Group {
     // Artisan Sourdough Loaf with Floured Scored Crust
     const loaf = new THREE.Mesh(
       createRoundedBoxGeo(0.17, 0.075, 0.1, 0.03, 2),
-      new THREE.MeshStandardMaterial({ color: 0x92400e, roughness: 0.65 })
+      getSharedStdMat(0x92400e, 0.65)
     );
     loaf.position.y = 0.045;
     g.add(loaf);
 
     [-0.04, 0.04].forEach((sx) => {
       const slit = new THREE.Mesh(
-        new THREE.BoxGeometry(0.018, 0.01, 0.075),
-        new THREE.MeshBasicMaterial({ color: 0xfef3c7 })
+        getBoxGeo(0.018, 0.01, 0.075),
+        getSharedBasicMat(0xfef3c7)
       );
       slit.rotation.y = 0.4;
       slit.position.set(sx, 0.085, 0);
@@ -427,21 +586,21 @@ function createBakeryFoodMesh(productName: string): THREE.Group {
   } else if (p.includes("muffin") || p.includes("cupcake") || p.includes("tart")) {
     // Cupcake with Swirled Frosting & Sprinkles
     const cup = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.05, 0.038, 0.055, 10),
-      new THREE.MeshStandardMaterial({ color: 0xd97706, roughness: 0.6 })
+      getCylinderGeo(0.05, 0.038, 0.055, 10),
+      getSharedStdMat(0xd97706, 0.6)
     );
     cup.position.y = 0.035;
     g.add(cup);
 
     const swirl = new THREE.Mesh(
-      new THREE.SphereGeometry(0.048, 8, 8),
-      new THREE.MeshStandardMaterial({ color: 0x06b6d4, roughness: 0.35 })
+      getSphereGeo(0.048, 8, 8),
+      getSharedStdMat(0x06b6d4, 0.35)
     );
     swirl.position.y = 0.075;
     g.add(swirl);
 
     const topper = new THREE.Mesh(
-      new THREE.SphereGeometry(0.015, 6, 6),
+      getSphereGeo(0.015, 6, 6),
       cherryMat
     );
     topper.position.y = 0.12;
@@ -449,7 +608,7 @@ function createBakeryFoodMesh(productName: string): THREE.Group {
   } else if (p.includes("donut") || p.includes("doughnut") || p.includes("bagel")) {
     // Strawberry Glazed Ring Donut
     const dough = new THREE.Mesh(
-      new THREE.TorusGeometry(0.055, 0.024, 8, 16),
+      getTorusGeo(0.055, 0.024, 8, 16),
       crustMat
     );
     dough.rotation.x = Math.PI / 2;
@@ -457,8 +616,8 @@ function createBakeryFoodMesh(productName: string): THREE.Group {
     g.add(dough);
 
     const glaze = new THREE.Mesh(
-      new THREE.TorusGeometry(0.056, 0.016, 6, 16),
-      new THREE.MeshStandardMaterial({ color: 0xec4899, roughness: 0.25 })
+      getTorusGeo(0.056, 0.016, 6, 16),
+      getSharedStdMat(0xec4899, 0.25)
     );
     glaze.rotation.x = Math.PI / 2;
     glaze.position.y = 0.045;
@@ -467,14 +626,14 @@ function createBakeryFoodMesh(productName: string): THREE.Group {
     // Golden Signature Bakery Buns / Cookies with Chocolate Chips
     [-0.035, 0.035].forEach((bx, idx) => {
       const bun = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.052, 0.048, 0.026, 12),
+        getCylinderGeo(0.052, 0.048, 0.026, 12),
         crustMat
       );
       bun.position.set(bx, 0.025, idx === 0 ? -0.02 : 0.02);
       g.add(bun);
 
       const chip = new THREE.Mesh(
-        new THREE.SphereGeometry(0.012, 6, 6),
+        getSphereGeo(0.012, 6, 6),
         darkChocMat
       );
       chip.position.set(bx, 0.04, idx === 0 ? -0.02 : 0.02);
@@ -647,23 +806,12 @@ function createHandheldUmbrellaMesh(fabricColorHex: number): THREE.Group {
   const grp = new THREE.Group();
   grp.name = "handheld-umbrella";
 
-  const metalMat = new THREE.MeshStandardMaterial({
-    color: 0x94a3b8,
-    metalness: 0.8,
-    roughness: 0.25,
-  });
-  const handleMat = new THREE.MeshStandardMaterial({
-    color: 0x1e293b,
-    roughness: 0.4,
-  });
-  const fabricMat = new THREE.MeshStandardMaterial({
-    color: fabricColorHex,
-    roughness: 0.35,
-    side: THREE.DoubleSide,
-  });
+  const metalMat = getSharedStdMat(0x94a3b8, 0.25, 0.8);
+  const handleMat = getSharedStdMat(0x1e293b, 0.4);
+  const fabricMat = getSharedStdMat(fabricColorHex, 0.35, 0, { side: THREE.DoubleSide });
 
   // 1. Curved J-Handle at base
-  const handleGeo = new THREE.TorusGeometry(0.045, 0.012, 8, 12, Math.PI);
+  const handleGeo = getTorusGeo(0.045, 0.012, 8, 12, Math.PI);
   const handle = new THREE.Mesh(handleGeo, handleMat);
   handle.rotation.z = Math.PI / 2;
   handle.position.set(0.04, -0.22, 0);
@@ -671,22 +819,21 @@ function createHandheldUmbrellaMesh(fabricColorHex: number): THREE.Group {
 
   // 2. Central Shaft
   const shaft = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.009, 0.009, 0.52, 8),
+    getCylinderGeo(0.009, 0.009, 0.52, 8),
     metalMat
   );
   shaft.position.y = 0.04;
   grp.add(shaft);
 
   // 3. Umbrella Dome Canopy (8-panel octagonal dome)
-  const canopyGeo = new THREE.ConeGeometry(0.42, 0.16, 8, 1, true);
+  const canopyGeo = getConeGeo(0.42, 0.16, 8, 1, true);
   const canopy = new THREE.Mesh(canopyGeo, fabricMat);
   canopy.position.y = 0.26;
-  canopy.castShadow = true;
   grp.add(canopy);
 
   // 4. Top silver ferrule tip
   const tip = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.008, 0.012, 0.06, 8),
+    getCylinderGeo(0.008, 0.012, 0.06, 8),
     metalMat
   );
   tip.position.y = 0.37;
@@ -698,6 +845,7 @@ function createHandheldUmbrellaMesh(fabricColorHex: number): THREE.Group {
 interface CafeTerraceResult {
   group: THREE.Group;
   walkingCustomer: THREE.Group;
+  rigRefs: WorkerRigRefs;
   handheldUmbrella: THREE.Group;
   carriedBag: THREE.Mesh;
   tableFood: THREE.Group;
@@ -725,41 +873,17 @@ function createCafeTerraceDeck(
   const g = new THREE.Group();
   g.name = "sidewalk-cafe-terrace";
 
-  const travertineMat = new THREE.MeshStandardMaterial({
-    color: 0xe7e5e4, // Warm sandstone / travertine
-    roughness: 0.72,
-  });
-  const borderStoneMat = new THREE.MeshStandardMaterial({
-    color: 0xa8a29e, // Warm stone rim & stepping stones
-    roughness: 0.78,
-  });
-  const metalMat = new THREE.MeshStandardMaterial({
-    color: 0x1e293b,
-    metalness: 0.6,
-    roughness: 0.35,
-  });
-  const tableWoodMat = new THREE.MeshStandardMaterial({
-    color: 0x78350f,
-    roughness: 0.48,
-  });
-  const cushionMat = new THREE.MeshStandardMaterial({
-    color: accentColor,
-    roughness: 0.55,
-  });
-  const umbrellaFabricMat = new THREE.MeshStandardMaterial({
-    color: 0xfef3c7, // Warm French cafe cream
-    roughness: 0.45,
-    side: THREE.DoubleSide,
-  });
-  const umbrellaStripeMat = new THREE.MeshStandardMaterial({
-    color: accentColor,
-    roughness: 0.45,
-    side: THREE.DoubleSide,
-  });
+  const travertineMat = getSharedStdMat(0xe7e5e4, 0.72);
+  const borderStoneMat = getSharedStdMat(0xa8a29e, 0.78);
+  const metalMat = getSharedStdMat(0x1e293b, 0.35, 0.6);
+  const tableWoodMat = getSharedStdMat(0x78350f, 0.48);
+  const cushionMat = getSharedStdMat(accentColor, 0.55);
+  const umbrellaFabricMat = getSharedStdMat(0xfef3c7, 0.45, 0, { side: THREE.DoubleSide });
+  const umbrellaStripeMat = getSharedStdMat(accentColor, 0.45, 0, { side: THREE.DoubleSide });
 
   // 1. Detached Circular Sandstone Garden Patio Base (radius 0.62m)
   const patioRim = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.62, 0.65, 0.045, 24),
+    getCylinderGeo(0.62, 0.65, 0.045, 24),
     borderStoneMat
   );
   patioRim.position.y = 0.022;
@@ -767,7 +891,7 @@ function createCafeTerraceDeck(
   g.add(patioRim);
 
   const patioSurface = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.56, 0.56, 0.025, 24),
+    getCylinderGeo(0.56, 0.56, 0.025, 24),
     travertineMat
   );
   patioSurface.position.y = 0.042;
@@ -780,9 +904,10 @@ function createCafeTerraceDeck(
     [-0.80, 0.015, 0.18],
     [-0.65, 0.015, 0.11],
   ];
+  const steppingStoneGeo = getCylinderGeo(0.095, 0.105, 0.028, 12);
   steppingStoneCoords.forEach(([sx, sy, sz], idx) => {
     const stone = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.095, 0.105, 0.028, 12),
+      steppingStoneGeo,
       idx % 2 === 0 ? travertineMat : borderStoneMat
     );
     stone.position.set(sx, sy, sz);
@@ -795,22 +920,21 @@ function createCafeTerraceDeck(
   parasolGrp.position.set(0, 0.05, -0.22);
 
   const baseWeight = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.14, 0.17, 0.035, 14),
+    getCylinderGeo(0.14, 0.17, 0.035, 14),
     metalMat
   );
   baseWeight.position.y = 0.018;
   parasolGrp.add(baseWeight);
 
   const mastPole = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.02, 0.02, 1.54, 10),
-    new THREE.MeshStandardMaterial({ color: 0x451a03, roughness: 0.5 })
+    getCylinderGeo(0.02, 0.02, 1.54, 10),
+    getSharedStdMat(0x451a03, 0.5)
   );
   mastPole.position.y = 0.77;
-  mastPole.castShadow = true;
   parasolGrp.add(mastPole);
 
   const canopy = new THREE.Mesh(
-    new THREE.ConeGeometry(0.72, 0.24, 12, 1, true),
+    getConeGeo(0.72, 0.24, 12, 1, true),
     umbrellaFabricMat
   );
   canopy.position.y = 1.54;
@@ -818,15 +942,15 @@ function createCafeTerraceDeck(
   parasolGrp.add(canopy);
 
   const valance = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.725, 0.725, 0.042, 12, 1, true),
+    getCylinderGeo(0.725, 0.725, 0.042, 12, 1, true),
     umbrellaStripeMat
   );
   valance.position.y = 1.43;
   parasolGrp.add(valance);
 
   const finial = new THREE.Mesh(
-    new THREE.SphereGeometry(0.028, 8, 8),
-    new THREE.MeshStandardMaterial({ color: 0xd97706, metalness: 0.8, roughness: 0.2 })
+    getSphereGeo(0.028, 8, 8),
+    getSharedStdMat(0xd97706, 0.2, 0.8)
   );
   finial.position.y = 1.68;
   parasolGrp.add(finial);
@@ -834,32 +958,20 @@ function createCafeTerraceDeck(
   g.add(parasolGrp);
 
   // 3. Pair of Terracotta Topiary Planter Pots flanking the back of the patio
-  const terracottaMat = new THREE.MeshStandardMaterial({
-    color: 0xc2410c,
-    roughness: 0.65,
-  });
-  const foliageMat = new THREE.MeshStandardMaterial({
-    color: 0x15803d,
-    roughness: 0.55,
-  });
+  const terracottaMat = getSharedStdMat(0xc2410c, 0.65);
+  const foliageMat = getSharedStdMat(0x15803d, 0.55);
+  const potGeo = getCylinderGeo(0.075, 0.055, 0.12, 10);
+  const shrubGeo = getSphereGeo(0.088, 10, 10);
   [-0.38, 0.38].forEach((px) => {
     const potGrp = new THREE.Group();
     potGrp.position.set(px, 0.05, -0.34);
 
-    const pot = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.075, 0.055, 0.12, 10),
-      terracottaMat
-    );
+    const pot = new THREE.Mesh(potGeo, terracottaMat);
     pot.position.y = 0.06;
-    pot.castShadow = true;
     potGrp.add(pot);
 
-    const shrub = new THREE.Mesh(
-      new THREE.SphereGeometry(0.088, 10, 10),
-      foliageMat
-    );
+    const shrub = new THREE.Mesh(shrubGeo, foliageMat);
     shrub.position.y = 0.15;
-    shrub.castShadow = true;
     potGrp.add(shrub);
 
     g.add(potGrp);
@@ -869,21 +981,21 @@ function createCafeTerraceDeck(
   const tableX = 0;
   const tableZ = 0;
   const tableLeg = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.024, 0.024, 0.36, 8),
+    getCylinderGeo(0.024, 0.024, 0.36, 8),
     metalMat
   );
   tableLeg.position.set(tableX, 0.23, tableZ);
   g.add(tableLeg);
 
   const tableBase = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.14, 0.14, 0.02, 12),
+    getCylinderGeo(0.14, 0.14, 0.02, 12),
     metalMat
   );
   tableBase.position.set(tableX, 0.06, tableZ);
   g.add(tableBase);
 
   const tableTop = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.25, 0.25, 0.032, 16),
+    getCylinderGeo(0.25, 0.25, 0.032, 16),
     tableWoodMat
   );
   tableTop.position.set(tableX, 0.41, tableZ);
@@ -892,52 +1004,41 @@ function createCafeTerraceDeck(
 
   // Brass rim around bistro tabletop
   const tableRim = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.255, 0.255, 0.02, 16, 1, true),
-    new THREE.MeshStandardMaterial({ color: 0xd97706, metalness: 0.7, roughness: 0.3, side: THREE.DoubleSide })
+    getCylinderGeo(0.255, 0.255, 0.02, 16, 1, true),
+    getSharedStdMat(0xd97706, 0.3, 0.7, { side: THREE.DoubleSide })
   );
   tableRim.position.set(tableX, 0.41, tableZ);
   g.add(tableRim);
 
   // 5. Two Proper Cafe Bistro Chairs (with pedestal, seat cushion, and curved backrest)
+  const chairBaseGeo = getCylinderGeo(0.085, 0.095, 0.018, 10);
+  const chairStemGeo = getCylinderGeo(0.018, 0.018, 0.15, 8);
+  const chairSeatFrameGeo = getCylinderGeo(0.105, 0.105, 0.022, 12);
+  const chairCushionGeo = getCylinderGeo(0.095, 0.095, 0.022, 12);
+  const chairBackrestGeo = createRoundedBoxGeo(0.028, 0.16, 0.17, 0.01, 2);
+
   const buildBistroChair = (cx: number, cz: number, facingSign: number) => {
     const chairGrp = new THREE.Group();
     chairGrp.position.set(cx, 0.05, cz);
 
-    const base = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.085, 0.095, 0.018, 10),
-      metalMat
-    );
+    const base = new THREE.Mesh(chairBaseGeo, metalMat);
     base.position.y = 0.01;
     chairGrp.add(base);
 
-    const stem = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.018, 0.018, 0.15, 8),
-      metalMat
-    );
+    const stem = new THREE.Mesh(chairStemGeo, metalMat);
     stem.position.y = 0.085;
     chairGrp.add(stem);
 
-    const seatFrame = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.105, 0.105, 0.022, 12),
-      metalMat
-    );
+    const seatFrame = new THREE.Mesh(chairSeatFrameGeo, metalMat);
     seatFrame.position.y = 0.16;
-    seatFrame.castShadow = true;
     chairGrp.add(seatFrame);
 
-    const seatCushion = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.095, 0.095, 0.022, 12),
-      cushionMat
-    );
+    const seatCushion = new THREE.Mesh(chairCushionGeo, cushionMat);
     seatCushion.position.y = 0.18;
     chairGrp.add(seatCushion);
 
-    const backrest = new THREE.Mesh(
-      createRoundedBoxGeo(0.028, 0.16, 0.17, 0.01, 2),
-      metalMat
-    );
+    const backrest = new THREE.Mesh(chairBackrestGeo, metalMat);
     backrest.position.set(facingSign * 0.095, 0.25, 0);
-    backrest.castShadow = true;
     chairGrp.add(backrest);
 
     g.add(chairGrp);
@@ -956,31 +1057,25 @@ function createCafeTerraceDeck(
 
   // Ceramic Espresso / Coffee Cup with Saucer
   const saucer = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.058, 0.058, 0.012, 10),
-    new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.3 })
+    getCylinderGeo(0.058, 0.058, 0.012, 10),
+    getSharedStdMat(0xf8fafc, 0.3)
   );
   saucer.position.set(tableX + 0.08, 0.43, tableZ + 0.06);
   tableFood.add(saucer);
 
   const cup = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.038, 0.028, 0.05, 10),
-    new THREE.MeshStandardMaterial({ color: 0x1e3a8a, roughness: 0.3 })
+    getCylinderGeo(0.038, 0.028, 0.05, 10),
+    getSharedStdMat(0x1e3a8a, 0.3)
   );
   cup.position.set(tableX + 0.08, 0.458, tableZ + 0.06);
   tableFood.add(cup);
 
   g.add(tableFood);
 
-  // Tabletop Evening Candle / Lantern
-  const candleMat = new THREE.MeshStandardMaterial({
-    color: 0xfef08a,
-    emissive: 0xf59e0b,
-    emissiveIntensity: 0.2,
-    roughness: 0.3,
-  });
+  // Tabletop Evening Candle / Lantern (shared material updated once per frame)
   const candle = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.018, 0.018, 0.042, 8),
-    candleMat
+    getCylinderGeo(0.018, 0.018, 0.042, 8),
+    SHARED_CANDLE_MAT
   );
   candle.position.set(tableX, 0.445, tableZ - 0.08);
   g.add(candle);
@@ -991,8 +1086,8 @@ function createCafeTerraceDeck(
     hairColorHex: hairColor,
     scale: 1.05,
   });
-  const defaultCrate = walkingCustomer.getObjectByName("carried-crate");
-  if (defaultCrate) defaultCrate.visible = false;
+  const rigRefs = walkingCustomer.userData.rigRefs as WorkerRigRefs;
+  if (rigRefs.carriedCrate) rigRefs.carriedCrate.visible = false;
 
   // Handheld Umbrella positioned neatly over customer's head & right hand during rain/snow
   const handheldUmbrella = createHandheldUmbrellaMesh(umbrellaColor);
@@ -1004,7 +1099,7 @@ function createCafeTerraceDeck(
   // Bakery Takeaway Paper Bag in hands when returning from store
   const carriedBag = new THREE.Mesh(
     createRoundedBoxGeo(0.16, 0.22, 0.11, 0.02, 2),
-    new THREE.MeshStandardMaterial({ color: 0xd97706, roughness: 0.85 })
+    getSharedStdMat(0xd97706, 0.85)
   );
   carriedBag.position.set(0.15, 0.38, 0.14);
   carriedBag.visible = false;
@@ -1020,6 +1115,7 @@ function createCafeTerraceDeck(
   return {
     group: g,
     walkingCustomer,
+    rigRefs,
     handheldUmbrella,
     carriedBag,
     tableFood,
@@ -1033,6 +1129,9 @@ function createCafeTerraceDeck(
  * so the diorama floor looks like lush green turf instead of plain white.
  */
 function createGrassCanvasTexture(night: boolean): THREE.CanvasTexture {
+  const cached = grassTextureCache.get(night);
+  if (cached) return cached;
+
   const canvas = document.createElement("canvas");
   canvas.width = 512;
   canvas.height = 512;
@@ -1077,6 +1176,7 @@ function createGrassCanvasTexture(night: boolean): THREE.CanvasTexture {
   tex.wrapT = THREE.RepeatWrapping;
   tex.repeat.set(8, 8);
   tex.colorSpace = THREE.SRGBColorSpace;
+  grassTextureCache.set(night, tex);
   return tex;
 }
 
@@ -1095,32 +1195,19 @@ function createDeliveryWorkerMesh(
 
   const worker = new THREE.Group();
   worker.name = "delivery-worker";
+  const rigRefs: WorkerRigRefs = {};
 
-  const skinMat = new THREE.MeshStandardMaterial({
-    color: 0xfdba74,
-    roughness: 0.45,
-  });
-  const uniformMat = new THREE.MeshStandardMaterial({
-    color: uniformColorHex,
-    roughness: 0.45,
-  });
-  const pantsMat = new THREE.MeshStandardMaterial({
-    color: 0x1e293b,
-    roughness: 0.6,
-  });
-  const shoeMat = new THREE.MeshStandardMaterial({
-    color: 0x0f172a,
-    roughness: 0.4,
-  });
-  const hairMat = new THREE.MeshStandardMaterial({
-    color: hairColorHex,
-    roughness: 0.5,
-  });
-  const crateMat = new THREE.MeshStandardMaterial({
-    color: 0xd97706,
-    roughness: 0.6,
-  });
-  const tapeMat = new THREE.MeshBasicMaterial({ color: 0xfef3c7 });
+  const skinMat = getSharedStdMat(0xfdba74, 0.45);
+  const uniformMat = getSharedStdMat(uniformColorHex, 0.45);
+  const pantsMat = getSharedStdMat(0x1e293b, 0.6);
+  const shoeMat = getSharedStdMat(0x0f172a, 0.4);
+  const hairMat = getSharedStdMat(hairColorHex, 0.5);
+  const crateMat = getSharedStdMat(0xd97706, 0.6);
+  const tapeMat = getSharedBasicMat(0xfef3c7);
+
+  const thighGeo = createRoundedBoxGeo(0.11, 0.16, 0.11, 0.03, 2);
+  const calfGeo = createRoundedBoxGeo(0.105, 0.15, 0.105, 0.025, 2);
+  const shoeGeo = createRoundedBoxGeo(0.12, 0.08, 0.17, 0.025, 2);
 
   // Left & Right Hinged Legs (pivoted at hip y = 0.34, with knee joint at y = -0.14 for sitting & walking)
   const buildArticulatedLeg = (lx: number, legName: string, kneeName: string) => {
@@ -1128,45 +1215,38 @@ function createDeliveryWorkerMesh(
     legGrp.name = legName;
     legGrp.position.set(lx, 0.34, 0);
 
-    const thighMesh = new THREE.Mesh(
-      createRoundedBoxGeo(0.11, 0.16, 0.11, 0.03, 2),
-      pantsMat
-    );
+    const thighMesh = new THREE.Mesh(thighGeo, pantsMat);
     thighMesh.position.y = -0.07;
-    thighMesh.castShadow = true;
     legGrp.add(thighMesh);
 
     const kneeGrp = new THREE.Group();
     kneeGrp.name = kneeName;
     kneeGrp.position.set(0, -0.14, 0);
 
-    const calfMesh = new THREE.Mesh(
-      createRoundedBoxGeo(0.105, 0.15, 0.105, 0.025, 2),
-      pantsMat
-    );
+    const calfMesh = new THREE.Mesh(calfGeo, pantsMat);
     calfMesh.position.y = -0.07;
-    calfMesh.castShadow = true;
     kneeGrp.add(calfMesh);
 
-    const shoeMesh = new THREE.Mesh(
-      createRoundedBoxGeo(0.12, 0.08, 0.17, 0.025, 2),
-      shoeMat
-    );
+    const shoeMesh = new THREE.Mesh(shoeGeo, shoeMat);
     shoeMesh.position.set(0, -0.15, 0.03);
-    shoeMesh.castShadow = true;
     kneeGrp.add(shoeMesh);
 
     legGrp.add(kneeGrp);
     worker.add(legGrp);
+    return { legGrp, kneeGrp };
   };
 
-  buildArticulatedLeg(-0.075, "left-leg", "left-knee");
-  buildArticulatedLeg(0.075, "right-leg", "right-knee");
+  const leftLegBuilt = buildArticulatedLeg(-0.075, "left-leg", "left-knee");
+  const rightLegBuilt = buildArticulatedLeg(0.075, "right-leg", "right-knee");
+  rigRefs.lLeg = leftLegBuilt.legGrp;
+  rigRefs.lKnee = leftLegBuilt.kneeGrp;
+  rigRefs.rLeg = rightLegBuilt.legGrp;
+  rigRefs.rKnee = rightLegBuilt.kneeGrp;
 
   // Belt / Waist
   const belt = new THREE.Mesh(
     createRoundedBoxGeo(0.29, 0.06, 0.19, 0.02, 2),
-    new THREE.MeshStandardMaterial({ color: 0x451a03, roughness: 0.5 })
+    getSharedStdMat(0x451a03, 0.5)
   );
   belt.position.y = 0.35;
   worker.add(belt);
@@ -1177,20 +1257,19 @@ function createDeliveryWorkerMesh(
     uniformMat
   );
   torso.position.set(0, 0.53, 0);
-  torso.castShadow = true;
   worker.add(torso);
 
   // White Shirt Collar / Neckline
   const collar = new THREE.Mesh(
     createRoundedBoxGeo(0.16, 0.05, 0.2, 0.015, 2),
-    new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.4 })
+    getSharedStdMat(0xf8fafc, 0.4)
   );
   collar.position.set(0, 0.69, 0.01);
   worker.add(collar);
 
   // Neck
   const neck = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.055, 0.06, 0.08, 10),
+    getCylinderGeo(0.055, 0.06, 0.08, 10),
     skinMat
   );
   neck.position.y = 0.73;
@@ -1200,20 +1279,18 @@ function createDeliveryWorkerMesh(
   const headGrp = new THREE.Group();
   headGrp.name = "head-group";
   headGrp.position.y = 0.85;
+  rigRefs.headGrp = headGrp;
   const head = new THREE.Mesh(
     createRoundedBoxGeo(0.22, 0.23, 0.22, 0.07, 3),
     skinMat
   );
-  head.castShadow = true;
   headGrp.add(head);
 
   // Eyes (facing +Z)
-  const eyeMat = new THREE.MeshStandardMaterial({
-    color: 0x0f172a,
-    roughness: 0.2,
-  });
+  const eyeMat = getSharedStdMat(0x0f172a, 0.2);
+  const eyeGeo = getSphereGeo(0.02, 8, 8);
   [-0.048, 0.048].forEach((ex) => {
-    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.02, 8, 8), eyeMat);
+    const eye = new THREE.Mesh(eyeGeo, eyeMat);
     eye.position.set(ex, 0.02, 0.108);
     headGrp.add(eye);
   });
@@ -1222,14 +1299,14 @@ function createDeliveryWorkerMesh(
     // Delivery Cap + Visor
     const capDome = new THREE.Mesh(
       createRoundedBoxGeo(0.235, 0.1, 0.24, 0.04, 2),
-      new THREE.MeshStandardMaterial({ color: 0xf59e0b, roughness: 0.4 })
+      getSharedStdMat(0xf59e0b, 0.4)
     );
     capDome.position.set(0, 0.1, 0);
     headGrp.add(capDome);
 
     const capVisor = new THREE.Mesh(
       createRoundedBoxGeo(0.22, 0.035, 0.14, 0.01, 2),
-      new THREE.MeshStandardMaterial({ color: 0xd97706, roughness: 0.4 })
+      getSharedStdMat(0xd97706, 0.4)
     );
     capVisor.position.set(0, 0.07, 0.14);
     headGrp.add(capVisor);
@@ -1252,33 +1329,35 @@ function createDeliveryWorkerMesh(
   worker.add(headGrp);
 
   // Left & Right Hinged Arms (with hands at the bottom)
+  const sleeveGeo = createRoundedBoxGeo(0.095, 0.25, 0.095, 0.03, 2);
+  const handGeo = getSphereGeo(0.048, 8, 8);
   [-0.2, 0.2].forEach((ax, idx) => {
     const armGrp = new THREE.Group();
     armGrp.name = idx === 0 ? "left-arm" : "right-arm";
     armGrp.position.set(ax, 0.65, 0);
 
-    const sleeve = new THREE.Mesh(
-      createRoundedBoxGeo(0.095, 0.25, 0.095, 0.03, 2),
-      uniformMat
-    );
+    const sleeve = new THREE.Mesh(sleeveGeo, uniformMat);
     sleeve.position.set(0, -0.11, 0);
-    sleeve.castShadow = true;
     armGrp.add(sleeve);
 
-    const hand = new THREE.Mesh(new THREE.SphereGeometry(0.048, 8, 8), skinMat);
+    const hand = new THREE.Mesh(handGeo, skinMat);
     hand.position.set(0, -0.25, 0);
     armGrp.add(hand);
 
-    if (idx === 1) {
+    if (idx === 0) {
+      rigRefs.lArm = armGrp;
+    } else {
+      rigRefs.rArm = armGrp;
       // Optional held bakery pastry bite in right hand (shown while seated & dining)
       const heldBite = new THREE.Mesh(
-        new THREE.SphereGeometry(0.034, 8, 8),
-        new THREE.MeshStandardMaterial({ color: 0xd97706, roughness: 0.5 })
+        getSphereGeo(0.034, 8, 8),
+        getSharedStdMat(0xd97706, 0.5)
       );
       heldBite.name = "held-bite";
       heldBite.position.set(0, -0.26, 0.045);
       heldBite.visible = false;
       armGrp.add(heldBite);
+      rigRefs.heldBite = heldBite;
     }
 
     worker.add(armGrp);
@@ -1288,16 +1367,16 @@ function createDeliveryWorkerMesh(
   const carriedCrate = new THREE.Group();
   carriedCrate.name = "carried-crate";
   carriedCrate.position.set(0, 0.5, 0.24);
+  rigRefs.carriedCrate = carriedCrate;
 
   const boxMesh = new THREE.Mesh(
     createRoundedBoxGeo(0.32, 0.24, 0.26, 0.03, 2),
     crateMat
   );
-  boxMesh.castShadow = true;
   carriedCrate.add(boxMesh);
 
   const tapeStrip = new THREE.Mesh(
-    new THREE.BoxGeometry(0.33, 0.05, 0.1),
+    getBoxGeo(0.33, 0.05, 0.1),
     tapeMat
   );
   tapeStrip.position.y = 0.11;
@@ -1306,6 +1385,7 @@ function createDeliveryWorkerMesh(
   worker.add(carriedCrate);
 
   worker.scale.setScalar(charScale);
+  worker.userData.rigRefs = rigRefs;
   return worker;
 }
 
@@ -1324,11 +1404,8 @@ interface SkyCloudItem {
 function createFluffyCloudMesh(scale: number, night: boolean, isStorm = false): THREE.Group {
   const grp = new THREE.Group();
   const cloudColor = night ? 0x1e293b : isStorm ? 0x334155 : 0xffffff;
-  const mat = new THREE.MeshStandardMaterial({
-    color: cloudColor,
-    roughness: 0.85,
-    metalness: 0.02,
-  });
+  const mat = getSharedStdMat(cloudColor, 0.85, 0.02);
+  const puffGeo = getSphereGeo(1, 14, 10);
 
   // Multiple volumetric rounded puffs forming a soft cumulus cloud
   const puffs = [
@@ -1343,8 +1420,7 @@ function createFluffyCloudMesh(scale: number, night: boolean, isStorm = false): 
   ];
 
   puffs.forEach((p) => {
-    const geo = new THREE.SphereGeometry(1, 14, 10);
-    const m = new THREE.Mesh(geo, mat);
+    const m = new THREE.Mesh(puffGeo, mat);
     m.position.set(p.x * scale, p.y * scale, p.z * scale);
     m.scale.set(p.rx * scale, p.ry * scale, p.rz * scale);
     m.castShadow = false;
@@ -1360,6 +1436,7 @@ function createFluffyCloudMesh(scale: number, night: boolean, isStorm = false): 
  * instead of square WebGL pixel blocks.
  */
 function createCircleParticleTexture(): THREE.CanvasTexture {
+  if (circleParticleTexCache) return circleParticleTexCache;
   const canvas = document.createElement("canvas");
   canvas.width = 32;
   canvas.height = 32;
@@ -1373,6 +1450,7 @@ function createCircleParticleTexture(): THREE.CanvasTexture {
   ctx.arc(16, 16, 16, 0, Math.PI * 2);
   ctx.fill();
   const tex = new THREE.CanvasTexture(canvas);
+  circleParticleTexCache = tex;
   return tex;
 }
 
@@ -1609,7 +1687,33 @@ export function B2BCityCanvas({
   }: B2BCityCanvasProps) {
     const mountRef = useRef<HTMLDivElement | null>(null);
     const [hoveredId, setHoveredId] = useState<string | null>(null);
-    const [labels, setLabels] = useState<FloatingLabelItem[]>([]);
+    const labelItems = useMemo<FloatingLabelMeta[]>(() => {
+    return [
+      layout.hqPlacement,
+      layout.warehousePlacement,
+      layout.financePlacement,
+      ...layout.storePlacements,
+      {
+        id: "van-0",
+        kind: "van" as CityObjectKind,
+        label: "🚚 Delivery Truck",
+        subLabel: "Dispatch Route",
+      },
+      {
+        id: "van-1",
+        kind: "van" as CityObjectKind,
+        label: "🚚 Delivery Truck",
+        subLabel: "Dispatch Route",
+      },
+    ].map((item) => ({
+      id: item.id,
+      kind: item.kind,
+      label: item.label,
+      subLabel: item.subLabel,
+      healthStatus: "storeNode" in item ? item.storeNode?.healthStatus : undefined,
+    }));
+  }, [layout]);
+
   const cloudsRef = useRef<SkyCloudItem[]>([]);
   const cloudsGroupRef = useRef<THREE.Group | null>(null);
 
@@ -1691,20 +1795,42 @@ export function B2BCityCanvas({
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
   const controlsRef = useRef<OrbitControls | null>(null);
   const worldGroupRef = useRef<THREE.Group | null>(null);
-  const clickableGroupsRef = useRef<
-    Map<
-      string,
-      {
-        group: THREE.Group;
-        placement: CityBuildingPlacement;
-        targetScale: number;
-        currentScale: number;
-      }
-    >
-  >(new Map());
+
+  interface ClickableGroupEntry {
+    group: THREE.Group;
+    placement: CityBuildingPlacement;
+    targetScale: number;
+    currentScale: number;
+    emblem?: THREE.Object3D;
+    urgentOrb?: THREE.Object3D;
+    steam?: THREE.Group;
+    conveyor?: THREE.Group;
+  }
+
+  const clickableGroupsRef = useRef<Map<string, ClickableGroupEntry>>(new Map());
+  const raycastProxiesRef = useRef<THREE.Mesh[]>([]);
+  const viewportSizeRef = useRef<{ width: number; height: number }>({
+    width: 900,
+    height: 560,
+  });
+
+  interface LabelDomEntry {
+    root: HTMLDivElement;
+    labelSpan: HTMLSpanElement | null;
+    subSpan: HTMLSpanElement | null;
+    lastX: number;
+    lastY: number;
+    lastVisible: boolean;
+    lastLabel: string;
+    lastSubLabel: string;
+  }
+  const labelDomRefs = useRef<Map<string, LabelDomEntry>>(new Map());
+  const syncFloatingLabelsRef = useRef<((forceAll?: boolean) => void) | null>(null);
+
   interface CafeCustomerAgentItem {
     id: string;
     walkingCustomer: THREE.Group;
+    rigRefs: WorkerRigRefs;
     handheldUmbrella: THREE.Group;
     carriedBag: THREE.Mesh;
     tableFood: THREE.Group;
@@ -1723,6 +1849,7 @@ export function B2BCityCanvas({
   }
 
   const cafeCustomerAgentsRef = useRef<CafeCustomerAgentItem[]>([]);
+  const cafeAgentsMapRef = useRef<Map<string, CafeCustomerAgentItem>>(new Map());
   const spawnedIdsRef = useRef<Set<string>>(new Set());
   const cameraFlyTargetRef = useRef<{
     pos: THREE.Vector3;
@@ -1738,7 +1865,33 @@ export function B2BCityCanvas({
         worldGroup.remove(child);
       }
       clickableGroupsRef.current.clear();
+      raycastProxiesRef.current = [];
       cafeCustomerAgentsRef.current = [];
+      cafeAgentsMapRef.current.clear();
+
+      if (rendererRef.current && typeof window !== "undefined") {
+        const isDense = currentLayout.storePlacements.length > 12;
+        rendererRef.current.setPixelRatio(
+          Math.min(window.devicePixelRatio, isDense ? 1.5 : 2)
+        );
+      }
+
+      const attachHitProxy = (
+        parentGroup: THREE.Group,
+        id: string,
+        w: number,
+        h: number,
+        d: number,
+        cx: number,
+        cy: number,
+        cz: number
+      ) => {
+        const proxy = new THREE.Mesh(getBoxGeo(w, h, d), HIT_PROXY_MAT);
+        proxy.position.set(cx, cy, cz);
+        proxy.userData.clickableId = id;
+        parentGroup.add(proxy);
+        raycastProxiesRef.current.push(proxy);
+      };
 
       const {
         worldWidth,
@@ -1751,35 +1904,25 @@ export function B2BCityCanvas({
         storePlacements,
       } = currentLayout;
 
-      // Shared high-craft materials
-      const windowGlowMat = new THREE.MeshStandardMaterial({
-        color: night ? 0xfef08a : 0xe0f2fe,
-        emissive: night ? 0xf59e0b : 0x38bdf8,
-        emissiveIntensity: night ? 1.15 : 0.35,
-        roughness: 0.15,
-        metalness: 0.2,
-      });
-      const warmWindowMat = new THREE.MeshStandardMaterial({
-        color: 0xfffbeb,
+      // Shared high-craft materials (cached across stores & rebuilds)
+      const windowGlowMat = getSharedStdMat(
+        night ? 0xfef08a : 0xe0f2fe,
+        0.15,
+        0.2,
+        {
+          emissive: night ? 0xf59e0b : 0x38bdf8,
+          emissiveIntensity: night ? 1.15 : 0.35,
+        }
+      );
+      const warmWindowMat = getSharedStdMat(0xfffbeb, 0.2, 0, {
         emissive: 0xf59e0b,
         emissiveIntensity: night ? 1.25 : 0.45,
-        roughness: 0.2,
       });
-      const darkFrameMat = new THREE.MeshStandardMaterial({
-        color: 0x1e293b,
-        roughness: 0.5,
-        metalness: 0.3,
-      });
-      const stoneTrimMat = new THREE.MeshStandardMaterial({
-        color: night ? 0x475569 : 0xf1f5f9,
-        roughness: 0.65,
-      });
-      const goldMat = new THREE.MeshStandardMaterial({
-        color: 0xfbbf24,
+      const darkFrameMat = getSharedStdMat(0x1e293b, 0.5, 0.3);
+      const stoneTrimMat = getSharedStdMat(night ? 0x475569 : 0xf1f5f9, 0.65);
+      const goldMat = getSharedStdMat(0xfbbf24, 0.2, 0.75, {
         emissive: 0xd97706,
         emissiveIntensity: 0.25,
-        metalness: 0.75,
-        roughness: 0.2,
       });
 
       // ======================================================================
@@ -1790,11 +1933,7 @@ export function B2BCityCanvas({
       // Rich Walnut / Slate Diorama Pedestal Base
       const walnutBase = new THREE.Mesh(
         createRoundedBoxGeo(worldWidth + 3.6, 1.5, worldDepth + 3.6, 0.35, 3),
-        new THREE.MeshStandardMaterial({
-          color: night ? 0x090d16 : 0x334155,
-          roughness: 0.55,
-          metalness: 0.15,
-        })
+        getSharedStdMat(night ? 0x090d16 : 0x334155, 0.55, 0.15)
       );
       walnutBase.position.y = -1.1;
       walnutBase.receiveShadow = true;
@@ -1803,25 +1942,26 @@ export function B2BCityCanvas({
       // Gold rim trim around diorama base
       const brassRim = new THREE.Mesh(
         createRoundedBoxGeo(worldWidth + 2.6, 0.25, worldDepth + 2.6, 0.2, 2),
-        new THREE.MeshStandardMaterial({
-          color: night ? 0x1e293b : 0x94a3b8,
-          roughness: 0.4,
-          metalness: 0.4,
-        })
+        getSharedStdMat(night ? 0x1e293b : 0x94a3b8, 0.4, 0.4)
       );
       brassRim.position.y = -0.35;
       baseGroup.add(brassRim);
 
       // Lush manicured green grass turf top layer with procedural lawn stripes & blades
-      const grassTexture = createGrassCanvasTexture(night);
-      const turfGround = new THREE.Mesh(
-        createRoundedBoxGeo(worldWidth + 1.2, 0.55, worldDepth + 1.2, 0.2, 3),
-        new THREE.MeshStandardMaterial({
+      let turfMat = turfMatCache.get(night);
+      if (!turfMat) {
+        const grassTexture = createGrassCanvasTexture(night);
+        turfMat = new THREE.MeshStandardMaterial({
           map: grassTexture,
           color: night ? 0x10b981 : 0x86efac,
           roughness: 0.92,
           metalness: 0.0,
-        })
+        });
+        turfMatCache.set(night, turfMat);
+      }
+      const turfGround = new THREE.Mesh(
+        createRoundedBoxGeo(worldWidth + 1.2, 0.55, worldDepth + 1.2, 0.2, 3),
+        turfMat
       );
       turfGround.position.y = -0.26;
       turfGround.receiveShadow = true;
@@ -1829,10 +1969,9 @@ export function B2BCityCanvas({
 
       // Decorative 3D Grass Tufts & Wildflower Clumps placed purely in open lawn greenbelts
       // (Strictly avoiding roads z=0.8, z=10.6, z=20.4, spine roads x=±16.2, and sidewalks)
-      const grassBladeMat = new THREE.MeshStandardMaterial({
-        color: night ? 0x059669 : 0x16a34a,
-        roughness: 0.8,
-      });
+      const grassBladeMat = getSharedStdMat(night ? 0x059669 : 0x16a34a, 0.8);
+      const grassBladeGeo = getConeGeo(0.12, 0.32, 5);
+      const flowerGeo = getSphereGeo(0.08, 8, 8);
       const flowerColors = [0xfacc15, 0xf472b6, 0x60a5fa, 0xfb923c];
       const safeLawnTuftPositions: Array<[number, number]> = [
         // North Park / behind HQ & Courtyard (z < -3.5)
@@ -1885,21 +2024,15 @@ export function B2BCityCanvas({
         const tuftGrp = new THREE.Group();
         tuftGrp.position.set(gx, 0.02, gz);
         for (let b = 0; b < 3; b++) {
-          const blade = new THREE.Mesh(
-            new THREE.ConeGeometry(0.12, 0.32, 5),
-            grassBladeMat
-          );
+          const blade = new THREE.Mesh(grassBladeGeo, grassBladeMat);
           blade.position.set((b - 1) * 0.12, 0.14, (b % 2) * 0.08);
           blade.rotation.z = (b - 1) * 0.2;
           tuftGrp.add(blade);
         }
         if (gIdx % 2 === 0) {
           const flower = new THREE.Mesh(
-            new THREE.SphereGeometry(0.08, 8, 8),
-            new THREE.MeshStandardMaterial({
-              color: flowerColors[gIdx % flowerColors.length],
-              roughness: 0.4,
-            })
+            flowerGeo,
+            getSharedStdMat(flowerColors[gIdx % flowerColors.length], 0.4)
           );
           flower.position.set(0, 0.28, 0.04);
           tuftGrp.add(flower);
@@ -1910,10 +2043,7 @@ export function B2BCityCanvas({
       // Central Command Plaza Paved Courtyard (set back at z = -6.0 so the 2-lane HQ road at z = 0.8 is 100% visible!)
       const plazaCurb = new THREE.Mesh(
         createRoundedBoxGeo(30.4, 0.1, 5.4, 0.15, 2),
-        new THREE.MeshStandardMaterial({
-          color: night ? 0x1e293b : 0xcbd5e1,
-          roughness: 0.7,
-        })
+        getSharedStdMat(night ? 0x1e293b : 0xcbd5e1, 0.7)
       );
       plazaCurb.position.set(0, 0.02, -6.0);
       plazaCurb.receiveShadow = true;
@@ -1921,10 +2051,7 @@ export function B2BCityCanvas({
 
       const plazaPaving = new THREE.Mesh(
         createRoundedBoxGeo(29.6, 0.12, 4.8, 0.12, 2),
-        new THREE.MeshStandardMaterial({
-          color: night ? 0x334155 : 0xf1f5f9,
-          roughness: 0.6,
-        })
+        getSharedStdMat(night ? 0x334155 : 0xf1f5f9, 0.6)
       );
       plazaPaving.position.set(0, 0.03, -6.0);
       plazaPaving.receiveShadow = true;
@@ -1933,30 +2060,21 @@ export function B2BCityCanvas({
       // Front HQ Loading Walkway connecting HQ entrance (z = -3.6) to HQ Road North Curb (z = -1.2)
       const hqWalkway = new THREE.Mesh(
         createRoundedBoxGeo(7.2, 0.11, 2.4, 0.08, 2),
-        new THREE.MeshStandardMaterial({
-          color: night ? 0x334155 : 0xe2e8f0,
-          roughness: 0.65,
-        })
+        getSharedStdMat(night ? 0x334155 : 0xe2e8f0, 0.65)
       );
       hqWalkway.position.set(0, 0.025, -2.3);
       hqWalkway.receiveShadow = true;
       baseGroup.add(hqWalkway);
 
       // Roads with Sidewalk Curbs, Dashed Markings & Zebra Crosswalks
-      const sidewalkMat = new THREE.MeshStandardMaterial({
-        color: night ? 0x1e293b : 0xe2e8f0,
-        roughness: 0.75,
-      });
-      const asphaltMat = new THREE.MeshStandardMaterial({
-        color: night ? 0x090d16 : 0x1e293b,
-        roughness: 0.85,
-      });
-      const stripeMat = new THREE.MeshBasicMaterial({
-        color: night ? 0x94a3b8 : 0xf8fafc,
-      });
-      const centerDividerMat = new THREE.MeshBasicMaterial({
-        color: night ? 0xf59e0b : 0xfbbf24,
-      });
+      const sidewalkMat = getSharedStdMat(night ? 0x1e293b : 0xe2e8f0, 0.75);
+      const asphaltMat = getSharedStdMat(night ? 0x090d16 : 0x1e293b, 0.85);
+      const stripeMat = getSharedBasicMat(night ? 0x94a3b8 : 0xf8fafc);
+      const centerDividerMat = getSharedBasicMat(night ? 0xf59e0b : 0xfbbf24);
+
+      const hDashGeo = getBoxGeo(0.95, 0.022, 0.14);
+      const vDashGeo = getBoxGeo(0.14, 0.022, 0.95);
+      const zebraGeo = getBoxGeo(0.95, 0.025, 0.18);
 
       roads.forEach((r) => {
         // Raised Sidewalk Bed under road
@@ -1972,7 +2090,7 @@ export function B2BCityCanvas({
 
         // Full 2-Lane Asphalt Roadway (elevated above all courtyard slabs so both lanes are always visible)
         const rMesh = new THREE.Mesh(
-          new THREE.BoxGeometry(r.width, 0.09, r.depth),
+          getBoxGeo(r.width, 0.09, r.depth),
           asphaltMat
         );
         rMesh.position.set(r.x, 0.08, r.z);
@@ -1981,11 +2099,9 @@ export function B2BCityCanvas({
 
         if (r.orientation === "horizontal") {
           // Outer White Lane Edge Lines (2-lane boulevard borders: North & South lanes)
+          const edgeGeo = getBoxGeo(r.width - 0.4, 0.02, 0.08);
           [-r.depth / 2 + 0.18, r.depth / 2 - 0.18].forEach((edgeZ) => {
-            const edgeLine = new THREE.Mesh(
-              new THREE.BoxGeometry(r.width - 0.4, 0.02, 0.08),
-              stripeMat
-            );
+            const edgeLine = new THREE.Mesh(edgeGeo, stripeMat);
             edgeLine.position.set(r.x, 0.13, r.z + edgeZ);
             baseGroup.add(edgeLine);
           });
@@ -1993,10 +2109,7 @@ export function B2BCityCanvas({
           // Amber Dashed Center Lane Divider (separating outbound & inbound lanes)
           const dashCount = Math.floor(r.width / 2.2);
           for (let i = 0; i < dashCount; i++) {
-            const dMesh = new THREE.Mesh(
-              new THREE.BoxGeometry(0.95, 0.022, 0.14),
-              centerDividerMat
-            );
+            const dMesh = new THREE.Mesh(hDashGeo, centerDividerMat);
             const dx = -r.width / 2 + 1.2 + i * 2.2;
             dMesh.position.set(r.x + dx, 0.132, r.z);
             baseGroup.add(dMesh);
@@ -2005,31 +2118,23 @@ export function B2BCityCanvas({
           // Zebra Crosswalk in front of HQ (on Grand Avenue z = 0.8)
           if (Math.abs(r.z - 0.8) < 0.2) {
             for (let zc = -1.2; zc <= 1.2; zc += 0.38) {
-              const zebra = new THREE.Mesh(
-                new THREE.BoxGeometry(0.95, 0.025, 0.18),
-                stripeMat
-              );
+              const zebra = new THREE.Mesh(zebraGeo, stripeMat);
               zebra.position.set(0, 0.134, r.z + zc);
               baseGroup.add(zebra);
             }
           }
         } else {
           // Outer White Lane Edge Lines for Vertical Spine Roads
+          const vEdgeGeo = getBoxGeo(0.08, 0.02, r.depth - 0.4);
           [-r.width / 2 + 0.18, r.width / 2 - 0.18].forEach((edgeX) => {
-            const edgeLine = new THREE.Mesh(
-              new THREE.BoxGeometry(0.08, 0.02, r.depth - 0.4),
-              stripeMat
-            );
+            const edgeLine = new THREE.Mesh(vEdgeGeo, stripeMat);
             edgeLine.position.set(r.x + edgeX, 0.13, r.z);
             baseGroup.add(edgeLine);
           });
 
           const dashCount = Math.floor(r.depth / 2.2);
           for (let i = 0; i < dashCount; i++) {
-            const dMesh = new THREE.Mesh(
-              new THREE.BoxGeometry(0.14, 0.022, 0.95),
-              centerDividerMat
-            );
+            const dMesh = new THREE.Mesh(vDashGeo, centerDividerMat);
             const dz = -r.depth / 2 + 1.2 + i * 2.2;
             dMesh.position.set(r.x, 0.132, r.z + dz);
             baseGroup.add(dMesh);
@@ -2038,34 +2143,26 @@ export function B2BCityCanvas({
       });
 
       // Decorative Streetlamps, Park Benches, Flower Bushes & Fire Hydrants along Avenues
-      const lampPostMat = new THREE.MeshStandardMaterial({
-        color: 0x0f172a,
-        metalness: 0.7,
-        roughness: 0.3,
-      });
-      const lampBulbMat = new THREE.MeshStandardMaterial({
-        color: 0xfef08a,
+      const lampPostMat = getSharedStdMat(0x0f172a, 0.3, 0.7);
+      const lampBulbMat = getSharedStdMat(0xfef08a, 0.5, 0, {
         emissive: 0xfacc15,
         emissiveIntensity: night ? 2.0 : 0.5,
       });
-      const benchWoodMat = new THREE.MeshStandardMaterial({
-        color: 0x92400e,
-        roughness: 0.75,
-      });
-      const hydrantMat = new THREE.MeshStandardMaterial({
-        color: 0xef4444,
-        roughness: 0.35,
-        metalness: 0.3,
-      });
+      const benchWoodMat = getSharedStdMat(0x92400e, 0.75);
+      const hydrantMat = getSharedStdMat(0xef4444, 0.35, 0.3);
+
+      const lampPoleGeo = getCylinderGeo(0.05, 0.08, 1.8, 8);
+      const lampArmGeo = getBoxGeo(0.06, 0.06, 0.45);
+      const lampBulbGeo = getSphereGeo(0.13, 10, 10);
+      const benchGeo = createRoundedBoxGeo(0.75, 0.22, 0.3, 0.03, 2);
+      const hydrantGeo = getCylinderGeo(0.09, 0.11, 0.36, 10);
 
       // Cafe patio centres (HQ + each store) so streetlamps never block the sitting areas
       const patioCenters: { x: number; z: number }[] = [{ x: -4.6, z: -4.1 }];
+      const tempVec = new THREE.Vector3();
       storePlacements.forEach((sp) => {
-        const off = new THREE.Vector3(3.05, 0, 1.15).applyAxisAngle(
-          new THREE.Vector3(0, 1, 0),
-          sp.rotationY
-        );
-        patioCenters.push({ x: sp.x + off.x, z: sp.z + off.z });
+        tempVec.set(3.05, 0, 1.15).applyAxisAngle(Y_AXIS, sp.rotationY);
+        patioCenters.push({ x: sp.x + tempVec.x, z: sp.z + tempVec.z });
       });
       const LAMP_PATIO_CLEARANCE = 1.5;
 
@@ -2095,25 +2192,16 @@ export function B2BCityCanvas({
         const lampGroup = new THREE.Group();
         lampGroup.position.set(lx, 0.08, lz);
 
-        const pole = new THREE.Mesh(
-          new THREE.CylinderGeometry(0.05, 0.08, 1.8, 8),
-          lampPostMat
-        );
+        const pole = new THREE.Mesh(lampPoleGeo, lampPostMat);
         pole.position.y = 0.9;
         pole.castShadow = true;
         lampGroup.add(pole);
 
-        const arm = new THREE.Mesh(
-          new THREE.BoxGeometry(0.06, 0.06, 0.45),
-          lampPostMat
-        );
+        const arm = new THREE.Mesh(lampArmGeo, lampPostMat);
         arm.position.set(0, 1.78, 0.18);
         lampGroup.add(arm);
 
-        const lantern = new THREE.Mesh(
-          new THREE.SphereGeometry(0.13, 10, 10),
-          lampBulbMat
-        );
+        const lantern = new THREE.Mesh(lampBulbGeo, lampBulbMat);
         lantern.position.set(0, 1.72, 0.36);
         lampGroup.add(lantern);
 
@@ -2122,21 +2210,13 @@ export function B2BCityCanvas({
         if (relocated) {
           // no bench / hydrant
         } else if (idx % 2 === 0) {
-          const bench = new THREE.Mesh(
-            createRoundedBoxGeo(0.75, 0.22, 0.3, 0.03, 2),
-            benchWoodMat
-          );
+          const bench = new THREE.Mesh(benchGeo, benchWoodMat);
           bench.position.set(0.65, 0.14, 0);
-          bench.castShadow = true;
           lampGroup.add(bench);
         } else {
           // Miniature red fire hydrant
-          const hyd = new THREE.Mesh(
-            new THREE.CylinderGeometry(0.09, 0.11, 0.36, 10),
-            hydrantMat
-          );
+          const hyd = new THREE.Mesh(hydrantGeo, hydrantMat);
           hyd.position.set(-0.55, 0.18, 0.05);
-          hyd.castShadow = true;
           lampGroup.add(hyd);
         }
 
@@ -2144,11 +2224,16 @@ export function B2BCityCanvas({
       });
 
       // Lush Multi-Style Trees (Rounded Park Trees & Cypresses)
-      const trunkMat = new THREE.MeshStandardMaterial({
-        color: 0x78350f,
-        roughness: 0.85,
-      });
+      const trunkMat = getSharedStdMat(0x78350f, 0.85);
       const foliagePalettes = [0x16a34a, 0x22c55e, 0x15803d, 0x10b981];
+      const planterGeo = getCylinderGeo(0.45, 0.48, 0.12, 12);
+      const trunkGeo = getCylinderGeo(0.12, 0.18, 0.9, 8);
+      const mainCrownGeo = getIcosahedronGeo(0.72, 1);
+      const sidePuff1Geo = getIcosahedronGeo(0.48, 1);
+      const sidePuff2Geo = getIcosahedronGeo(0.45, 1);
+      const coneLayerGeos = [0, 1, 2].map((layer) =>
+        getConeGeo(0.75 - layer * 0.16, 1.05 - layer * 0.12, 9)
+      );
 
       trees.forEach((t, idx) => {
         const treeGrp = new THREE.Group();
@@ -2156,58 +2241,40 @@ export function B2BCityCanvas({
         treeGrp.scale.setScalar(t.scale);
 
         // Tree planter ring
-        const planter = new THREE.Mesh(
-          new THREE.CylinderGeometry(0.45, 0.48, 0.12, 12),
-          stoneTrimMat
-        );
+        const planter = new THREE.Mesh(planterGeo, stoneTrimMat);
         planter.position.y = 0.06;
         treeGrp.add(planter);
 
-        const trunk = new THREE.Mesh(
-          new THREE.CylinderGeometry(0.12, 0.18, 0.9, 8),
-          trunkMat
-        );
+        const trunk = new THREE.Mesh(trunkGeo, trunkMat);
         trunk.position.y = 0.45;
         trunk.castShadow = true;
         treeGrp.add(trunk);
 
-        const fMat = new THREE.MeshStandardMaterial({
-          color: foliagePalettes[idx % foliagePalettes.length],
-          roughness: 0.65,
-        });
+        const fMat = getSharedStdMat(
+          foliagePalettes[idx % foliagePalettes.length],
+          0.65
+        );
 
         if (idx % 2 === 0) {
           // Puff-cloud deciduous park tree
-          const mainCrown = new THREE.Mesh(
-            new THREE.IcosahedronGeometry(0.72, 1),
-            fMat
-          );
+          const mainCrown = new THREE.Mesh(mainCrownGeo, fMat);
           mainCrown.position.set(0, 1.35, 0);
           mainCrown.castShadow = true;
           treeGrp.add(mainCrown);
 
-          const sidePuff1 = new THREE.Mesh(
-            new THREE.IcosahedronGeometry(0.48, 1),
-            fMat
-          );
+          const sidePuff1 = new THREE.Mesh(sidePuff1Geo, fMat);
           sidePuff1.position.set(0.38, 1.15, 0.25);
           sidePuff1.castShadow = true;
           treeGrp.add(sidePuff1);
 
-          const sidePuff2 = new THREE.Mesh(
-            new THREE.IcosahedronGeometry(0.45, 1),
-            fMat
-          );
+          const sidePuff2 = new THREE.Mesh(sidePuff2Geo, fMat);
           sidePuff2.position.set(-0.35, 1.65, -0.2);
           sidePuff2.castShadow = true;
           treeGrp.add(sidePuff2);
         } else {
           // Layered pine / cypress tree
           for (let layer = 0; layer < 3; layer++) {
-            const cone = new THREE.Mesh(
-              new THREE.ConeGeometry(0.75 - layer * 0.16, 1.05 - layer * 0.12, 9),
-              fMat
-            );
+            const cone = new THREE.Mesh(coneLayerGeos[layer], fMat);
             cone.position.y = 1.05 + layer * 0.55;
             cone.castShadow = true;
             treeGrp.add(cone);
@@ -2238,7 +2305,7 @@ export function B2BCityCanvas({
       // Ground Floor Warm Cream / Sandstone Facade
       const hqFirstFloor = new THREE.Mesh(
         createRoundedBoxGeo(5.6, 1.85, 4.0, 0.12, 3),
-        new THREE.MeshStandardMaterial({ color: 0xfffbeb, roughness: 0.55 })
+        getSharedStdMat(0xfffbeb, 0.55)
       );
       hqFirstFloor.position.y = 1.15;
       hqFirstFloor.castShadow = true;
@@ -2248,7 +2315,7 @@ export function B2BCityCanvas({
       // Mid Cornice Belt
       const hqMidBelt = new THREE.Mesh(
         createRoundedBoxGeo(5.85, 0.22, 4.25, 0.06, 2),
-        new THREE.MeshStandardMaterial({ color: 0x1e3a8a, roughness: 0.45 })
+        getSharedStdMat(0x1e3a8a, 0.45)
       );
       hqMidBelt.position.y = 2.12;
       hqMidBelt.castShadow = true;
@@ -2257,7 +2324,7 @@ export function B2BCityCanvas({
       // Second Floor Executive Royal Blue Tier
       const hqSecondFloor = new THREE.Mesh(
         createRoundedBoxGeo(5.3, 1.55, 3.7, 0.12, 3),
-        new THREE.MeshStandardMaterial({ color: 0x1d4ed8, roughness: 0.45 })
+        getSharedStdMat(0x1d4ed8, 0.45)
       );
       hqSecondFloor.position.y = 2.95;
       hqSecondFloor.castShadow = true;
@@ -2276,7 +2343,7 @@ export function B2BCityCanvas({
       // Penthouse Clock/Sign Tower
       const hqTower = new THREE.Mesh(
         createRoundedBoxGeo(2.8, 1.05, 2.2, 0.1, 3),
-        new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.4 })
+        getSharedStdMat(0x0f172a, 0.4)
       );
       hqTower.position.set(0, 4.42, 0.2);
       hqTower.castShadow = true;
@@ -2305,59 +2372,47 @@ export function B2BCityCanvas({
       hqGroup.add(hqDoorFrame);
 
       const hqDoorGlass = new THREE.Mesh(
-        new THREE.BoxGeometry(1.05, 1.1, 0.16),
+        getBoxGeo(1.05, 1.1, 0.16),
         warmWindowMat
       );
       hqDoorGlass.position.set(0, 0.85, 2.02);
       hqGroup.add(hqDoorGlass);
 
       // Side Display Windows on Ground Floor
+      const hqSideFrameGeo = createRoundedBoxGeo(1.3, 0.95, 0.14, 0.04, 2);
+      const hqSideGlassGeo = getBoxGeo(1.12, 0.78, 0.16);
       [-1.75, 1.75].forEach((wx) => {
-        const frame = new THREE.Mesh(
-          createRoundedBoxGeo(1.3, 0.95, 0.14, 0.04, 2),
-          darkFrameMat
-        );
+        const frame = new THREE.Mesh(hqSideFrameGeo, darkFrameMat);
         frame.position.set(wx, 0.98, 2.01);
         hqGroup.add(frame);
 
-        const glass = new THREE.Mesh(
-          new THREE.BoxGeometry(1.12, 0.78, 0.16),
-          warmWindowMat
-        );
+        const glass = new THREE.Mesh(hqSideGlassGeo, warmWindowMat);
         glass.position.set(wx, 0.98, 2.01);
         hqGroup.add(glass);
       });
 
       // Second Floor Framed Windows (3 front bays + 2 side bays on +X and -X)
+      const hqUpperFrameGeo = createRoundedBoxGeo(1.15, 0.82, 0.14, 0.04, 2);
+      const hqUpperGlassGeo = getBoxGeo(0.96, 0.64, 0.16);
       [-1.65, 0, 1.65].forEach((wx) => {
-        const frame = new THREE.Mesh(
-          createRoundedBoxGeo(1.15, 0.82, 0.14, 0.04, 2),
-          stoneTrimMat
-        );
+        const frame = new THREE.Mesh(hqUpperFrameGeo, stoneTrimMat);
         frame.position.set(wx, 2.95, 1.86);
         hqGroup.add(frame);
 
-        const glass = new THREE.Mesh(
-          new THREE.BoxGeometry(0.96, 0.64, 0.16),
-          windowGlowMat
-        );
+        const glass = new THREE.Mesh(hqUpperGlassGeo, windowGlowMat);
         glass.position.set(wx, 2.95, 1.86);
         hqGroup.add(glass);
       });
 
+      const hqSideUpperGeo = createRoundedBoxGeo(0.14, 0.78, 0.95, 0.03, 2);
+      const hqSideLowerGeo = createRoundedBoxGeo(0.14, 0.82, 0.98, 0.03, 2);
       [-1, 1].forEach((sideSign) => {
         [-0.85, 0.85].forEach((wz) => {
-          const sWin = new THREE.Mesh(
-            createRoundedBoxGeo(0.14, 0.78, 0.95, 0.03, 2),
-            windowGlowMat
-          );
+          const sWin = new THREE.Mesh(hqSideUpperGeo, windowGlowMat);
           sWin.position.set(sideSign * 2.66, 2.95, wz);
           hqGroup.add(sWin);
 
-          const gWin = new THREE.Mesh(
-            createRoundedBoxGeo(0.14, 0.82, 0.98, 0.03, 2),
-            warmWindowMat
-          );
+          const gWin = new THREE.Mesh(hqSideLowerGeo, warmWindowMat);
           gWin.position.set(sideSign * 2.81, 1.05, wz);
           hqGroup.add(gWin);
         });
@@ -2366,7 +2421,7 @@ export function B2BCityCanvas({
       // Artisanal Brick Chimney + Animated Steam Puffs
       const chimney = new THREE.Mesh(
         createRoundedBoxGeo(0.68, 1.65, 0.68, 0.06, 2),
-        new THREE.MeshStandardMaterial({ color: 0x991b1b, roughness: 0.75 })
+        getSharedStdMat(0x991b1b, 0.75)
       );
       chimney.position.set(1.95, 4.5, -0.95);
       chimney.castShadow = true;
@@ -2382,15 +2437,13 @@ export function B2BCityCanvas({
       const steamGroup = new THREE.Group();
       steamGroup.name = "hq-steam";
       steamGroup.position.set(1.95, 5.65, -0.95);
-      const steamMat = new THREE.MeshStandardMaterial({
-        color: 0xffffff,
+      const steamMat = getSharedStdMat(0xffffff, 1, 0, {
         transparent: true,
         opacity: 0.82,
-        roughness: 1,
       });
       for (let s = 0; s < 4; s++) {
         const puff = new THREE.Mesh(
-          new THREE.IcosahedronGeometry(0.24 + s * 0.06, 1),
+          getIcosahedronGeo(0.24 + s * 0.06, 1),
           steamMat
         );
         puff.position.y = s * 0.5;
@@ -2400,19 +2453,22 @@ export function B2BCityCanvas({
 
       // Rotating Golden Crown Emblem atop HQ Tower
       const hqBeacon = new THREE.Mesh(
-        new THREE.OctahedronGeometry(0.42, 0),
+        getOctahedronGeo(0.42, 0),
         goldMat
       );
       hqBeacon.name = "rotating-emblem";
       hqBeacon.position.set(0, 5.45, 0.2);
       hqGroup.add(hqBeacon);
 
+      attachHitProxy(hqGroup, hqPlacement.id, 6.4, 5.8, 5.4, 0, 2.9, 0.2);
       worldGroup.add(hqGroup);
       clickableGroupsRef.current.set(hqPlacement.id, {
         group: hqGroup,
         placement: hqPlacement,
         targetScale: 1,
         currentScale: 1,
+        emblem: hqBeacon,
+        steam: steamGroup,
       });
 
       // Detached Garden Cafe Patio beside Bakery HQ
@@ -2452,6 +2508,7 @@ export function B2BCityCanvas({
       };
 
       // Add both the patio group AND the single continuous customer directly to worldGroup
+      attachHitProxy(hqPatio.group, hqTreeCafeId, 1.6, 2.4, 1.6, 0, 1.2, 0);
       worldGroup.add(hqPatio.group);
       worldGroup.add(hqPatio.walkingCustomer);
       clickableGroupsRef.current.set(hqTreeCafeId, {
@@ -2461,9 +2518,10 @@ export function B2BCityCanvas({
         currentScale: 0.96,
       });
 
-      cafeCustomerAgentsRef.current.push({
+      const hqAgentItem: CafeCustomerAgentItem = {
         id: hqTreeCafeId,
         walkingCustomer: hqPatio.walkingCustomer,
+        rigRefs: hqPatio.rigRefs,
         handheldUmbrella: hqPatio.handheldUmbrella,
         carriedBag: hqPatio.carriedBag,
         tableFood: hqPatio.tableFood,
@@ -2479,7 +2537,9 @@ export function B2BCityCanvas({
         cycleDuration: 30.0,
         phaseOffset: 0,
         eatingSpeed: 1.9,
-      });
+      };
+      cafeCustomerAgentsRef.current.push(hqAgentItem);
+      cafeAgentsMapRef.current.set(hqTreeCafeId, hqAgentItem);
 
       // ======================================================================
       // BUILDING 2: CATALOG & STOCK WAREHOUSE (SAWTOOTH INDUSTRIAL FULFILLMENT)
@@ -2491,7 +2551,7 @@ export function B2BCityCanvas({
       // Concrete Dock Apron
       const whApron = new THREE.Mesh(
         createRoundedBoxGeo(6.0, 0.24, 4.8, 0.08, 2),
-        new THREE.MeshStandardMaterial({ color: 0x94a3b8, roughness: 0.75 })
+        getSharedStdMat(0x94a3b8, 0.75)
       );
       whApron.position.y = 0.12;
       whApron.receiveShadow = true;
@@ -2500,11 +2560,7 @@ export function B2BCityCanvas({
       // Main Warehouse Cladding
       const whBody = new THREE.Mesh(
         createRoundedBoxGeo(5.2, 2.35, 3.8, 0.12, 3),
-        new THREE.MeshStandardMaterial({
-          color: 0x334155,
-          roughness: 0.5,
-          metalness: 0.25,
-        })
+        getSharedStdMat(0x334155, 0.5, 0.25)
       );
       whBody.position.y = 1.35;
       whBody.castShadow = true;
@@ -2514,68 +2570,48 @@ export function B2BCityCanvas({
       // Emerald Accent Band
       const whBand = new THREE.Mesh(
         createRoundedBoxGeo(5.32, 0.26, 3.92, 0.06, 2),
-        new THREE.MeshStandardMaterial({ color: 0x10b981, roughness: 0.35 })
+        getSharedStdMat(0x10b981, 0.35)
       );
       whBand.position.y = 2.38;
       whGroup.add(whBand);
 
       // Classic 3-Bay Sawtooth Industrial Skylight Roof
-      const sawRoofMat = new THREE.MeshStandardMaterial({
-        color: 0x475569,
-        roughness: 0.55,
-        metalness: 0.3,
-      });
+      const sawRoofMat = getSharedStdMat(0x475569, 0.55, 0.3);
+      const toothGeo = createRoundedBoxGeo(1.52, 0.75, 3.5, 0.06, 2);
+      const skylightGeo = getBoxGeo(0.12, 0.55, 3.2);
       [-1.55, 0, 1.55].forEach((rx) => {
-        const tooth = new THREE.Mesh(
-          createRoundedBoxGeo(1.52, 0.75, 3.5, 0.06, 2),
-          sawRoofMat
-        );
+        const tooth = new THREE.Mesh(toothGeo, sawRoofMat);
         tooth.position.set(rx, 2.72, 0);
         tooth.rotation.z = 0.28;
         tooth.castShadow = true;
         whGroup.add(tooth);
 
         // Glowing Skylight Strip on each sawtooth
-        const skylight = new THREE.Mesh(
-          new THREE.BoxGeometry(0.12, 0.55, 3.2),
-          windowGlowMat
-        );
+        const skylight = new THREE.Mesh(skylightGeo, windowGlowMat);
         skylight.position.set(rx + 0.68, 2.75, 0);
         whGroup.add(skylight);
       });
 
       // 3 Recessed Roll-Up Steel Loading Doors + Safety Bollards
-      const shutterMat = new THREE.MeshStandardMaterial({
-        color: 0xe2e8f0,
-        metalness: 0.5,
-        roughness: 0.35,
-      });
-      const bollardMat = new THREE.MeshStandardMaterial({
-        color: 0xfacc15,
-        roughness: 0.3,
-      });
+      const shutterMat = getSharedStdMat(0xe2e8f0, 0.35, 0.5);
+      const bollardMat = getSharedStdMat(0xfacc15, 0.3);
+      const whDoorFrameMat = getSharedStdMat(0x0f172a, 0.5);
+      const whDoorFrameGeo = createRoundedBoxGeo(1.15, 1.45, 0.14, 0.04, 2);
+      const whShutterGeo = getBoxGeo(0.98, 1.28, 0.16);
+      const whBollardGeo = getCylinderGeo(0.05, 0.05, 0.42, 8);
 
       [-1.55, 0, 1.55].forEach((bx) => {
-        const doorFrame = new THREE.Mesh(
-          createRoundedBoxGeo(1.15, 1.45, 0.14, 0.04, 2),
-           new THREE.MeshStandardMaterial({ color: 0x0f172a })
-        );
+        const doorFrame = new THREE.Mesh(whDoorFrameGeo, whDoorFrameMat);
         doorFrame.position.set(bx, 0.92, 1.9);
         whGroup.add(doorFrame);
 
-        const shutter = new THREE.Mesh(
-          new THREE.BoxGeometry(0.98, 1.28, 0.16),
-          shutterMat
-        );
+        const shutter = new THREE.Mesh(whShutterGeo, shutterMat);
         shutter.position.set(bx, 0.92, 1.9);
         whGroup.add(shutter);
 
         // Yellow safety bollards flanking each bay
         [-0.58, 0.58].forEach((ox) => {
-          const bollard = new THREE.Mesh(
-            new THREE.CylinderGeometry(0.05, 0.05, 0.42, 8),
-            bollardMat
-          );
+          const bollard = new THREE.Mesh(whBollardGeo, bollardMat);
           bollard.position.set(bx + ox, 0.38, 2.08);
           whGroup.add(bollard);
         });
@@ -2593,22 +2629,16 @@ export function B2BCityCanvas({
       const conveyorBoxes = new THREE.Group();
       conveyorBoxes.name = "wh-conveyor";
       conveyorBoxes.position.set(-0.6, 0.62, 2.35);
-      const cardboardMat = new THREE.MeshStandardMaterial({
-        color: 0xd97706,
-        roughness: 0.65,
-      });
+      const cardboardMat = getSharedStdMat(0xd97706, 0.65);
+      const convBoxGeo = createRoundedBoxGeo(0.44, 0.38, 0.44, 0.04, 2);
+      const convTapeGeo = getBoxGeo(0.46, 0.06, 0.12);
+      const convTapeMat = getSharedBasicMat(0xfef3c7);
       for (let c = 0; c < 3; c++) {
         const crateGrp = new THREE.Group();
-        const box = new THREE.Mesh(
-          createRoundedBoxGeo(0.44, 0.38, 0.44, 0.04, 2),
-          cardboardMat
-        );
+        const box = new THREE.Mesh(convBoxGeo, cardboardMat);
         box.castShadow = true;
         crateGrp.add(box);
-        const tape = new THREE.Mesh(
-          new THREE.BoxGeometry(0.46, 0.06, 0.12),
-          new THREE.MeshBasicMaterial({ color: 0xfef3c7 })
-        );
+        const tape = new THREE.Mesh(convTapeGeo, convTapeMat);
         tape.position.y = 0.18;
         crateGrp.add(tape);
         crateGrp.position.x = (c - 1) * 0.9;
@@ -2619,25 +2649,27 @@ export function B2BCityCanvas({
       // Stacked Wooden Pallet on Right Side of Dock
       const pallet = new THREE.Mesh(
         createRoundedBoxGeo(0.95, 0.12, 0.95, 0.02, 2),
-        new THREE.MeshStandardMaterial({ color: 0x92400e, roughness: 0.85 })
+        getSharedStdMat(0x92400e, 0.85)
       );
       pallet.position.set(1.85, 0.28, 2.28);
       whGroup.add(pallet);
 
       const stackedCargo = new THREE.Mesh(
         createRoundedBoxGeo(0.78, 0.55, 0.78, 0.06, 2),
-        new THREE.MeshStandardMaterial({ color: 0x10b981, roughness: 0.45 })
+        getSharedStdMat(0x10b981, 0.45)
       );
       stackedCargo.position.set(1.85, 0.62, 2.28);
       stackedCargo.castShadow = true;
       whGroup.add(stackedCargo);
 
+      attachHitProxy(whGroup, warehousePlacement.id, 6.0, 3.2, 5.2, 0, 1.6, 0.2);
       worldGroup.add(whGroup);
       clickableGroupsRef.current.set(warehousePlacement.id, {
         group: whGroup,
         placement: warehousePlacement,
         targetScale: 1,
         currentScale: 1,
+        conveyor: conveyorBoxes,
       });
 
       // ======================================================================
@@ -2659,11 +2691,7 @@ export function B2BCityCanvas({
       // Emerald Glass Curtain-Wall Tower Core
       const finCore = new THREE.Mesh(
         createRoundedBoxGeo(3.9, 3.85, 3.5, 0.16, 3),
-        new THREE.MeshStandardMaterial({
-          color: 0x064e3b,
-          roughness: 0.2,
-          metalness: 0.45,
-        })
+        getSharedStdMat(0x064e3b, 0.2, 0.45)
       );
       finCore.position.y = 2.22;
       finCore.castShadow = true;
@@ -2671,27 +2699,23 @@ export function B2BCityCanvas({
       finGroup.add(finCore);
 
       // Architectural Corner Marble Pillars & Horizontal Floor Spandrels
+      const finCornerGeo = createRoundedBoxGeo(0.36, 3.95, 0.36, 0.05, 2);
       [
         [-1.85, 1.65],
         [1.85, 1.65],
         [-1.85, -1.65],
         [1.85, -1.65],
       ].forEach(([px, pz]) => {
-        const col = new THREE.Mesh(
-          createRoundedBoxGeo(0.36, 3.95, 0.36, 0.05, 2),
-          stoneTrimMat
-        );
+        const col = new THREE.Mesh(finCornerGeo, stoneTrimMat);
         col.position.set(px, 2.25, pz);
         col.castShadow = true;
         finGroup.add(col);
       });
 
       // Classical Front Portico Columns
+      const finPorticoColGeo = getCylinderGeo(0.11, 0.13, 1.45, 12);
       [-1.1, -0.38, 0.38, 1.1].forEach((cx) => {
-        const fCol = new THREE.Mesh(
-          new THREE.CylinderGeometry(0.11, 0.13, 1.45, 12),
-          stoneTrimMat
-        );
+        const fCol = new THREE.Mesh(finPorticoColGeo, stoneTrimMat);
         fCol.position.set(cx, 1.05, 1.92);
         fCol.castShadow = true;
         finGroup.add(fCol);
@@ -2707,11 +2731,9 @@ export function B2BCityCanvas({
       finGroup.add(porticoCap);
 
       // 3 Glowing Glass Office Tiers
+      const finGlassBandGeo = createRoundedBoxGeo(3.98, 0.48, 3.58, 0.08, 2);
       [1.35, 2.35, 3.35].forEach((fy) => {
-        const glassBand = new THREE.Mesh(
-          createRoundedBoxGeo(3.98, 0.48, 3.58, 0.08, 2),
-          windowGlowMat
-        );
+        const glassBand = new THREE.Mesh(finGlassBandGeo, windowGlowMat);
         glassBand.position.y = fy;
         finGroup.add(glassBand);
       });
@@ -2730,13 +2752,13 @@ export function B2BCityCanvas({
       coinGroup.position.set(0, 5.2, 0);
 
       const outerTorus = new THREE.Mesh(
-        new THREE.TorusGeometry(0.62, 0.13, 14, 28),
+        getTorusGeo(0.62, 0.13, 14, 28),
         goldMat
       );
       coinGroup.add(outerTorus);
 
       const innerCoin = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.38, 0.38, 0.12, 20),
+        getCylinderGeo(0.38, 0.38, 0.12, 20),
         goldMat
       );
       innerCoin.rotation.x = Math.PI / 2;
@@ -2744,12 +2766,14 @@ export function B2BCityCanvas({
 
       finGroup.add(coinGroup);
 
+      attachHitProxy(finGroup, financePlacement.id, 4.8, 5.8, 4.4, 0, 2.9, 0);
       worldGroup.add(finGroup);
       clickableGroupsRef.current.set(financePlacement.id, {
         group: finGroup,
         placement: financePlacement,
         targetScale: 1,
         currentScale: 1,
+        emblem: coinGroup,
       });
 
       // ======================================================================
@@ -2770,6 +2794,43 @@ export function B2BCityCanvas({
         new: 0x3b82f6,     // Royal Blue
       };
 
+      const lotCurbGeo = createRoundedBoxGeo(4.2, 0.14, 4.0, 0.1, 2);
+      const lotCurbMat = getSharedStdMat(night ? 0x334155 : 0xcbd5e1, 0.7);
+      const lotPatioGeo = createRoundedBoxGeo(3.96, 0.16, 3.76, 0.08, 2);
+      const lotPatioMat = getSharedStdMat(night ? 0x1e293b : 0xf8fafc, 0.6);
+      const wainscotGeo = createRoundedBoxGeo(3.3, 0.36, 2.7, 0.08, 2);
+      const wainscotMat = getSharedStdMat(0x334155, 0.65);
+      const stSideFrameGeo = createRoundedBoxGeo(0.14, 0.85, 1.25, 0.04, 2);
+      const stSideGlassGeo = getBoxGeo(0.16, 0.68, 1.08);
+      const stSideSillGeo = createRoundedBoxGeo(0.24, 0.1, 1.36, 0.03, 2);
+      const stRearWinGeo = createRoundedBoxGeo(1.2, 0.72, 0.14, 0.03, 2);
+      const stRearDoorGeo = createRoundedBoxGeo(0.68, 1.05, 0.14, 0.03, 2);
+      const stCorniceGeo = createRoundedBoxGeo(3.48, 0.22, 2.88, 0.06, 2);
+      const stPitchedRoofGeo = getConeGeo(2.35, 0.95, 4);
+      const stMansardGeo = createRoundedBoxGeo(2.75, 0.62, 2.15, 0.12, 3);
+      const stMansardMat = getSharedStdMat(0x334155, 0.5);
+      const stParapetSignGeo = createRoundedBoxGeo(2.4, 0.55, 0.24, 0.05, 2);
+      const stAcUnitGeo = createRoundedBoxGeo(0.65, 0.38, 0.55, 0.04, 2);
+      const stSignBackGeo = createRoundedBoxGeo(2.1, 0.36, 0.1, 0.03, 2);
+      const stSignFaceGeo = createRoundedBoxGeo(2.02, 0.3, 0.08, 0.02, 2);
+      const stSignFaceMat = getSharedStdMat(0xffffff, 0.25, 0.05);
+      const stDoorFrameGeo = createRoundedBoxGeo(0.78, 1.12, 0.14, 0.03, 2);
+      const stDoorGlassGeo = getBoxGeo(0.62, 0.96, 0.16);
+      const stWinFrameGeo = createRoundedBoxGeo(1.48, 0.88, 0.14, 0.04, 2);
+      const stWinPaneGeo = getBoxGeo(1.32, 0.72, 0.16);
+      const stPlanterGeo = createRoundedBoxGeo(1.42, 0.22, 0.28, 0.03, 2);
+      const stPlanterMat = getSharedStdMat(0x78350f, 0.8);
+      const stHedgeGeo = createRoundedBoxGeo(1.34, 0.18, 0.22, 0.05, 2);
+      const stHedgeMat = getSharedStdMat(0x16a34a, 0.7);
+      const stUpperWinGeo = createRoundedBoxGeo(0.75, 0.52, 0.14, 0.03, 2);
+      const stUrgentOrbGeo = getOctahedronGeo(0.28, 0);
+      const stUrgentOrbMat = getSharedStdMat(0xf43f5e, 0.5, 0, {
+        emissive: 0xe11d48,
+        emissiveIntensity: 1.1,
+      });
+
+      const storeGeomOffsetVec = new THREE.Vector3();
+
       storePlacements.forEach((sp, storeIdx) => {
         const stGroup = new THREE.Group();
         stGroup.position.set(sp.x, 0.08, sp.z);
@@ -2782,24 +2843,12 @@ export function B2BCityCanvas({
         const variant = sp.styleVariant % 5;
 
         // 1. Raised Stone Sidewalk Patio Lot with Curb
-        const lotCurb = new THREE.Mesh(
-          createRoundedBoxGeo(4.2, 0.14, 4.0, 0.1, 2),
-          new THREE.MeshStandardMaterial({
-            color: night ? 0x334155 : 0xcbd5e1,
-            roughness: 0.7,
-          })
-        );
+        const lotCurb = new THREE.Mesh(lotCurbGeo, lotCurbMat);
         lotCurb.position.y = 0.07;
         lotCurb.receiveShadow = true;
         stGroup.add(lotCurb);
 
-        const lotPatio = new THREE.Mesh(
-          createRoundedBoxGeo(3.96, 0.16, 3.76, 0.08, 2),
-          new THREE.MeshStandardMaterial({
-            color: night ? 0x1e293b : 0xf8fafc,
-            roughness: 0.6,
-          })
-        );
+        const lotPatio = new THREE.Mesh(lotPatioGeo, lotPatioMat);
         lotPatio.position.y = 0.08;
         lotPatio.receiveShadow = true;
         stGroup.add(lotPatio);
@@ -2808,7 +2857,7 @@ export function B2BCityCanvas({
         const baseH = variant === 2 ? 2.35 : variant === 4 ? 2.15 : 1.95;
         const bodyMesh = new THREE.Mesh(
           createRoundedBoxGeo(3.2, baseH, 2.6, 0.12, 3),
-          new THREE.MeshStandardMaterial({ color: wallHex, roughness: 0.55 })
+          getSharedStdMat(wallHex, 0.55)
         );
         bodyMesh.position.set(0, baseH / 2 + 0.14, -0.2);
         bodyMesh.castShadow = true;
@@ -2816,79 +2865,52 @@ export function B2BCityCanvas({
         stGroup.add(bodyMesh);
 
         // 360-degree lower wainscoting plinth & mid-wall architectural trim
-        const wainscot = new THREE.Mesh(
-          createRoundedBoxGeo(3.3, 0.36, 2.7, 0.08, 2),
-          new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.65 })
-        );
+        const wainscot = new THREE.Mesh(wainscotGeo, wainscotMat);
         wainscot.position.set(0, 0.32, -0.2);
         stGroup.add(wainscot);
 
         // Side Windows on Both +X and -X Walls + Rear Service Window (-Z) so no side is ever blank
         [-1, 1].forEach((sideDir) => {
-          const sideFrame = new THREE.Mesh(
-            createRoundedBoxGeo(0.14, 0.85, 1.25, 0.04, 2),
-            darkFrameMat
-          );
+          const sideFrame = new THREE.Mesh(stSideFrameGeo, darkFrameMat);
           sideFrame.position.set(sideDir * 1.61, 0.92, -0.2);
           stGroup.add(sideFrame);
 
-          const sideGlass = new THREE.Mesh(
-            new THREE.BoxGeometry(0.16, 0.68, 1.08),
-            warmWindowMat
-          );
+          const sideGlass = new THREE.Mesh(stSideGlassGeo, warmWindowMat);
           sideGlass.position.set(sideDir * 1.61, 0.92, -0.2);
           stGroup.add(sideGlass);
 
-          const sideSill = new THREE.Mesh(
-            createRoundedBoxGeo(0.24, 0.1, 1.36, 0.03, 2),
-            stoneTrimMat
-          );
+          const sideSill = new THREE.Mesh(stSideSillGeo, stoneTrimMat);
           sideSill.position.set(sideDir * 1.64, 0.46, -0.2);
           stGroup.add(sideSill);
         });
 
         // Rear Window & Service Door (-Z face)
-        const rearWin = new THREE.Mesh(
-          createRoundedBoxGeo(1.2, 0.72, 0.14, 0.03, 2),
-          warmWindowMat
-        );
+        const rearWin = new THREE.Mesh(stRearWinGeo, warmWindowMat);
         rearWin.position.set(0.45, 0.95, -1.51);
         stGroup.add(rearWin);
 
-        const rearDoor = new THREE.Mesh(
-          createRoundedBoxGeo(0.68, 1.05, 0.14, 0.03, 2),
-          darkFrameMat
-        );
+        const rearDoor = new THREE.Mesh(stRearDoorGeo, darkFrameMat);
         rearDoor.position.set(-0.75, 0.68, -1.51);
         stGroup.add(rearDoor);
 
         // Architectural Corner Pilasters
+        const pilasterGeo = createRoundedBoxGeo(0.22, baseH + 0.04, 0.22, 0.04, 2);
         [
           [-1.56, 1.06],
           [1.56, 1.06],
           [-1.56, -1.46],
           [1.56, -1.46],
         ].forEach(([px, pz]) => {
-          const pilaster = new THREE.Mesh(
-            createRoundedBoxGeo(0.22, baseH + 0.04, 0.22, 0.04, 2),
-            stoneTrimMat
-          );
+          const pilaster = new THREE.Mesh(pilasterGeo, stoneTrimMat);
           pilaster.position.set(px, baseH / 2 + 0.14, pz);
-          pilaster.castShadow = true;
           stGroup.add(pilaster);
         });
 
         // 3. Variant Roof Architectures (Pitched Gable, Parisian Mansard, Rooftop Pergola, Clock Bistro)
-        const roofMat = new THREE.MeshStandardMaterial({
-          color: accentHex,
-          roughness: 0.4,
-        });
+        const roofMat = getSharedStdMat(accentHex, 0.4);
 
         // Status Trim Cornice around roof line
-        const cornice = new THREE.Mesh(
-          createRoundedBoxGeo(3.48, 0.22, 2.88, 0.06, 2),
-          roofMat
-        );
+        const cornice = new THREE.Mesh(stCorniceGeo, roofMat);
         cornice.position.set(0, baseH + 0.2, -0.2);
         cornice.castShadow = true;
         stGroup.add(cornice);
@@ -2896,11 +2918,8 @@ export function B2BCityCanvas({
         if (variant === 0 || variant === 3) {
           // Cozy Pitched Gable Bakery Roof + Rooftop Sign
           const pitchedRoof = new THREE.Mesh(
-            new THREE.ConeGeometry(2.35, 0.95, 4),
-            new THREE.MeshStandardMaterial({
-              color: variant === 0 ? 0x1e293b : 0x7c2d12,
-              roughness: 0.6,
-            })
+            stPitchedRoofGeo,
+            getSharedStdMat(variant === 0 ? 0x1e293b : 0x7c2d12, 0.6)
           );
           pitchedRoof.rotation.y = Math.PI / 4;
           pitchedRoof.scale.set(1.08, 1, 0.88);
@@ -2909,30 +2928,20 @@ export function B2BCityCanvas({
           stGroup.add(pitchedRoof);
         } else if (variant === 1) {
           // Parisian Mansard Tier + Rooftop AC & Skylight
-          const mansard = new THREE.Mesh(
-            createRoundedBoxGeo(2.75, 0.62, 2.15, 0.12, 3),
-            new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.5 })
-          );
+          const mansard = new THREE.Mesh(stMansardGeo, stMansardMat);
           mansard.position.set(0, baseH + 0.56, -0.2);
           mansard.castShadow = true;
           stGroup.add(mansard);
         } else {
           // Modern Terraced Bistro with Upper Sign Wall & Rooftop Greenery
-          const parapetSign = new THREE.Mesh(
-            createRoundedBoxGeo(2.4, 0.55, 0.24, 0.05, 2),
-            roofMat
-          );
+          const parapetSign = new THREE.Mesh(stParapetSignGeo, roofMat);
           parapetSign.position.set(0, baseH + 0.52, 0.95);
           parapetSign.castShadow = true;
           stGroup.add(parapetSign);
 
           // Rooftop AC unit
-          const acUnit = new THREE.Mesh(
-            createRoundedBoxGeo(0.65, 0.38, 0.55, 0.04, 2),
-            stoneTrimMat
-          );
+          const acUnit = new THREE.Mesh(stAcUnitGeo, stoneTrimMat);
           acUnit.position.set(-0.85, baseH + 0.45, -0.55);
-          acUnit.castShadow = true;
           stGroup.add(acUnit);
         }
 
@@ -2943,77 +2952,45 @@ export function B2BCityCanvas({
         stGroup.add(storeAwning);
 
         // Classic White Signboard with Dark Trim mounted above entrance awning
-        const signBacking = new THREE.Mesh(
-          createRoundedBoxGeo(2.1, 0.36, 0.1, 0.03, 2),
-          darkFrameMat
-        );
+        const signBacking = new THREE.Mesh(stSignBackGeo, darkFrameMat);
         signBacking.position.set(0, 1.84, 1.18);
-        signBacking.castShadow = true;
         stGroup.add(signBacking);
 
-        const signFace = new THREE.Mesh(
-          createRoundedBoxGeo(2.02, 0.3, 0.08, 0.02, 2),
-          new THREE.MeshStandardMaterial({
-            color: 0xffffff,
-            roughness: 0.25,
-            metalness: 0.05,
-          })
-        );
+        const signFace = new THREE.Mesh(stSignFaceGeo, stSignFaceMat);
         signFace.position.set(0, 1.84, 1.22);
         stGroup.add(signFace);
 
         // 5. Recessed Storefront Door + Warm Display Window + Flower Planter Box
-        const doorFrame = new THREE.Mesh(
-          createRoundedBoxGeo(0.78, 1.12, 0.14, 0.03, 2),
-          darkFrameMat
-        );
+        const doorFrame = new THREE.Mesh(stDoorFrameGeo, darkFrameMat);
         doorFrame.position.set(-0.82, 0.7, 1.11);
         stGroup.add(doorFrame);
 
-        const doorGlass = new THREE.Mesh(
-          new THREE.BoxGeometry(0.62, 0.96, 0.16),
-          warmWindowMat
-        );
+        const doorGlass = new THREE.Mesh(stDoorGlassGeo, warmWindowMat);
         doorGlass.position.set(-0.82, 0.7, 1.11);
         stGroup.add(doorGlass);
 
         // Large Picture Display Window
-        const winFrame = new THREE.Mesh(
-          createRoundedBoxGeo(1.48, 0.88, 0.14, 0.04, 2),
-          darkFrameMat
-        );
+        const winFrame = new THREE.Mesh(stWinFrameGeo, darkFrameMat);
         winFrame.position.set(0.52, 0.82, 1.11);
         stGroup.add(winFrame);
 
-        const winPane = new THREE.Mesh(
-          new THREE.BoxGeometry(1.32, 0.72, 0.16),
-          warmWindowMat
-        );
+        const winPane = new THREE.Mesh(stWinPaneGeo, warmWindowMat);
         winPane.position.set(0.52, 0.82, 1.11);
         stGroup.add(winPane);
 
         // Window Flower Box under Display Window
-        const planterBox = new THREE.Mesh(
-          createRoundedBoxGeo(1.42, 0.22, 0.28, 0.03, 2),
-          new THREE.MeshStandardMaterial({ color: 0x78350f, roughness: 0.8 })
-        );
+        const planterBox = new THREE.Mesh(stPlanterGeo, stPlanterMat);
         planterBox.position.set(0.52, 0.28, 1.24);
         stGroup.add(planterBox);
 
-        const hedge = new THREE.Mesh(
-          createRoundedBoxGeo(1.34, 0.18, 0.22, 0.05, 2),
-          new THREE.MeshStandardMaterial({ color: 0x16a34a, roughness: 0.7 })
-        );
+        const hedge = new THREE.Mesh(stHedgeGeo, stHedgeMat);
         hedge.position.set(0.52, 0.42, 1.24);
         stGroup.add(hedge);
 
         // Second-story windows if taller store variant
         if (baseH > 2.05) {
           [-0.75, 0.75].forEach((ux) => {
-            const uWin = new THREE.Mesh(
-              createRoundedBoxGeo(0.75, 0.52, 0.14, 0.03, 2),
-              windowGlowMat
-            );
+            const uWin = new THREE.Mesh(stUpperWinGeo, windowGlowMat);
             uWin.position.set(ux, 1.92, 1.11);
             stGroup.add(uWin);
           });
@@ -3045,10 +3022,9 @@ export function B2BCityCanvas({
         );
 
         // Position the detached circular garden patio cleanly outside the store's sidewalk curb (x = 2.1)
-        const terraceOffset = new THREE.Vector3(3.05, 0.05, 1.15);
-        terraceOffset.applyAxisAngle(new THREE.Vector3(0, 1, 0), sp.rotationY);
-        const worldTableX = sp.x + terraceOffset.x;
-        const worldTableZ = sp.z + terraceOffset.z;
+        storeGeomOffsetVec.set(3.05, 0.05, 1.15).applyAxisAngle(Y_AXIS, sp.rotationY);
+        const worldTableX = sp.x + storeGeomOffsetVec.x;
+        const worldTableZ = sp.z + storeGeomOffsetVec.z;
 
         patioSet.group.position.set(worldTableX, 0.05, worldTableZ);
         patioSet.group.rotation.y = sp.rotationY;
@@ -3083,6 +3059,7 @@ export function B2BCityCanvas({
         };
 
         // Add both the patio group AND the single continuous customer directly to worldGroup
+        attachHitProxy(patioSet.group, treeCafeId, 1.6, 2.4, 1.6, 0, 1.2, 0);
         worldGroup.add(patioSet.group);
         worldGroup.add(patioSet.walkingCustomer);
 
@@ -3094,23 +3071,33 @@ export function B2BCityCanvas({
         });
 
         // Store entrance door in world coordinates (front porch at local x = -0.82, z = 1.45)
-        const doorOffset = new THREE.Vector3(-0.82, 0.08, 1.45);
-        doorOffset.applyAxisAngle(new THREE.Vector3(0, 1, 0), sp.rotationY);
-        const doorWorldPos = new THREE.Vector3(sp.x + doorOffset.x, 0.08, sp.z + doorOffset.z);
+        storeGeomOffsetVec.set(-0.82, 0.08, 1.45).applyAxisAngle(Y_AXIS, sp.rotationY);
+        const doorWorldPos = new THREE.Vector3(
+          sp.x + storeGeomOffsetVec.x,
+          0.08,
+          sp.z + storeGeomOffsetVec.z
+        );
 
         // Patio entry waypoint in front of stepping stones & table (local x = 2.45, z = 1.45)
-        const entryOffset = new THREE.Vector3(2.45, 0.08, 1.45);
-        entryOffset.applyAxisAngle(new THREE.Vector3(0, 1, 0), sp.rotationY);
-        const patioEntryWorldPos = new THREE.Vector3(sp.x + entryOffset.x, 0.08, sp.z + entryOffset.z);
+        storeGeomOffsetVec.set(2.45, 0.08, 1.45).applyAxisAngle(Y_AXIS, sp.rotationY);
+        const patioEntryWorldPos = new THREE.Vector3(
+          sp.x + storeGeomOffsetVec.x,
+          0.08,
+          sp.z + storeGeomOffsetVec.z
+        );
 
         // Diner's chair in world coordinates (local +0.35 * 0.95 from patio center)
-        const chairOffset = new THREE.Vector3(0.35 * 0.95, 0.08, 0);
-        chairOffset.applyAxisAngle(new THREE.Vector3(0, 1, 0), sp.rotationY);
-        const chairWorldPos = new THREE.Vector3(worldTableX + chairOffset.x, 0.08, worldTableZ + chairOffset.z);
+        storeGeomOffsetVec.set(0.35 * 0.95, 0.08, 0).applyAxisAngle(Y_AXIS, sp.rotationY);
+        const chairWorldPos = new THREE.Vector3(
+          worldTableX + storeGeomOffsetVec.x,
+          0.08,
+          worldTableZ + storeGeomOffsetVec.z
+        );
 
-        cafeCustomerAgentsRef.current.push({
+        const storeAgentItem: CafeCustomerAgentItem = {
           id: treeCafeId,
           walkingCustomer: patioSet.walkingCustomer,
+          rigRefs: patioSet.rigRefs,
           handheldUmbrella: patioSet.handheldUmbrella,
           carriedBag: patioSet.carriedBag,
           tableFood: patioSet.tableFood,
@@ -3126,18 +3113,14 @@ export function B2BCityCanvas({
           cycleDuration: 30.0,
           phaseOffset: (storeIdx + 1) * 5.5,
           eatingSpeed: 1.7 + (storeIdx % 3) * 0.35,
-        });
+        };
+        cafeCustomerAgentsRef.current.push(storeAgentItem);
+        cafeAgentsMapRef.current.set(treeCafeId, storeAgentItem);
 
         // 7. Urgent / Overdue Pulsing Alert Ring above Roof
+        let alertOrb: THREE.Object3D | undefined;
         if (health === "urgent") {
-          const alertOrb = new THREE.Mesh(
-            new THREE.OctahedronGeometry(0.28, 0),
-            new THREE.MeshStandardMaterial({
-              color: 0xf43f5e,
-              emissive: 0xe11d48,
-              emissiveIntensity: 1.1,
-            })
-          );
+          alertOrb = new THREE.Mesh(stUrgentOrbGeo, stUrgentOrbMat);
           alertOrb.name = "urgent-beacon";
           alertOrb.position.set(0, baseH + 1.35, -0.2);
           stGroup.add(alertOrb);
@@ -3150,12 +3133,14 @@ export function B2BCityCanvas({
         spawnedIdsRef.current.add(sp.id);
         stGroup.scale.setScalar(startScale);
 
+        attachHitProxy(stGroup, sp.id, 4.2, 3.2, 4.0, 0, 1.6, 0);
         worldGroup.add(stGroup);
         clickableGroupsRef.current.set(sp.id, {
           group: stGroup,
           placement: sp,
           targetScale: 1,
           currentScale: startScale,
+          urgentOrb: alertOrb,
         });
       });
 
@@ -3268,39 +3253,26 @@ export function B2BCityCanvas({
         // Rounded Insulated White Cargo Box with Brand Stripe
         const cargo = new THREE.Mesh(
           createRoundedBoxGeo(1.18, 0.78, 0.82, 0.08, 3),
-          new THREE.MeshStandardMaterial({
-            color: 0xffffff,
-            roughness: 0.3,
-            metalness: 0.1,
-          })
+          getSharedStdMat(0xffffff, 0.3, 0.1)
         );
         cargo.position.set(-0.22, 0.62, 0);
         cargo.castShadow = true;
         vanGroup.add(cargo);
 
         const brandStripe = new THREE.Mesh(
-          new THREE.BoxGeometry(1.2, 0.16, 0.84),
-          new THREE.MeshStandardMaterial({
-            color: cabColors[v % cabColors.length],
-            roughness: 0.35,
-          })
+          getBoxGeo(1.2, 0.16, 0.84),
+          getSharedStdMat(cabColors[v % cabColors.length], 0.35)
         );
         brandStripe.position.set(-0.22, 0.62, 0);
         vanGroup.add(brandStripe);
 
         // Openable Rear Cargo Doors (swing open during loading at HQ & unloading at Store)
-        const doorLeafMat = new THREE.MeshStandardMaterial({
-          color: 0xf8fafc,
-          roughness: 0.35,
-          metalness: 0.2,
-        });
+        const doorLeafMat = getSharedStdMat(0xf8fafc, 0.35, 0.2);
+        const rearDoorGeo = createRoundedBoxGeo(0.06, 0.66, 0.36, 0.02, 2);
         const leftRearDoor = new THREE.Group();
         leftRearDoor.name = "left-rear-door";
         leftRearDoor.position.set(-0.82, 0.62, -0.36);
-        const leftDoorMesh = new THREE.Mesh(
-          createRoundedBoxGeo(0.06, 0.66, 0.36, 0.02, 2),
-          doorLeafMat
-        );
+        const leftDoorMesh = new THREE.Mesh(rearDoorGeo, doorLeafMat);
         leftDoorMesh.position.set(0, 0, 0.18);
         leftRearDoor.add(leftDoorMesh);
         vanGroup.add(leftRearDoor);
@@ -3308,18 +3280,19 @@ export function B2BCityCanvas({
         const rightRearDoor = new THREE.Group();
         rightRearDoor.name = "right-rear-door";
         rightRearDoor.position.set(-0.82, 0.62, 0.36);
-        const rightDoorMesh = new THREE.Mesh(
-          createRoundedBoxGeo(0.06, 0.66, 0.36, 0.02, 2),
-          doorLeafMat
-        );
+        const rightDoorMesh = new THREE.Mesh(rearDoorGeo, doorLeafMat);
         rightDoorMesh.position.set(0, 0, -0.18);
         rightRearDoor.add(rightDoorMesh);
         vanGroup.add(rightRearDoor);
 
+        vanGroup.userData.leftDoor = leftRearDoor;
+        vanGroup.userData.rightDoor = rightRearDoor;
+        vanGroup.userData.workerRigRefs = workerGroup.userData.rigRefs as WorkerRigRefs;
+
         // Visible Interior Cargo Crates inside back of van
         const interiorCrates = new THREE.Mesh(
           createRoundedBoxGeo(0.32, 0.32, 0.48, 0.03, 2),
-          new THREE.MeshStandardMaterial({ color: 0xd97706, roughness: 0.65 })
+          getSharedStdMat(0xd97706, 0.65)
         );
         interiorCrates.name = "interior-crates";
         interiorCrates.position.set(-0.68, 0.48, 0);
@@ -3328,11 +3301,7 @@ export function B2BCityCanvas({
         // Rounded Aerodynamic Cab + Windshield
         const cab = new THREE.Mesh(
           createRoundedBoxGeo(0.62, 0.62, 0.76, 0.09, 3),
-          new THREE.MeshStandardMaterial({
-            color: cabColors[v % cabColors.length],
-            roughness: 0.3,
-            metalness: 0.2,
-          })
+          getSharedStdMat(cabColors[v % cabColors.length], 0.3, 0.2)
         );
         cab.position.set(0.64, 0.52, 0);
         cab.castShadow = true;
@@ -3346,42 +3315,30 @@ export function B2BCityCanvas({
         vanGroup.add(windshield);
 
         // Glowing Headlights & Red Taillights
-        const headlightMat = new THREE.MeshStandardMaterial({
-          color: 0xfef08a,
+        const headlightMat = getSharedStdMat(0xfef08a, 0.5, 0, {
           emissive: 0xfacc15,
           emissiveIntensity: 1.5,
         });
-        const taillightMat = new THREE.MeshStandardMaterial({
-          color: 0xf43f5e,
+        const taillightMat = getSharedStdMat(0xf43f5e, 0.5, 0, {
           emissive: 0xe11d48,
           emissiveIntensity: 1.2,
         });
+        const lightGeo = getBoxGeo(0.06, 0.1, 0.14);
         [-0.26, 0.26].forEach((lz) => {
-          const hl = new THREE.Mesh(
-            new THREE.BoxGeometry(0.06, 0.1, 0.14),
-            headlightMat
-          );
+          const hl = new THREE.Mesh(lightGeo, headlightMat);
           hl.position.set(0.95, 0.38, lz);
           vanGroup.add(hl);
 
-          const tl = new THREE.Mesh(
-            new THREE.BoxGeometry(0.06, 0.1, 0.14),
-            taillightMat
-          );
+          const tl = new THREE.Mesh(lightGeo, taillightMat);
           tl.position.set(-0.82, 0.38, lz);
           vanGroup.add(tl);
         });
 
         // 4 Wheels with Silver Hubcaps
-        const tireMat = new THREE.MeshStandardMaterial({
-          color: 0x0f172a,
-          roughness: 0.8,
-        });
-        const hubMat = new THREE.MeshStandardMaterial({
-          color: 0xe2e8f0,
-          metalness: 0.7,
-          roughness: 0.2,
-        });
+        const tireMat = getSharedStdMat(0x0f172a, 0.8);
+        const hubMat = getSharedStdMat(0xe2e8f0, 0.2, 0.7);
+        const tireGeo = getCylinderGeo(0.2, 0.2, 0.14, 14);
+        const hubGeo = getCylinderGeo(0.1, 0.1, 0.16, 10);
         [
           [-0.48, 0.2, 0.4],
           [-0.48, 0.2, -0.4],
@@ -3390,22 +3347,17 @@ export function B2BCityCanvas({
         ].forEach(([wx, wy, wz]) => {
           const wheelGrp = new THREE.Group();
           wheelGrp.position.set(wx, wy, wz);
-          const tire = new THREE.Mesh(
-            new THREE.CylinderGeometry(0.2, 0.2, 0.14, 14),
-            tireMat
-          );
+          const tire = new THREE.Mesh(tireGeo, tireMat);
           tire.rotation.x = Math.PI / 2;
           wheelGrp.add(tire);
 
-          const hub = new THREE.Mesh(
-            new THREE.CylinderGeometry(0.1, 0.1, 0.16, 10),
-            hubMat
-          );
+          const hub = new THREE.Mesh(hubGeo, hubMat);
           hub.rotation.x = Math.PI / 2;
           wheelGrp.add(hub);
           vanGroup.add(wheelGrp);
         });
 
+        attachHitProxy(vanGroup, vanPlacement.id, 2.2, 1.2, 1.0, 0.05, 0.6, 0);
         worldGroup.add(vanGroup);
         clickableGroupsRef.current.set(vanPlacement.id, {
           group: vanGroup,
@@ -3414,6 +3366,9 @@ export function B2BCityCanvas({
           currentScale: 1,
         });
       }
+
+      // Trigger initial label sync right after rebuilding meshes
+      syncFloatingLabelsRef.current?.(true);
 
       // Note: Rather than generic pedestrians traversing across empty streets,
       // all patrons are now situated at storefront cafes and ordering counters,
@@ -3444,12 +3399,15 @@ export function B2BCityCanvas({
     camera.position.set(23, 22, 27);
     cameraRef.current = camera;
 
+    const isDenseScene = layoutRef.current.storePlacements.length > 12;
+    viewportSizeRef.current = { width, height };
+
     const renderer = new THREE.WebGLRenderer({
       antialias: true,
       powerPreference: "high-performance",
     });
     renderer.setSize(width, height);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, isDenseScene ? 1.5 : 2));
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -3477,7 +3435,7 @@ export function B2BCityCanvas({
     controls.enableZoom = false;
     // On touch: single-finger swipe scrolls page natively; 2 fingers rotate and zoom 3D diorama
     controls.touches = {
-      ONE: undefined as any,
+      ONE: undefined as unknown as THREE.TOUCH,
       TWO: THREE.TOUCH.DOLLY_ROTATE,
     };
     controlsRef.current = controls;
@@ -3496,8 +3454,9 @@ export function B2BCityCanvas({
     const dirLight = new THREE.DirectionalLight(atmos.dirLightColor, atmos.dirLightIntensity);
     dirLight.position.set(22, 36, 20);
     dirLight.castShadow = true;
-    dirLight.shadow.mapSize.width = 2048;
-    dirLight.shadow.mapSize.height = 2048;
+    const shadowMapSize = isDenseScene ? 1536 : 2048;
+    dirLight.shadow.mapSize.width = shadowMapSize;
+    dirLight.shadow.mapSize.height = shadowMapSize;
     dirLight.shadow.camera.near = 5;
     dirLight.shadow.camera.far = 110;
     const d = 32;
@@ -3576,36 +3535,38 @@ export function B2BCityCanvas({
 
     rebuildCityMeshes(worldGroup, layoutRef.current, isNightModeRef.current);
 
-    // Raycaster & Pointer Interaction
+    // Raycaster & Pointer Interaction (hits low-poly BoxGeometry proxies only)
     const raycaster = new THREE.Raycaster();
     const pointer = new THREE.Vector2();
     let pointerDownPos = { x: 0, y: 0 };
+    let lastHoverCheck = 0;
 
     const getHitClickableId = (clientX: number, clientY: number): string | null => {
       const rect = renderer.domElement.getBoundingClientRect();
+      if (rect.width === 0 || rect.height === 0) return null;
       pointer.x = ((clientX - rect.left) / rect.width) * 2 - 1;
       pointer.y = -((clientY - rect.top) / rect.height) * 2 + 1;
       raycaster.setFromCamera(pointer, camera);
 
-      const intersects = raycaster.intersectObjects(worldGroup.children, true);
+      const intersects = raycaster.intersectObjects(raycastProxiesRef.current, false);
       for (const hit of intersects) {
-        let curr: THREE.Object3D | null = hit.object;
-        while (curr && curr !== worldGroup) {
-          const cid = curr.userData?.clickableId as string | undefined;
-          if (cid) {
-            // Cafe patios are only clickable while the customer is seated & eating
-            // (food bubble visible); otherwise let the ray pass through.
-            const cafeAgent = cafeCustomerAgentsRef.current.find((a) => a.id === cid);
-            if (cafeAgent && !cafeAgent.foodBubble.visible) break;
-            return cid;
-          }
-          curr = curr.parent;
-        }
+        const cid = hit.object.userData?.clickableId as string | undefined;
+        if (!cid) continue;
+        // Cafe patios are only clickable while the customer is seated & eating
+        // (food bubble visible); otherwise let the ray pass through.
+        const cafeAgent = cafeAgentsMapRef.current.get(cid);
+        if (cafeAgent && !cafeAgent.foodBubble.visible) continue;
+        return cid;
       }
       return null;
     };
 
     const handlePointerMove = (e: PointerEvent) => {
+      if (e.buttons !== 0) return;
+      const now = performance.now();
+      if (now - lastHoverCheck < 40) return;
+      lastHoverCheck = now;
+
       const hitId = getHitClickableId(e.clientX, e.clientY);
       if (hitId !== hoveredIdRef.current) {
         setHoveredId(hitId);
@@ -3677,37 +3638,56 @@ export function B2BCityCanvas({
     domElem.addEventListener("pointerup", handlePointerUp);
     domElem.addEventListener("wheel", handleWheelCapture, { capture: true, passive: true });
 
-    const handleResize = () => {
-      if (!container) return;
-      const w = container.clientWidth || 800;
-      const h = container.clientHeight || 520;
-      camera.aspect = w / h;
-      camera.updateProjectionMatrix();
-      renderer.setSize(w, h);
-    };
-    const resizeObserver = new ResizeObserver(handleResize);
-    resizeObserver.observe(container);
-
     // Animation Loop (only runs continuously when isSimulating is true AND in viewport)
     let frameId = 0;
     let isLoopRunning = false;
-    let lastLabelSync = -1;
     let accumulatedElapsed = 0;
     const clock = new THREE.Clock();
 
     const cachedProjVec = new THREE.Vector3();
+    const projScreenMatrix = new THREE.Matrix4();
+    const cameraFrustum = new THREE.Frustum();
+    const agentCullSphere = new THREE.Sphere(new THREE.Vector3(), 4.5);
+    const lastCamMatrix = new Float32Array(16);
+    let hasProjectedOnce = false;
+    let lastCandleIntensity = -1;
 
-    const syncFloatingLabels = () => {
-      const rect = renderer.domElement.getBoundingClientRect();
-      const cWidth = rect.width || container.clientWidth || 900;
-      const cHeight = rect.height || container.clientHeight || 560;
-      const nextLabels: FloatingLabelItem[] = [];
+    const syncFloatingLabels = (forceAll: boolean = false) => {
+      const cWidth = viewportSizeRef.current.width || 900;
+      const cHeight = viewportSizeRef.current.height || 560;
 
-      clickableGroupsRef.current.forEach((entry, id) => {
+      camera.updateMatrixWorld();
+      const camElems = camera.matrixWorldInverse.elements;
+      let cameraMoved = forceAll || !hasProjectedOnce;
+      if (!cameraMoved) {
+        for (let i = 0; i < 16; i++) {
+          if (Math.abs(camElems[i] - lastCamMatrix[i]) > 1e-5) {
+            cameraMoved = true;
+            break;
+          }
+        }
+      }
+      if (cameraMoved) {
+        lastCamMatrix.set(camElems);
+        hasProjectedOnce = true;
+      }
+
+      const projectEntry = (id: string, entry: ClickableGroupEntry) => {
         const { group, placement } = entry;
-        // Skip floating 2D HTML building badge for tree cafe so park trees and lawn remain clean & uncluttered
-        if (placement.kind === "tree_cafe") {
-          return;
+        if (placement.kind === "tree_cafe") return;
+        const domEntry = labelDomRefs.current.get(id);
+        if (!domEntry) return;
+
+        if (placement.kind === "van") {
+          if (domEntry.labelSpan && domEntry.lastLabel !== placement.label) {
+            domEntry.labelSpan.textContent = placement.label;
+            domEntry.lastLabel = placement.label;
+          }
+          const nextSub = placement.subLabel ? `· ${placement.subLabel}` : "";
+          if (domEntry.subSpan && domEntry.lastSubLabel !== nextSub) {
+            domEntry.subSpan.textContent = nextSub;
+            domEntry.lastSubLabel = nextSub;
+          }
         }
 
         const topY =
@@ -3718,6 +3698,7 @@ export function B2BCityCanvas({
             : placement.kind === "van"
             ? 1.75
             : 3.6;
+
         cachedProjVec.set(group.position.x, topY, group.position.z);
         cachedProjVec.project(camera);
 
@@ -3730,21 +3711,47 @@ export function B2BCityCanvas({
           sy > 15 &&
           sy < cHeight - 15;
 
-        nextLabels.push({
-          id,
-          kind: placement.kind,
-          label: placement.label,
-          subLabel: placement.subLabel,
-          topProduct: placement.storeNode?.topProduct,
-          healthStatus: placement.storeNode?.healthStatus,
-          x: sx,
-          y: sy,
-          visible: isVisible,
-        });
-      });
+        if (isVisible !== domEntry.lastVisible) {
+          domEntry.root.style.display = isVisible ? "" : "none";
+          domEntry.lastVisible = isVisible;
+        }
+        if (isVisible) {
+          const rx = Math.round(sx);
+          const ry = Math.round(sy);
+          if (rx !== domEntry.lastX || ry !== domEntry.lastY) {
+            domEntry.root.style.transform = `translate3d(${rx}px, ${ry}px, 0) translate(-50%, -100%)`;
+            domEntry.lastX = rx;
+            domEntry.lastY = ry;
+          }
+        }
+      };
 
-      setLabels(nextLabels);
+      if (cameraMoved) {
+        clickableGroupsRef.current.forEach((entry, id) => {
+          projectEntry(id, entry);
+        });
+      } else {
+        // Stationary camera: only re-project the 2 moving delivery vans
+        const van0 = clickableGroupsRef.current.get("van-0");
+        if (van0) projectEntry("van-0", van0);
+        const van1 = clickableGroupsRef.current.get("van-1");
+        if (van1) projectEntry("van-1", van1);
+      }
     };
+    syncFloatingLabelsRef.current = syncFloatingLabels;
+
+    const handleResize = () => {
+      if (!container) return;
+      const w = container.clientWidth || 800;
+      const h = container.clientHeight || 520;
+      viewportSizeRef.current = { width: w, height: h };
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
+      renderer.setSize(w, h);
+      syncFloatingLabels(true);
+    };
+    const resizeObserver = new ResizeObserver(handleResize);
+    resizeObserver.observe(container);
 
     const animate = () => {
       if (!isSimulatingRef.current) {
@@ -3773,27 +3780,29 @@ export function B2BCityCanvas({
       const activeHovId = hoveredIdRef.current;
 
       clickableGroupsRef.current.forEach((entry, id) => {
-        const { group, placement } = entry;
+        const { group, placement, emblem, urgentOrb, steam, conveyor } = entry;
 
         const isHovered = id === activeHovId;
         const desiredScale = isHovered ? 1.05 : entry.targetScale;
-        entry.currentScale += (desiredScale - entry.currentScale) * 0.14;
-        group.scale.setScalar(entry.currentScale);
+        if (Math.abs(desiredScale - entry.currentScale) > 0.0005) {
+          entry.currentScale += (desiredScale - entry.currentScale) * 0.14;
+          group.scale.setScalar(entry.currentScale);
+        } else if (entry.currentScale !== desiredScale) {
+          entry.currentScale = desiredScale;
+          group.scale.setScalar(desiredScale);
+        }
 
-        const emblem = group.getObjectByName("rotating-emblem");
         if (emblem) {
           emblem.rotation.y = elapsed * 1.4;
           emblem.position.y += Math.sin(elapsed * 2.5) * 0.002;
         }
 
-        const urgentOrb = group.getObjectByName("urgent-beacon");
         if (urgentOrb) {
           const s = 1 + Math.sin(elapsed * 5) * 0.22;
           urgentOrb.scale.setScalar(s);
           urgentOrb.rotation.y = elapsed * 2.2;
         }
 
-        const steam = group.getObjectByName("hq-steam");
         if (steam) {
           steam.children.forEach((puff, idx) => {
             const cycle = (elapsed * 0.7 + idx * 0.25) % 1;
@@ -3803,7 +3812,6 @@ export function B2BCityCanvas({
           });
         }
 
-        const conveyor = group.getObjectByName("wh-conveyor");
         if (conveyor) {
           conveyor.children.forEach((crate, idx) => {
             const cPos = ((elapsed * 0.5 + idx * 0.33) % 1) * 2.3 - 1.15;
@@ -3815,10 +3823,10 @@ export function B2BCityCanvas({
           const ud = group.userData;
           const wps: Array<{ x: number; z: number }> = ud.waypoints || [];
           const workerGrp: THREE.Group | undefined = ud.workerGroup;
-          const leftDoor = group.getObjectByName("left-rear-door");
-          const rightDoor = group.getObjectByName("right-rear-door");
+          const workerRig: WorkerRigRefs | undefined = ud.workerRigRefs;
+          const leftDoor: THREE.Object3D | undefined = ud.leftDoor;
+          const rightDoor: THREE.Object3D | undefined = ud.rightDoor;
           const dt = delta || 0.016;
-          const driveSpeed = 0.42 + (ud.vanIndex || 0) * 0.04;
 
           // Helper to animate the 3D human worker walking between two points with a crate
           const animateWorkerTrip = (
@@ -3849,18 +3857,18 @@ export function B2BCityCanvas({
             const angle = Math.atan2(ex - sx, ez - sz);
             workerGrp.rotation.y = angle;
 
-            // Swing legs while walking
-            const lLeg = workerGrp.getObjectByName("left-leg");
-            const rLeg = workerGrp.getObjectByName("right-leg");
+            // Swing legs while walking (O(1) direct rig refs)
+            const lLeg = workerRig?.lLeg;
+            const rLeg = workerRig?.rLeg;
             if (lLeg && rLeg) {
               lLeg.rotation.x = Math.sin(elapsed * 14) * 0.55;
               rLeg.rotation.x = -Math.sin(elapsed * 14) * 0.55;
             }
 
             // Show crate in hands when carrying (outbound), hide when walking back empty-handed
-            const crate = workerGrp.getObjectByName("carried-crate");
-            const lArm = workerGrp.getObjectByName("left-arm");
-            const rArm = workerGrp.getObjectByName("right-arm");
+            const crate = workerRig?.carriedCrate;
+            const lArm = workerRig?.lArm;
+            const rArm = workerRig?.rArm;
             const hasBox = carryingOnOutbound ? isOutbound : !isOutbound;
             if (crate) crate.visible = hasBox;
             if (lArm && rArm) {
@@ -4139,26 +4147,29 @@ export function B2BCityCanvas({
         currentSeason === "thunderstorm" ||
         currentSeason === "snow";
 
+      const targetCandleIntensity = isNight ? 0.95 : 0.15;
+      if (lastCandleIntensity !== targetCandleIntensity) {
+        SHARED_CANDLE_MAT.emissiveIntensity = targetCandleIntensity;
+        lastCandleIntensity = targetCandleIntensity;
+      }
+
+      camera.updateMatrixWorld();
+      projScreenMatrix.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+      cameraFrustum.setFromProjectionMatrix(projScreenMatrix);
+
       cafeCustomerAgentsRef.current.forEach((agent) => {
+        agentCullSphere.center.copy(agent.patioEntryWorldPos);
+        if (!cameraFrustum.intersectsSphere(agentCullSphere)) {
+          return;
+        }
+
         const cycleTime = agent.cycleDuration || 30.0;
         const localTime = (elapsed + agent.phaseOffset) % cycleTime;
-
-        if (agent.tableCandle) {
-          (agent.tableCandle.material as THREE.MeshStandardMaterial).emissiveIntensity =
-            isNight ? 0.95 : 0.15;
-        }
 
         // Single continuous character is ALWAYS visible — zero mesh swapping or disappearing!
         agent.walkingCustomer.visible = true;
 
-        const lLeg = agent.walkingCustomer.getObjectByName("left-leg");
-        const rLeg = agent.walkingCustomer.getObjectByName("right-leg");
-        const lKnee = agent.walkingCustomer.getObjectByName("left-knee");
-        const rKnee = agent.walkingCustomer.getObjectByName("right-knee");
-        const lArm = agent.walkingCustomer.getObjectByName("left-arm");
-        const rArm = agent.walkingCustomer.getObjectByName("right-arm");
-        const headGrp = agent.walkingCustomer.getObjectByName("head-group");
-        const heldBite = agent.walkingCustomer.getObjectByName("held-bite");
+        const { lLeg, rLeg, lKnee, rKnee, lArm, rArm, headGrp, heldBite } = agent.rigRefs;
 
         const seatedFacingAngle = agent.storeRotationY - Math.PI / 2;
 
@@ -4531,17 +4542,13 @@ export function B2BCityCanvas({
 
       renderer.render(scene, camera);
 
-      // Smooth floating label synchronization locked onto moving trucks and buildings
-      if (elapsed - lastLabelSync >= 0.033) {
-        lastLabelSync = elapsed;
-        syncFloatingLabels();
-      }
+      // Direct DOM label synchronization (zero React re-renders; projects all on camera move, vans-only otherwise)
+      syncFloatingLabels();
     };
 
     wakeLoopRef.current = () => {
       clock.getDelta(); // Discard elapsed paused time to prevent physics jump
-      lastLabelSync = -1;
-      syncFloatingLabels(); // Snap labels immediately to exact 3D positions on resume
+      syncFloatingLabels(true); // Snap labels immediately to exact 3D positions on resume
       if (!isLoopRunning) {
         animate();
       }
@@ -4559,7 +4566,7 @@ export function B2BCityCanvas({
     const handleControlsChange = () => {
       if (!isSimulatingRef.current) {
         renderer.render(scene, camera);
-        syncFloatingLabels();
+        syncFloatingLabels(true);
       }
     };
     controls.addEventListener("change", handleControlsChange);
@@ -4582,6 +4589,7 @@ export function B2BCityCanvas({
     return () => {
       wakeLoopRef.current = null;
       pauseLoopRef.current = null;
+      syncFloatingLabelsRef.current = null;
       if (frameId) cancelAnimationFrame(frameId);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       controls.removeEventListener("change", handleControlsChange);
@@ -4600,6 +4608,8 @@ export function B2BCityCanvas({
       if (cloudsGroupRef.current) {
         cloudsGroupRef.current.clear();
       }
+      selectionRing.geometry.dispose();
+      (selectionRing.material as THREE.Material).dispose();
       rainPoints.geometry.dispose();
       (rainPoints.material as THREE.Material).dispose();
       snowPoints.geometry.dispose();
@@ -4794,6 +4804,10 @@ export function B2BCityCanvas({
     }
   }, [focusTargetId]);
 
+  useLayoutEffect(() => {
+    syncFloatingLabelsRef.current?.(true);
+  }, [labelItems]);
+
   return (
     <div className="relative w-full h-full select-none overflow-hidden touch-pan-y">
       <div
@@ -4814,10 +4828,9 @@ export function B2BCityCanvas({
         </div>
       )}
 
-      {/* Projected 3D Building Floating Badges */}
+      {/* Projected 3D Building Floating Badges (positioned via direct DOM refs, zero per-frame React re-renders) */}
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
-        {labels.map((lbl) => {
-          if (!lbl.visible) return null;
+        {labelItems.map((lbl) => {
           const isSelected = lbl.id === selectedId;
           const isHovered = lbl.id === hoveredId;
 
@@ -4864,22 +4877,49 @@ export function B2BCityCanvas({
           return (
             <div
               key={lbl.id}
-              style={{
-                transform: `translate3d(${Math.round(lbl.x)}px, ${Math.round(
-                  lbl.y
-                )}px, 0) translate(-50%, -100%)`,
+              ref={(el) => {
+                if (el) {
+                  const existing = labelDomRefs.current.get(lbl.id);
+                  if (!existing || existing.root !== el) {
+                    labelDomRefs.current.set(lbl.id, {
+                      root: el,
+                      labelSpan: el.querySelector<HTMLSpanElement>("[data-lbl-main]"),
+                      subSpan: el.querySelector<HTMLSpanElement>("[data-lbl-sub]"),
+                      lastX: Number.NaN,
+                      lastY: Number.NaN,
+                      lastVisible: true,
+                      lastLabel: "",
+                      lastSubLabel: "",
+                    });
+                  }
+                } else {
+                  labelDomRefs.current.delete(lbl.id);
+                }
               }}
-              className={`absolute top-0 left-0 transition-transform duration-75 px-2.5 py-0.5 rounded-lg border text-[10.5px] font-extrabold tracking-tight whitespace-nowrap backdrop-blur-xs shadow-sm ${badgeStyle} ${
+              style={LABEL_INIT_STYLE}
+              className={`absolute top-0 left-0 px-2.5 py-0.5 rounded-lg border text-[10.5px] font-extrabold tracking-tight whitespace-nowrap backdrop-blur-xs shadow-sm ${badgeStyle} ${
                 isSelected || isHovered
                   ? "scale-110 ring-2 ring-blue-600 shadow-lg z-20"
                   : "opacity-95 z-10"
               }`}
             >
-              <span>{lbl.label}</span>
-              {lbl.subLabel && (
-                <span className={`ml-1.5 text-[9.5px] ${subLabelStyle}`}>
-                  · {lbl.subLabel}
-                </span>
+              {lbl.kind === "van" ? (
+                <>
+                  <span data-lbl-main="true" />
+                  <span
+                    data-lbl-sub="true"
+                    className={`ml-1.5 text-[9.5px] ${subLabelStyle}`}
+                  />
+                </>
+              ) : (
+                <>
+                  <span>{lbl.label}</span>
+                  {lbl.subLabel && (
+                    <span className={`ml-1.5 text-[9.5px] ${subLabelStyle}`}>
+                      · {lbl.subLabel}
+                    </span>
+                  )}
+                </>
               )}
             </div>
           );
