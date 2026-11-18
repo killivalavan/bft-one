@@ -6,7 +6,6 @@ import { Loader2, Mail, Lock, Eye, EyeOff, LogIn, ShieldAlert, ArrowRight } from
 import { useTenant } from "@/lib/context/TenantContext";
 import { getPlatformAdminUrl, getTenantUrl } from "@/lib/tenant/hostUrls";
 import { resolveCanonicalHostname } from "@/lib/tenant/hostnameResolver";
-import { getBusinessStoreId } from "@/lib/utils/storeIdGenerator";
 import styles from "./login.module.css";
 
 export default function LoginPage() {
@@ -555,7 +554,7 @@ export default function LoginPage() {
               >
                 <div className={styles.field}>
                   <label htmlFor="login-email" className={styles.label}>
-                    Store Reference ID, Employee ID, or Mail ID
+                    Store ID, Employee ID, or Email
                   </label>
                   <div className={styles.control}>
                     <Mail className={styles.leadingIcon} aria-hidden="true" />
@@ -568,7 +567,7 @@ export default function LoginPage() {
                       autoCapitalize="none"
                       spellCheck={false}
                       required
-                      placeholder={`e.g. KBS74713, ${getBusinessStoreId(business).employeePrefix || "ck"}10121997, or owner@store.com`}
+                      placeholder="Enter your ID or email"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       aria-invalid={error ? true : undefined}

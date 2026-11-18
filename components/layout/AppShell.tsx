@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSelectedLayoutSegment } from "next/navigation";
 import { useUser } from "@/lib/hooks/useUser";
 import { useProfile } from "@/lib/hooks/useProfile";
 import { useTenant } from "@/lib/context/TenantContext";
@@ -20,6 +20,7 @@ import { SubscriptionExpiryBanner } from "@/components/admin/SubscriptionExpiryB
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const selectedSegment = useSelectedLayoutSegment();
   const { user, loading: userLoading } = useUser();
   const { flags } = useProfile();
   const {
@@ -100,8 +101,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     setIsMobileDrawerOpen(false);
   }, [pathname]);
 
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   const hostKind =
-    typeof window !== "undefined"
+    mounted && typeof window !== "undefined"
       ? resolveCanonicalHostname(window.location.host)?.kind
       : null;
 
@@ -123,7 +129,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }, [hostKind, user, userLoading, pathname]);
 
   const isMarketingLanding =
-    hostKind === "marketing" || pathname === "/site";
+    selectedSegment === "site" || hostKind === "marketing" || pathname === "/site";
   const isPublicAuthPage =
     pathname === "/login" ||
     pathname === "/set-password" ||
