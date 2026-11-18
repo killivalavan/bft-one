@@ -671,7 +671,16 @@ export function CounterCubLandingPage({
   const [demoError, setDemoError] = useState("");
   const [demoSubmitted, setDemoSubmitted] = useState(false);
 
-  const resolvedPlatformUrl = platformUrl || getPlatformAdminUrl("/super-admin");
+  const [clientPlatformUrl, setClientPlatformUrl] = useState(
+    "https://app.countercub.com/super-admin"
+  );
+  useEffect(() => {
+    if (!platformUrl) {
+      setClientPlatformUrl(getPlatformAdminUrl("/super-admin"));
+    }
+  }, [platformUrl]);
+
+  const resolvedPlatformUrl = platformUrl || clientPlatformUrl;
   const resolvedSignupUrl = signupUrl || "#book-demo";
   const faqItems = faqs && faqs.length > 0 ? faqs : DEFAULT_FAQS;
   const activeIndustry = INDUSTRIES.find((i) => i.id === selectedIndustry) || INDUSTRIES[0];
