@@ -554,7 +554,7 @@ export default function LoginPage() {
               >
                 <div className={styles.field}>
                   <label htmlFor="login-email" className={styles.label}>
-                    Store ID, Employee ID, or Email
+                    Store Reference ID, Employee ID, or Mail ID
                   </label>
                   <div className={styles.control}>
                     <Mail className={styles.leadingIcon} aria-hidden="true" />
