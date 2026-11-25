@@ -12,6 +12,8 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils/cn";
+import { getMarketingUrl } from "@/lib/tenant/hostUrls";
+import { CounterCubMark } from "@/components/ui/SeyalLogo";
 
 type AuthStep = "credentials" | "mfa_challenge" | "mfa_enroll";
 
@@ -25,6 +27,9 @@ export default function SuperAdminLoginPage() {
   const [copiedKey, setCopiedKey] = useState(false);
   const [forgotMode, setForgotMode] = useState(false);
   const [resetSent, setResetSent] = useState(false);
+  const [shopSelectorUrl, setShopSelectorUrl] = useState(
+    "https://www.countercub.com/#workspace"
+  );
 
   // MFA State
   const [factorId, setFactorId] = useState<string>("");
@@ -35,6 +40,7 @@ export default function SuperAdminLoginPage() {
 
   // Check existing session on mount: auto-redirect if already Super Admin with valid session
   useEffect(() => {
+    setShopSelectorUrl(getMarketingUrl("/#workspace"));
     let isMounted = true;
     (async () => {
       try {
@@ -374,12 +380,12 @@ export default function SuperAdminLoginPage() {
         {/* Brand Header */}
         <div className="text-center space-y-3">
           <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-[#2563EB] text-white shadow-xl shadow-[#2563EB]/30 ring-1 ring-white/20 mb-1">
-            <Globe size={28} />
+            <CounterCubMark size={30} className="text-white" title="CounterCub" />
           </div>
 
-          <div className="flex items-center justify-center gap-2">
+          <div className="flex flex-wrap items-center justify-center gap-2">
             <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#2563EB]/20 text-[#60A5FA] text-xs font-bold uppercase tracking-wider border border-[#2563EB]/30 backdrop-blur-md">
-              <Shield size={12} className="text-[#60A5FA]" />
+              <Shield size={12} className="text-[#60A5FA] shrink-0" />
               <span>CounterCub Command Center</span>
             </div>
             <div className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-slate-800 text-slate-300 text-xs font-semibold border border-slate-700">
@@ -400,19 +406,19 @@ export default function SuperAdminLoginPage() {
 
         {/* Card Frame */}
         <Card className="border border-slate-800 bg-slate-900/90 backdrop-blur-2xl shadow-2xl shadow-black/50 rounded-3xl overflow-hidden ring-1 ring-slate-700/50">
-          <CardHeader className="bg-slate-950/60 border-b border-slate-800/80 px-6 py-4 flex items-center justify-between">
-            <div className="flex items-center gap-2 text-xs font-bold text-slate-300 uppercase tracking-wider">
-              <Lock size={14} className="text-[#2563EB]" />
-              <span>
+          <CardHeader className="bg-slate-950/60 border-b border-slate-800/80 px-4 sm:px-6 py-3.5 sm:py-4 flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 text-xs font-bold text-slate-300 uppercase tracking-wider min-w-0">
+              <Lock size={14} className="text-[#2563EB] shrink-0" />
+              <span className="truncate">
                 {step === "credentials" ? "Step 1: Identity Verification" : "Step 2: Two-Factor Security Check"}
               </span>
             </div>
-            <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-slate-800 text-slate-400 border border-slate-700">
+            <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-slate-800 text-slate-400 border border-slate-700 shrink-0">
               {step === "credentials" ? "1 / 2" : "2 / 2"}
             </span>
           </CardHeader>
 
-          <CardContent className="p-6 sm:p-8 space-y-6">
+          <CardContent className="p-4 sm:p-8 space-y-6">
             
             {/* STEP 1: CREDENTIALS */}
             {step === "credentials" && forgotMode && (
@@ -471,7 +477,7 @@ export default function SuperAdminLoginPage() {
             {step === "credentials" && !forgotMode && (
               <form onSubmit={handleCredentialsLogin} className="space-y-4">
                 <div className="space-y-2">
-                  <label className="text-xs font-bold text-slate-300 ml-1 uppercase tracking-wider flex items-center justify-between">
+                  <label className="text-xs font-bold text-slate-300 ml-1 uppercase tracking-wider flex flex-wrap items-center justify-between gap-1">
                     <span>Master Admin Email</span>
                     <span className="text-[11px] text-[#60A5FA] normal-case font-medium">admin@countercub.com</span>
                   </label>
@@ -556,7 +562,7 @@ export default function SuperAdminLoginPage() {
                 </div>
 
                 {/* 6-Digit Code Inputs */}
-                <div className="flex items-center justify-center gap-2 sm:gap-2.5">
+                <div className="flex items-center justify-center gap-1.5 sm:gap-2.5">
                   {otpCode.map((digit, idx) => (
                     <input
                       key={idx}
@@ -570,7 +576,7 @@ export default function SuperAdminLoginPage() {
                       value={digit}
                       onChange={(e) => handleOtpChange(idx, e.target.value)}
                       onKeyDown={(e) => handleOtpKeyDown(idx, e)}
-                      className="w-11 h-13 sm:w-12 sm:h-14 text-center text-xl sm:text-2xl font-black font-mono bg-slate-950/80 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-[#2563EB] focus:border-transparent transition-all shadow-inner"
+                      className="flex-1 min-w-0 max-w-11 sm:max-w-12 h-12 sm:h-14 text-center text-xl sm:text-2xl font-black font-mono bg-slate-950/80 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-[#2563EB] focus:border-transparent transition-all shadow-inner"
                     />
                   ))}
                 </div>
@@ -649,7 +655,7 @@ export default function SuperAdminLoginPage() {
                   <label className="text-xs font-bold text-slate-300 ml-1 uppercase tracking-wider block text-center">
                     Enter the 6-Digit Code from your app to confirm:
                   </label>
-                  <div className="flex items-center justify-center gap-2">
+                  <div className="flex items-center justify-center gap-1.5 sm:gap-2">
                     {otpCode.map((digit, idx) => (
                       <input
                         key={idx}
@@ -663,7 +669,7 @@ export default function SuperAdminLoginPage() {
                         value={digit}
                         onChange={(e) => handleOtpChange(idx, e.target.value)}
                         onKeyDown={(e) => handleOtpKeyDown(idx, e)}
-                        className="w-10 h-12 text-center text-xl font-bold font-mono bg-slate-950 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
+                        className="flex-1 min-w-0 max-w-10 sm:max-w-11 h-12 text-center text-xl font-bold font-mono bg-slate-950 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
                       />
                     ))}
                   </div>
@@ -690,14 +696,14 @@ export default function SuperAdminLoginPage() {
         </Card>
 
         {/* Footer Navigation */}
-        <div className="flex items-center justify-between px-2 text-xs text-slate-500">
-          <Link
-            href="/login"
-            className="hover:text-slate-300 transition-colors flex items-center gap-1.5"
+        <div className="flex flex-wrap items-center justify-between gap-2 px-2 text-xs text-slate-500">
+          <a
+            href={shopSelectorUrl}
+            className="hover:text-slate-300 transition-colors flex items-center gap-1.5 py-1"
           >
-            <ArrowLeft size={13} />
+            <ArrowLeft size={13} className="shrink-0" />
             <span>Regular Client Shop Login</span>
-          </Link>
+          </a>
 
           <span className="font-mono text-[11px] text-slate-600">
             TLS 1.3 • AES-256 Encrypted

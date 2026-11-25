@@ -7,6 +7,7 @@ import { useTenant } from "@/lib/context/TenantContext";
 import { getPlatformAdminUrl, getTenantUrl } from "@/lib/tenant/hostUrls";
 import { resolveCanonicalHostname } from "@/lib/tenant/hostnameResolver";
 import styles from "./login.module.css";
+import { CounterCubMark } from "@/components/ui/SeyalLogo";
 
 export default function LoginPage() {
   const { business, tenantError } = useTenant();
@@ -26,10 +27,14 @@ export default function LoginPage() {
   const [superAdminNotice, setSuperAdminNotice] = useState(false);
   const [forgotMode, setForgotMode] = useState(false);
   const [resetSent, setResetSent] = useState(false);
+  const [rootPortalUrl, setRootPortalUrl] = useState(
+    "https://app.countercub.com/super-admin-login"
+  );
   const router = useRouter();
 
-  // Read ?email= from query string if present
+  // Read ?email= from query string if present & resolve environment-aware platform URL client-side
   useEffect(() => {
+    setRootPortalUrl(getPlatformAdminUrl("/super-admin-login"));
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
       const emailParam = params.get("email");
@@ -364,6 +369,7 @@ export default function LoginPage() {
       <main className={styles.panel}>
         <div className={styles.inner}>
           <header className={styles.brand}>
+            <CounterCubMark size={44} className="text-[#2563EB]" title="CounterCub" />
             <h1 className={styles.wordmark}>
               <span className={styles.wordmarkSeyal}>Counter</span>
               <span className={styles.wordmarkPro}>Cub</span>
@@ -461,7 +467,7 @@ export default function LoginPage() {
 
                 <div className="w-full pt-2 space-y-2.5">
                   <a
-                    href={getPlatformAdminUrl("/super-admin-login")}
+                    href={rootPortalUrl}
                     className="w-full inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 active:scale-[0.99] text-white font-bold text-sm shadow-md transition-all cursor-pointer"
                   >
                     <span>Go to Platform Portal (2FA Login)</span>
@@ -578,7 +584,7 @@ export default function LoginPage() {
                 </div>
 
                 <div className={styles.field}>
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between gap-2">
                     <label htmlFor="login-password" className={styles.label}>
                       Password
                     </label>
@@ -589,7 +595,7 @@ export default function LoginPage() {
                         setResetSent(false);
                         setError(undefined);
                       }}
-                      className="text-xs font-semibold text-blue-600 hover:text-blue-700 cursor-pointer"
+                      className="text-xs font-semibold text-blue-600 hover:text-blue-700 py-1.5 -my-1.5 px-1 shrink-0 cursor-pointer"
                     >
                       Forgot password?
                     </button>
@@ -668,7 +674,7 @@ export default function LoginPage() {
               All rights reserved.
             </p>
             <a
-              href={getPlatformAdminUrl("/super-admin-login")}
+              href={rootPortalUrl}
               id="login-root-portal"
               className={styles.rootLink}
             >

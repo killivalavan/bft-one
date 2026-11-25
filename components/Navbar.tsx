@@ -14,6 +14,7 @@ import {
   User, LogOut, ChevronDown, Bell, Wallet, TrendingUp, Globe, Sparkles, Store, LifeBuoy, Bug, FileText, Boxes, Banknote, PanelLeftOpen, Menu, Megaphone
 } from "lucide-react";
 import RaiseIssueModal from "@/components/support/RaiseIssueModal";
+import { CounterCubMark } from "@/components/ui/SeyalLogo";
 
 interface NavbarProps {
   isSidebarCollapsed?: boolean;
@@ -173,6 +174,7 @@ export default function Navbar({
                       </button>
 
                       <Link href="/" className="flex items-center gap-1.5 group shrink-0">
+                        <CounterCubMark size={17} className="text-[#2563EB]" />
                         <span className="font-extrabold text-lg tracking-tight leading-none text-[#0F172A] group-hover:text-[#2563EB] transition-colors">
                           Counter<span className="text-[#2563EB]">Cub</span>
                         </span>
@@ -188,6 +190,7 @@ export default function Navbar({
                           className="flex items-center gap-2 group shrink-0 transition-opacity duration-200"
                           title="CounterCub Admin Dashboard"
                         >
+                          <CounterCubMark size={18} className="text-[#2563EB]" />
                           <span className="font-extrabold text-lg sm:text-xl tracking-tight leading-none">
                             <span className="text-[#0F172A] group-hover:text-[#2563EB] transition-colors">Counter</span>
                             <span className="text-[#2563EB]">Cub</span>
@@ -200,8 +203,9 @@ export default function Navbar({
                   /* Staff & Super Admin: Standard Full Brand */
                   <Link
                     href={isSuperAdminView ? "/super-admin" : "/"}
-                    className="flex items-center gap-2.5 sm:gap-3 group shrink-0"
+                    className="flex items-center gap-2 group shrink-0"
                   >
+                    <CounterCubMark size={18} className={isSuperAdminView ? "text-[#3B82F6]" : "text-[#2563EB]"} />
                     <div className="flex flex-col justify-center min-w-0">
                       <span className="font-extrabold text-lg sm:text-xl tracking-tight leading-none">
                         {isSuperAdminView ? (
@@ -454,8 +458,13 @@ export default function Navbar({
 
       {/* Modern Mobile Bottom Navigation Bar - Only for staff or super admin */}
       {!isFocusMode && (!flags?.isAdmin || isSuperAdminView) && (
-        <div className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-xl border-t border-[#E2E8F0] shadow-md pb-[env(safe-area-inset-bottom)]">
-          <div className="flex items-center justify-around h-16 px-2">
+        <div className={cn(
+          "md:hidden fixed bottom-0 left-0 right-0 z-50 backdrop-blur-xl border-t shadow-md pb-[env(safe-area-inset-bottom)]",
+          isSuperAdminView
+            ? "bg-slate-950/95 border-slate-800"
+            : "bg-white/95 border-[#E2E8F0]"
+        )}>
+          <div className="flex items-center justify-around h-16 px-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {allLinks.map((link) => {
               const isActive = pathname === link.href;
               const Icon = link.icon;
@@ -464,19 +473,27 @@ export default function Navbar({
                   key={link.href}
                   href={link.href}
                   className={cn(
-                    "relative flex flex-col items-center justify-center w-full h-full py-1 transition-all",
-                    isActive ? "text-[#2563EB]" : "text-[#64748B] hover:text-[#0F172A]"
+                    "relative flex flex-col items-center justify-center flex-1 min-w-[60px] h-full px-1 py-1 transition-all",
+                    isActive
+                      ? "text-[#2563EB]"
+                      : isSuperAdminView
+                        ? "text-slate-400 hover:text-white"
+                        : "text-[#64748B] hover:text-[#0F172A]"
                   )}
                 >
                   <div className={cn(
                     "p-1.5 rounded-lg transition-all duration-200",
-                    isActive ? "bg-[#EFF6FF] scale-105" : "bg-transparent"
+                    isActive
+                      ? isSuperAdminView ? "bg-[#2563EB]/20 scale-105" : "bg-[#EFF6FF] scale-105"
+                      : "bg-transparent"
                   )}>
                     <Icon size={20} className={isActive ? "stroke-[2.5]" : "stroke-[1.75]"} />
                   </div>
                   <span className={cn(
-                    "text-[10px] tracking-tight mt-0.5",
-                    isActive ? "font-bold text-[#2563EB]" : "font-medium text-[#64748B]"
+                    "text-[10px] tracking-tight mt-0.5 whitespace-nowrap truncate max-w-full",
+                    isActive
+                      ? isSuperAdminView ? "font-bold text-blue-400" : "font-bold text-[#2563EB]"
+                      : isSuperAdminView ? "font-medium text-slate-400" : "font-medium text-[#64748B]"
                   )}>
                     {link.label}
                   </span>
@@ -487,29 +504,31 @@ export default function Navbar({
               );
             })}
 
-            <Link
-              href="/profile"
-              className={cn(
-                "relative flex flex-col items-center justify-center w-full h-full py-1 transition-all",
-                pathname === "/profile" ? "text-[#2563EB]" : "text-[#64748B] hover:text-[#0F172A]"
-              )}
-            >
-              <div className={cn(
-                "p-1.5 rounded-lg transition-all duration-200",
-                pathname === "/profile" ? "bg-[#EFF6FF] scale-105" : "bg-transparent"
-              )}>
-                <User size={20} className={pathname === "/profile" ? "stroke-[2.5]" : "stroke-[1.75]"} />
-              </div>
-              <span className={cn(
-                "text-[10px] tracking-tight mt-0.5",
-                pathname === "/profile" ? "font-bold text-[#2563EB]" : "font-medium text-[#64748B]"
-              )}>
-                Profile
-              </span>
-              {pathname === "/profile" && (
-                <span className="w-1 h-1 rounded-full bg-[#2563EB] absolute bottom-1.5" />
-              )}
-            </Link>
+            {!isSuperAdminView && (
+              <Link
+                href="/profile"
+                className={cn(
+                  "relative flex flex-col items-center justify-center flex-1 min-w-[60px] h-full px-1 py-1 transition-all",
+                  pathname === "/profile" ? "text-[#2563EB]" : "text-[#64748B] hover:text-[#0F172A]"
+                )}
+              >
+                <div className={cn(
+                  "p-1.5 rounded-lg transition-all duration-200",
+                  pathname === "/profile" ? "bg-[#EFF6FF] scale-105" : "bg-transparent"
+                )}>
+                  <User size={20} className={pathname === "/profile" ? "stroke-[2.5]" : "stroke-[1.75]"} />
+                </div>
+                <span className={cn(
+                  "text-[10px] tracking-tight mt-0.5 whitespace-nowrap truncate max-w-full",
+                  pathname === "/profile" ? "font-bold text-[#2563EB]" : "font-medium text-[#64748B]"
+                )}>
+                  Profile
+                </span>
+                {pathname === "/profile" && (
+                  <span className="w-1 h-1 rounded-full bg-[#2563EB] absolute bottom-1.5" />
+                )}
+              </Link>
+            )}
           </div>
         </div>
       )}

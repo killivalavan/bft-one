@@ -39,6 +39,7 @@ import {
 import { validateTenantSlug } from "@/lib/utils/slugValidator";
 import { getPlatformAdminUrl, getTenantUrl } from "@/lib/tenant/hostUrls";
 import { CURRENCY_OPTIONS } from "@/lib/utils/currencies";
+import { CounterCubMark } from "@/components/ui/SeyalLogo";
 
 const dmSans = DM_Sans({
   subsets: ["latin"],
@@ -363,12 +364,12 @@ const PRICING_CURRENCIES: {
   symbol: string;
   rateFromInr: number;
 }[] = [
-  { code: "INR", label: "India (INR ₹)", symbol: "₹", rateFromInr: 1 },
-  { code: "USD", label: "Global (USD $)", symbol: "$", rateFromInr: 1 / 84 },
-  { code: "AED", label: "UAE (AED د.إ)", symbol: "AED ", rateFromInr: 1 / 23 },
-  { code: "GBP", label: "UK (GBP £)", symbol: "£", rateFromInr: 1 / 106 },
-  { code: "EUR", label: "Europe (EUR €)", symbol: "€", rateFromInr: 1 / 91 },
-];
+    { code: "INR", label: "India (INR ₹)", symbol: "₹", rateFromInr: 1 },
+    { code: "USD", label: "Global (USD $)", symbol: "$", rateFromInr: 1 / 84 },
+    { code: "AED", label: "UAE (AED د.إ)", symbol: "AED ", rateFromInr: 1 / 23 },
+    { code: "GBP", label: "UK (GBP £)", symbol: "£", rateFromInr: 1 / 106 },
+    { code: "EUR", label: "Europe (EUR €)", symbol: "€", rateFromInr: 1 / 91 },
+  ];
 
 const DEFAULT_FAQS: LandingFaqItem[] = [
   {
@@ -425,22 +426,7 @@ function formatPlanPrice(inrPrice: number, currencyCode: PricingCurrencyCode): s
 }
 
 function CubPawIcon({ size = 16, className = "" }: { size?: number; className?: string }) {
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="currentColor"
-      className={className}
-      aria-hidden="true"
-    >
-      <ellipse cx="5.2" cy="8.8" rx="1.9" ry="2.55" transform="rotate(-18 5.2 8.8)" />
-      <ellipse cx="9.6" cy="5.7" rx="2.0" ry="2.75" transform="rotate(-6 9.6 5.7)" />
-      <ellipse cx="14.4" cy="5.7" rx="2.0" ry="2.75" transform="rotate(6 14.4 5.7)" />
-      <ellipse cx="18.8" cy="8.8" rx="1.9" ry="2.55" transform="rotate(18 18.8 8.8)" />
-      <path d="M12 10.6c-3.45 0-6.2 2.45-6.2 5.35 0 2.05 1.55 3.65 3.65 3.65 1.1 0 1.85-.48 2.55-.48s1.45.48 2.55.48c2.1 0 3.65-1.6 3.65-3.65 0-2.9-2.75-5.35-6.2-5.35z" />
-    </svg>
-  );
+  return <CounterCubMark size={size} className={className} />;
 }
 
 const PAW_STEPS = [
@@ -484,7 +470,7 @@ function CubPawTrail({
 function Logo() {
   return (
     <a href="#top" className="cc-brand" aria-label="CounterCub home">
-      <span className="cc-brand-mark"><CubPawIcon size={17} /></span>
+      <span className="cc-brand-mark"><CounterCubMark size={20} /></span>
       <span>Counter<span className="cc-brand-cub">Cub</span></span>
     </a>
   );
@@ -582,8 +568,10 @@ function DashboardPreview() {
           </div>
         </main>
       </div>
-      <div className="cc-floating-note cc-floating-note-top"><span><CheckCircle2 size={15} /></span><div><b>POS + GST + WhatsApp</b><small>Bills &amp; payslips in 1 click</small></div></div>
-      <div className="cc-floating-note cc-floating-note-bottom"><span><Zap size={15} /></span><div><b>36+ Global Currencies</b><small>India ₹ · USD $ · AED · GBP · EUR</small></div></div>
+      <div className="cc-floating-notes">
+        <div className="cc-floating-note cc-floating-note-top"><span><CheckCircle2 size={15} /></span><div><b>POS + GST + WhatsApp</b><small>Bills &amp; payslips in 1 click</small></div></div>
+        <div className="cc-floating-note cc-floating-note-bottom"><span><Zap size={15} /></span><div><b>36+ Global Currencies</b><small>India ₹ · USD $ · AED · GBP · EUR</small></div></div>
+      </div>
     </div>
   );
 }
@@ -817,16 +805,19 @@ export function CounterCubLandingPage({
             {mobileMenuOpen ? <X size={20} /> : <Menu size={20} />}
           </button>
           {mobileMenuOpen && (
-            <nav className="cc-mobile-menu" aria-label="Mobile navigation">
-              <a href="#industries" onClick={closeMobileMenu}>Industries</a>
-              <a href="#features" onClick={closeMobileMenu}>Features</a>
-              <a href="#modes" onClick={closeMobileMenu}>Business modes</a>
-              <a href="#global" onClick={closeMobileMenu}>India &amp; Global</a>
-              <a href="#pricing" onClick={closeMobileMenu}>Pricing</a>
-              <a href="#faq" onClick={closeMobileMenu}>FAQ</a>
-              <button type="button" className="cc-mobile-link" onClick={scrollToWorkspaceLogin}>Store login</button>
-              <button type="button" className="cc-primary-btn" onClick={() => scrollToDemoForm()}>Book free demo <ArrowRight size={15} /></button>
-            </nav>
+            <>
+              <div className="cc-mobile-backdrop" onClick={closeMobileMenu} aria-hidden="true" />
+              <nav className="cc-mobile-menu" aria-label="Mobile navigation">
+                <a href="#industries" onClick={closeMobileMenu}>Industries</a>
+                <a href="#features" onClick={closeMobileMenu}>Features</a>
+                <a href="#modes" onClick={closeMobileMenu}>Business modes</a>
+                <a href="#global" onClick={closeMobileMenu}>India &amp; Global</a>
+                <a href="#pricing" onClick={closeMobileMenu}>Pricing</a>
+                <a href="#faq" onClick={closeMobileMenu}>FAQ</a>
+                <button type="button" className="cc-mobile-link" onClick={scrollToWorkspaceLogin}>Store login</button>
+                <button type="button" className="cc-primary-btn" onClick={() => scrollToDemoForm()}>Book free demo <ArrowRight size={15} /></button>
+              </nav>
+            </>
           )}
         </div>
       </header>
@@ -835,34 +826,39 @@ export function CounterCubLandingPage({
         <section className="cc-hero">
           <CubPawTrail className="cc-paw-trail-hero-top" />
           <CubPawTrail className="cc-paw-trail-hero" />
-          <div className="cc-container cc-hero-grid">
-            <div>
-              <div className="cc-eyebrow">
-                <CubPawIcon size={12} />
-                Zero-Trust Multi-Tenant Retail &amp; Cafe Operating System
+          <div className="cc-container">
+            <div className="cc-hero-grid">
+              <div>
+                <div className="cc-eyebrow">
+                  <CubPawIcon size={12} />
+                  Zero-Trust Multi-Tenant Retail &amp; Cafe Operating System
+                </div>
+                <h1>
+                  Still running your business on
+                  <span className="cc-rotating-problem" key={problemIndex}>{ROTATING_PROBLEMS[problemIndex]}</span>
+                  <span className="cc-blue-line">One POS for every counter.</span>
+                </h1>
+                <p className="cc-hero-copy">
+                  Built for <strong>cafes, pharmacies, supermarkets, bakeries, retail shops, and B2B wholesale</strong>. Handle GST/tax billing, WhatsApp receipts, inventory, GPS staff payroll, and wholesale dispatch in India and 36+ currencies.
+                </p>
+                <div className="cc-hero-actions">
+                  <button type="button" className="cc-primary-btn" onClick={() => scrollToDemoForm({ planName: "Free" })}>
+                    Book a free demo <ArrowRight size={16} />
+                  </button>
+                  <a className="cc-secondary-btn" href="#industries">Explore billing types <ArrowUpRight size={15} /></a>
+                </div>
+                <div className="cc-trust-note">
+                  <CheckCircle2 size={14} />
+                  <span>
+                    Free plan available · Works offline · Already have a store?{" "}
+                    <button type="button" className="cc-login" style={{ textDecoration: "underline" }} onClick={scrollToWorkspaceLogin}>
+                      Log in
+                    </button>
+                  </span>
+                </div>
               </div>
-              <h1>
-                Still running your business on
-                <span className="cc-rotating-problem" key={problemIndex}>{ROTATING_PROBLEMS[problemIndex]}</span>
-                <span className="cc-blue-line">One POS for every counter.</span>
-              </h1>
-              <p className="cc-hero-copy">
-                Built for <strong>cafes, pharmacies, supermarkets, bakeries, retail shops, and B2B wholesale</strong>. Handle GST/tax billing, WhatsApp receipts, inventory, GPS staff payroll, and wholesale dispatch in India and 36+ currencies.
-              </p>
-              <div className="cc-hero-actions">
-                <button type="button" className="cc-primary-btn" onClick={() => scrollToDemoForm({ planName: "Free" })}>
-                  Book a free demo <ArrowRight size={16} />
-                </button>
-                <a className="cc-secondary-btn" href="#industries">Explore billing types <ArrowUpRight size={15} /></a>
-              </div>
-              <div className="cc-trust-note">
-                <CheckCircle2 size={14} /> Free plan available · Works offline · Already have a store?{" "}
-                <button type="button" className="cc-login" style={{ textDecoration: "underline" }} onClick={scrollToWorkspaceLogin}>
-                  Log in
-                </button>
-              </div>
+              <div className="cc-hero-visual"><DashboardPreview /></div>
             </div>
-            <div className="cc-hero-visual"><DashboardPreview /></div>
           </div>
         </section>
 
@@ -985,7 +981,7 @@ export function CounterCubLandingPage({
           </div>
         </section>
 
-        <section className="cc-section cc-section-soft" id="workspace">
+        <section className="cc-section cc-section-soft" id="workflows">
           <div className="cc-container">
             <div className="cc-section-heading">
               <div className="cc-section-label">BUILT FOR DAILY WORK</div>
@@ -1027,7 +1023,7 @@ export function CounterCubLandingPage({
                     <thead><tr><th>ITEM / SKU</th><th>STOCK</th><th>SIGNAL</th><th>ACTION</th></tr></thead>
                     <tbody>
                       <tr><td>Amoxicillin 500mg</td><td>18 boxes</td><td><span className="cc-showcase-pill">Healthy</span></td><td>In stock</td></tr>
-                      <tr><td>Full Cream Milk</td><td>8 L</td><td><span className="cc-showcase-pill" style={{ background: "#fff4e5", color: "#b76e08" }}>Price +11%</span></td><td>Bulk lock</td></tr>
+                      <tr><td>Full Cream Milk</td><td>8 L</td><td><span className="cc-showcase-pill" style={{ background: "#fff4e5", color: "#9a5b04" }}>Price +11%</span></td><td>Bulk lock</td></tr>
                       <tr><td>Arabica Beans</td><td>24 kg</td><td><span className="cc-showcase-pill">Recipe Auto</span></td><td>Tracked</td></tr>
                     </tbody>
                   </table>
@@ -1200,33 +1196,35 @@ export function CounterCubLandingPage({
         </section>
 
         <section className="cc-section cc-section-soft" id="workspace">
-          <div className="cc-container cc-workspace">
-            <div>
-              <div className="cc-section-label">YOUR BUSINESS. YOUR WORKSPACE.</div>
-              <h2>A dedicated digital address for every store.</h2>
-              <p>Each business gets its own isolated CounterCub subdomain, role-based admin and staff logins, and zero-trust tenant data isolation.</p>
-              <div className="cc-check-list">
-                <span><CheckCircle2 size={15} /> Dedicated workspace URL (&lt;store&gt;.countercub.com)</span>
-                <span><CheckCircle2 size={15} /> Role-based admin, staff &amp; B2B helper access</span>
-                <span><CheckCircle2 size={15} /> Audit logs &amp; strict multi-tenant isolation</span>
+          <div className="cc-container">
+            <div className="cc-workspace">
+              <div>
+                <div className="cc-section-label">YOUR BUSINESS. YOUR WORKSPACE.</div>
+                <h2>A dedicated digital address for every store.</h2>
+                <p>Each business gets its own isolated CounterCub subdomain, role-based admin and staff logins, and zero-trust tenant data isolation.</p>
+                <div className="cc-check-list">
+                  <span><CheckCircle2 size={15} /> Dedicated workspace URL (&lt;store&gt;.countercub.com)</span>
+                  <span><CheckCircle2 size={15} /> Role-based admin, staff &amp; B2B helper access</span>
+                  <span><CheckCircle2 size={15} /> Audit logs &amp; strict multi-tenant isolation</span>
+                </div>
               </div>
+              <form className="cc-url-demo" onSubmit={openStoreWorkspace}>
+                <label className="cc-url-label" htmlFor="cc-store-slug">Already have a CounterCub store?</label>
+                <div className="cc-url-field">
+                  <input
+                    id="cc-store-slug"
+                    autoComplete="off"
+                    value={storeSlug}
+                    onChange={(event) => { setStoreSlug(event.target.value); setSlugError(""); }}
+                    placeholder="Enter your store name"
+                  />
+                  <span className="cc-url-suffix">.countercub.com</span>
+                </div>
+                {slugError && <div className="cc-url-error" role="alert">{slugError}</div>}
+                <button type="submit" className="cc-primary-btn cc-url-submit">Open my workspace <ArrowRight size={15} /></button>
+                <div className="cc-url-hint">Example: yourstore.countercub.com/login</div>
+              </form>
             </div>
-            <form className="cc-url-demo" onSubmit={openStoreWorkspace}>
-              <label className="cc-url-label" htmlFor="cc-store-slug">Already have a CounterCub store?</label>
-              <div className="cc-url-field">
-                <input
-                  id="cc-store-slug"
-                  autoComplete="off"
-                  value={storeSlug}
-                  onChange={(event) => { setStoreSlug(event.target.value); setSlugError(""); }}
-                  placeholder="Enter your store name"
-                />
-                <span className="cc-url-suffix">.countercub.com</span>
-              </div>
-              {slugError && <div className="cc-url-error" role="alert">{slugError}</div>}
-              <button type="submit" className="cc-primary-btn cc-url-submit">Open my workspace <ArrowRight size={15} /></button>
-              <div className="cc-url-hint">Example: yourstore.countercub.com/login</div>
-            </form>
           </div>
         </section>
 
@@ -1280,171 +1278,173 @@ export function CounterCubLandingPage({
                 </article>
               ))}
             </div>
-            <p style={{ textAlign: "center", color: "#98a2b3", fontSize: "10px", marginTop: 18 }}>
-              Official CounterCub plan limits (`Free`, `Basic`, `Pro`, `Business`) are billed in INR; international currency values are approximate guides.
+            <p style={{ textAlign: "center", color: "#667085", fontSize: "11px", marginTop: 18 }}>
+              Official CounterCub plan limits (Free, Basic, Pro, Business) are billed in INR; international currency values are approximate guides.
             </p>
           </div>
         </section>
 
         <section className="cc-section cc-section-soft" id="book-demo">
           <CubPawTrail className="cc-paw-trail-demo" />
-          <div className="cc-container cc-demo-grid">
-            <div className="cc-demo-copy">
-              <div className="cc-section-label">BOOK A FREE DEMO &amp; STORE SETUP</div>
-              <h2>See CounterCub tailored to your counter <span>in 15 minutes.</span></h2>
-              <p>Tell us about your cafe, pharmacy, supermarket, retail store, or wholesale business. Our team will walk you through POS billing, GST invoices, inventory import, and set up your dedicated store workspace.</p>
-              <div className="cc-check-list">
-                <span><CheckCircle2 size={15} /> Dedicated &lt;yourstore&gt;.countercub.com workspace</span>
-                <span><CheckCircle2 size={15} /> Assisted Excel/CSV catalog import with AI Smart Import</span>
-                <span><CheckCircle2 size={15} /> Live POS, WhatsApp bills &amp; GPS payroll walkthrough</span>
-              </div>
-              <div className="cc-demo-contact">
-                <MessageCircle size={16} style={{ color: "#2563eb" }} />
-                <span>Direct team inbox: <strong>support@countercub.com</strong></span>
-              </div>
-            </div>
-
-            <div className="cc-demo-card">
-              {demoSubmitted ? (
-                <div className="cc-demo-success" role="status">
-                  <div className="cc-demo-success-head">
-                    <CheckCircle2 size={21} />
-                    <span>Demo request sent to our team!</span>
-                  </div>
-                  <p style={{ margin: 0, fontSize: 12.5, color: "#475467", lineHeight: 1.65 }}>
-                    Thank you, <strong>{demoName}</strong>. Your demo request has been sent to{" "}
-                    <strong>support@countercub.com</strong> — our onboarding team will reach out shortly.
-                  </p>
-                  <div className="cc-demo-summary">
-                    <span><strong>Store:</strong> {demoStoreName}{demoCity.trim() ? ` (${demoCity.trim()})` : ""}</span>
-                    <span><strong>Phone / WhatsApp:</strong> {demoPhone}</span>
-                    {demoEmail.trim() && <span><strong>Email:</strong> {demoEmail.trim()}</span>}
-                    <span><strong>Business Type:</strong> {selectedDemoIndustryName}</span>
-                    <span><strong>Selected Plan:</strong> {demoPlan} ({pricingCurrency})</span>
-                  </div>
-                  <div className="cc-demo-success-actions">
-                    <button
-                      type="button"
-                      className="cc-primary-btn"
-                      onClick={() => setDemoSubmitted(false)}
-                    >
-                      Submit another request
-                    </button>
-                  </div>
+          <div className="cc-container">
+            <div className="cc-demo-grid">
+              <div className="cc-demo-copy">
+                <div className="cc-section-label">BOOK A FREE DEMO &amp; STORE SETUP</div>
+                <h2>See CounterCub tailored to your counter <span>in 15 minutes.</span></h2>
+                <p>Tell us about your cafe, pharmacy, supermarket, retail store, or wholesale business. Our team will walk you through POS billing, GST invoices, inventory import, and set up your dedicated store workspace.</p>
+                <div className="cc-check-list">
+                  <span><CheckCircle2 size={15} /> Dedicated &lt;yourstore&gt;.countercub.com workspace</span>
+                  <span><CheckCircle2 size={15} /> Assisted Excel/CSV catalog import with AI Smart Import</span>
+                  <span><CheckCircle2 size={15} /> Live POS, WhatsApp bills &amp; GPS payroll walkthrough</span>
                 </div>
-              ) : (
-                <form id="cc-demo-form" onSubmit={handleDemoSubmit} noValidate>
-                  <div className="cc-demo-honeypot" aria-hidden="true">
-                    <label htmlFor="cc-demo-website">Website</label>
-                    <input
-                      id="cc-demo-website"
-                      name="website"
-                      type="text"
-                      tabIndex={-1}
-                      autoComplete="off"
-                      value={demoHoneypot}
-                      onChange={(e) => setDemoHoneypot(e.target.value)}
-                    />
-                  </div>
-                  <div className="cc-demo-fields">
-                    <div className="cc-demo-field">
-                      <label htmlFor="cc-demo-name">Full Name *</label>
-                      <input
-                        id="cc-demo-name"
-                        type="text"
-                        required
-                        maxLength={100}
-                        value={demoName}
-                        onChange={(e) => { setDemoName(e.target.value); setDemoError(""); }}
-                        placeholder="e.g., Arjun Kumar"
-                      />
+                <div className="cc-demo-contact">
+                  <MessageCircle size={16} style={{ color: "#2563eb" }} />
+                  <span>Direct team inbox: <strong>support@countercub.com</strong></span>
+                </div>
+              </div>
+
+              <div className="cc-demo-card">
+                {demoSubmitted ? (
+                  <div className="cc-demo-success" role="status">
+                    <div className="cc-demo-success-head">
+                      <CheckCircle2 size={21} />
+                      <span>Demo request sent to our team!</span>
                     </div>
-                    <div className="cc-demo-field">
-                      <label htmlFor="cc-demo-phone">Phone / WhatsApp *</label>
-                      <input
-                        id="cc-demo-phone"
-                        type="tel"
-                        required
-                        maxLength={30}
-                        value={demoPhone}
-                        onChange={(e) => { setDemoPhone(e.target.value); setDemoError(""); }}
-                        placeholder="e.g., +91 98765 43210"
-                      />
+                    <p style={{ margin: 0, fontSize: 12.5, color: "#475467", lineHeight: 1.65 }}>
+                      Thank you, <strong>{demoName}</strong>. Your demo request has been sent to{" "}
+                      <strong>support@countercub.com</strong> — our onboarding team will reach out shortly.
+                    </p>
+                    <div className="cc-demo-summary">
+                      <span><strong>Store:</strong> {demoStoreName}{demoCity.trim() ? ` (${demoCity.trim()})` : ""}</span>
+                      <span><strong>Phone / WhatsApp:</strong> {demoPhone}</span>
+                      {demoEmail.trim() && <span><strong>Email:</strong> {demoEmail.trim()}</span>}
+                      <span><strong>Business Type:</strong> {selectedDemoIndustryName}</span>
+                      <span><strong>Selected Plan:</strong> {demoPlan} ({pricingCurrency})</span>
                     </div>
-                    <div className="cc-demo-field">
-                      <label htmlFor="cc-demo-store">Business / Store Name *</label>
-                      <input
-                        id="cc-demo-store"
-                        type="text"
-                        required
-                        maxLength={120}
-                        value={demoStoreName}
-                        onChange={(e) => { setDemoStoreName(e.target.value); setDemoError(""); }}
-                        placeholder="e.g., CarePlus Pharmacy"
-                      />
-                    </div>
-                    <div className="cc-demo-field">
-                      <label htmlFor="cc-demo-city">City / Country *</label>
-                      <input
-                        id="cc-demo-city"
-                        type="text"
-                        required
-                        maxLength={100}
-                        value={demoCity}
-                        onChange={(e) => { setDemoCity(e.target.value); setDemoError(""); }}
-                        placeholder="e.g., Chennai, India / Dubai, UAE"
-                      />
-                    </div>
-                    <div className="cc-demo-field cc-demo-field-full">
-                      <label htmlFor="cc-demo-email">Contact Email *</label>
-                      <input
-                        id="cc-demo-email"
-                        type="email"
-                        required
-                        maxLength={120}
-                        value={demoEmail}
-                        onChange={(e) => { setDemoEmail(e.target.value); setDemoError(""); }}
-                        placeholder="e.g., owner@yourstore.com"
-                      />
-                    </div>
-                    <div className="cc-demo-field">
-                      <label htmlFor="cc-demo-industry">Business Type</label>
-                      <select
-                        id="cc-demo-industry"
-                        value={demoIndustry}
-                        onChange={(e) => setDemoIndustry(e.target.value)}
+                    <div className="cc-demo-success-actions">
+                      <button
+                        type="button"
+                        className="cc-primary-btn"
+                        onClick={() => setDemoSubmitted(false)}
                       >
-                        {INDUSTRIES.map((ind) => (
-                          <option key={ind.id} value={ind.id}>{ind.name}</option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="cc-demo-field">
-                      <label htmlFor="cc-demo-plan">Interested Plan</label>
-                      <select
-                        id="cc-demo-plan"
-                        value={demoPlan}
-                        onChange={(e) => setDemoPlan(e.target.value)}
-                      >
-                        {PLANS.map((plan) => (
-                          <option key={plan.name} value={plan.name}>
-                            {plan.name} ({formatPlanPrice(plan.inrPrice, pricingCurrency)}/mo)
-                          </option>
-                        ))}
-                      </select>
+                        Submit another request
+                      </button>
                     </div>
                   </div>
-                  {demoError && <div className="cc-url-error" role="alert" style={{ marginTop: 10 }}>{demoError}</div>}
-                  <button
-                    type="submit"
-                    className="cc-primary-btn"
-                    disabled={demoSubmitting}
-                    style={{ width: "100%", marginTop: 14 }}
-                  >
-                    {demoSubmitting ? "Sending demo request..." : "Book My Free Demo"} {!demoSubmitting && <ArrowRight size={15} />}
-                  </button>
-                </form>
-              )}
+                ) : (
+                  <form id="cc-demo-form" onSubmit={handleDemoSubmit} noValidate>
+                    <div className="cc-demo-honeypot" aria-hidden="true">
+                      <label htmlFor="cc-demo-website">Website</label>
+                      <input
+                        id="cc-demo-website"
+                        name="website"
+                        type="text"
+                        tabIndex={-1}
+                        autoComplete="off"
+                        value={demoHoneypot}
+                        onChange={(e) => setDemoHoneypot(e.target.value)}
+                      />
+                    </div>
+                    <div className="cc-demo-fields">
+                      <div className="cc-demo-field">
+                        <label htmlFor="cc-demo-name">Full Name *</label>
+                        <input
+                          id="cc-demo-name"
+                          type="text"
+                          required
+                          maxLength={100}
+                          value={demoName}
+                          onChange={(e) => { setDemoName(e.target.value); setDemoError(""); }}
+                          placeholder="e.g., Arjun Kumar"
+                        />
+                      </div>
+                      <div className="cc-demo-field">
+                        <label htmlFor="cc-demo-phone">Phone / WhatsApp *</label>
+                        <input
+                          id="cc-demo-phone"
+                          type="tel"
+                          required
+                          maxLength={30}
+                          value={demoPhone}
+                          onChange={(e) => { setDemoPhone(e.target.value); setDemoError(""); }}
+                          placeholder="e.g., +91 98765 43210"
+                        />
+                      </div>
+                      <div className="cc-demo-field">
+                        <label htmlFor="cc-demo-store">Business / Store Name *</label>
+                        <input
+                          id="cc-demo-store"
+                          type="text"
+                          required
+                          maxLength={120}
+                          value={demoStoreName}
+                          onChange={(e) => { setDemoStoreName(e.target.value); setDemoError(""); }}
+                          placeholder="e.g., CarePlus Pharmacy"
+                        />
+                      </div>
+                      <div className="cc-demo-field">
+                        <label htmlFor="cc-demo-city">City / Country *</label>
+                        <input
+                          id="cc-demo-city"
+                          type="text"
+                          required
+                          maxLength={100}
+                          value={demoCity}
+                          onChange={(e) => { setDemoCity(e.target.value); setDemoError(""); }}
+                          placeholder="e.g., Chennai, India / Dubai, UAE"
+                        />
+                      </div>
+                      <div className="cc-demo-field cc-demo-field-full">
+                        <label htmlFor="cc-demo-email">Contact Email *</label>
+                        <input
+                          id="cc-demo-email"
+                          type="email"
+                          required
+                          maxLength={120}
+                          value={demoEmail}
+                          onChange={(e) => { setDemoEmail(e.target.value); setDemoError(""); }}
+                          placeholder="e.g., owner@yourstore.com"
+                        />
+                      </div>
+                      <div className="cc-demo-field">
+                        <label htmlFor="cc-demo-industry">Business Type</label>
+                        <select
+                          id="cc-demo-industry"
+                          value={demoIndustry}
+                          onChange={(e) => setDemoIndustry(e.target.value)}
+                        >
+                          {INDUSTRIES.map((ind) => (
+                            <option key={ind.id} value={ind.id}>{ind.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="cc-demo-field">
+                        <label htmlFor="cc-demo-plan">Interested Plan</label>
+                        <select
+                          id="cc-demo-plan"
+                          value={demoPlan}
+                          onChange={(e) => setDemoPlan(e.target.value)}
+                        >
+                          {PLANS.map((plan) => (
+                            <option key={plan.name} value={plan.name}>
+                              {plan.name} ({formatPlanPrice(plan.inrPrice, pricingCurrency)}/mo)
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                    {demoError && <div className="cc-url-error" role="alert" style={{ marginTop: 10 }}>{demoError}</div>}
+                    <button
+                      type="submit"
+                      className="cc-primary-btn"
+                      disabled={demoSubmitting}
+                      style={{ width: "100%", marginTop: 14 }}
+                    >
+                      {demoSubmitting ? "Sending demo request..." : "Book My Free Demo"} {!demoSubmitting && <ArrowRight size={15} />}
+                    </button>
+                  </form>
+                )}
+              </div>
             </div>
           </div>
         </section>
